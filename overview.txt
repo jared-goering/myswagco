@@ -1,0 +1,338 @@
+
+
+1. Product Overview
+
+Goal:
+Create a My Swag Co Custom Screen Printing experience where users can:
+	1.	Choose from a small, curated list of premium blanks (e.g., Comfort Colors 1717, Bella+Canvas 3001, AS Colour).
+	2.	Configure sizes/quantities (minimum 24).
+	3.	Specify print locations & number of ink colors.
+	4.	Upload artwork.
+	5.	Get an instant quote based on your screen print pricing logic.
+	6.	Pay a deposit online to lock in the order.
+	7.	Have the order auto-approved after internal art review and then move into production.
+
+Standard promise:
+
+“Most orders ship in ~14 business days after art approval.”
+
+⸻
+
+2. Core Experience – Customer Flow
+
+Step 1: Custom Landing Page
+
+URL idea: /custom-shirts
+
+Key elements:
+	•	Headline:
+“Custom Screen Printed Shirts – Designed & Ordered Online”
+	•	Subcopy:
+“Choose your favorite premium tee, upload your artwork, get instant pricing, and pay your deposit in minutes.”
+	•	CTA: “Start Your Order” → Takes user into the configurator flow.
+
+⸻
+
+Step 2: Garment Selection
+
+Small curated card grid, e.g.:
+	•	Comfort Colors 1717 (Pigment-Dyed Tee)
+	•	Bella+Canvas 3001 (Soft Unisex Tee)
+	•	AS Colour Staple or equivalent
+
+Each card shows:
+	•	Garment name
+	•	Thumbnail
+	•	Short description
+	•	“From $X/shirt at 24 pieces” teaser price
+	•	“Select” button
+
+Admin requirement: The list of garments (name, image, active/inactive, base cost, pricing tiers) must be configurable in an admin panel.
+
+User selects one → goes to configuration.
+
+⸻
+
+Step 3: Order Configuration
+
+This can be a 3-step wizard on one page:
+
+3.1 Sizes & Quantities
+	•	Inputs: size grid with quantity for:
+	•	XS, S, M, L, XL, 2XL, 3XL, etc.
+	•	Live total quantity:
+“Total: 36 shirts”
+	•	Enforce minimum 24:
+	•	If < 24: disable next step and show message:
+“Custom orders have a 24-shirt minimum. Please increase your total quantity.”
+
+3.2 Print Locations (Screen Print Only)
+Preset options:
+	•	Front only
+	•	Back only
+	•	Front + Back
+	•	Left chest + Full back
+
+Each location has:
+	•	Toggle (on/off)
+	•	Dropdown for # of ink colors (1–4; configurable max).
+
+3.3 Colors & Basic Details
+	•	Shirt color dropdown (limited, curated options per garment).
+	•	Optional fields:
+	•	“Name of your organization/event”
+	•	“Need-by date” picker (with note:
+“Most orders ship in ~14 business days after art approval.”)
+
+On the right: Live Quote Panel (always visible):
+	•	Garment subtotal
+	•	Print subtotal
+	•	Setup fees
+	•	Estimated shipping (if included or shown as separate)
+	•	Total order cost
+	•	Per-shirt price
+
+⸻
+
+Step 4: Artwork Upload
+
+Per selected print location:
+	•	“Upload artwork for front”
+	•	“Upload artwork for back”
+…based on what they turned on.
+
+Features:
+	•	Drag-and-drop uploader.
+	•	Accepted formats: PNG, JPG, PDF, AI, EPS, SVG.
+	•	Max size (e.g. 50 MB) and tip text:
+	•	“High-resolution files (300dpi at print size) give the best results.”
+	•	Optional: text-based design option:
+	•	Checkbox: “I don’t have artwork – I just need text on my shirt.”
+	•	Shows simple fields: text line(s), font style, placement.
+
+Back-end:
+	•	Store files in a secure bucket.
+	•	Generate low-res preview thumbnails for admin and (optionally) customer.
+
+⸻
+
+Step 5: Review & Deposit Checkout
+
+Review Page shows:
+	•	Garment, color, curated image.
+	•	Quantity by size.
+	•	Print locations + ink colors.
+	•	Uploaded artwork filenames/preview.
+	•	Price breakdown:
+	•	Total project cost
+	•	Required deposit (e.g., 50% of total – configurable)
+	•	“Remaining balance due before shipment.”
+
+Copy example:
+
+“Today’s payment: $X. This is a 50% deposit toward your total of $Y. Remaining balance is due before your order ships.”
+
+Customer inputs:
+	•	Name
+	•	Email
+	•	Phone
+	•	Shipping address
+	•	Optional: “Order notes”
+
+Payment:
+	•	Use Shopify Payments/Shop Pay.
+	•	Create order or draft order with:
+	•	Line item “Custom Screen Print Order – [Garment name]”
+	•	Line-item properties or metafield containing full configuration JSON.
+	•	Mark as partially paid with deposit amount.
+
+Confirmation:
+	•	On-screen and email:
+	•	Summary of configuration.
+	•	Deposit amount captured.
+	•	Language like:
+
+“Thanks! Your order has been received. Our team will review your artwork within 1–2 business days. If everything looks good, your order will be approved automatically and move into production. Most orders ship in ~14 business days after art approval.”
+
+⸻
+
+3. Internal Workflow & Statuses
+
+Order Status Lifecycle (internal)
+	1.	New – Deposit Paid
+	•	Customer finished checkout.
+	•	Status auto-set to “Pending Art Review.”
+	2.	Pending Art Review
+	•	Team checks:
+	•	Is artwork high enough resolution?
+	•	Number of colors matches what they selected?
+	•	Any production issues (tiny text, gradients, etc.)?
+	3.	Art Approved (Auto-Approved Flow)
+
+	•	If artwork is acceptable:
+	•	Mark order as Art Approved / In Production.
+	•	Start 14-business-day clock toward estimated ship date.
+	•	Optional: send automated email:
+“Your artwork is approved! We’ve moved your order into production. We’re targeting shipment around [Date].”
+
+	4.	Issues Found
+
+	•	If artwork cannot be used as-is:
+	•	Internal status: “Art Revision Needed.”
+	•	Manual email to customer describing:
+	•	Required changes, or
+	•	New price if color count/location needs adjustment.
+	•	Admin can adjust price → send invoice link for difference if needed.
+
+	5.	Ready to Ship / Balance Due
+
+	•	Before shipping, ensure remaining 50% is collected:
+	•	Second payment via invoice or Shopify payment request.
+	•	When fully paid, change status to “Ready to Ship / Completed.”
+
+⸻
+
+4. Pricing & Quoting Engine (Screen Print Only)
+
+Key Inputs
+	•	Garment:
+	•	Base cost per shirt (your cost).
+	•	Pricing tiers (quantity ranges → margin/markup rules).
+	•	Quantity: total shirts (≥ 24).
+	•	Print details:
+	•	Number of locations.
+	•	Number of ink colors per location.
+	•	Fees:
+	•	Per-screen setup cost (per color per location).
+	•	Per-print cost per shirt (varies by quantity and colors).
+	•	Shipping & handling:
+	•	Either baked into margin or added at checkout.
+
+Example Logic (high-level pseudocode)
+
+total_qty = sum(size_quantities)
+
+if total_qty < 24:
+    show error
+
+# Garment cost
+garment_unit_cost = lookup_garment_cost(garment_id, total_qty)
+garment_subtotal = garment_unit_cost * total_qty
+
+# Screen setup fees
+screen_count = sum(colors_per_location)  # each color requires a screen
+setup_fee_total = screen_count * setup_fee_per_screen
+
+# Print cost per shirt
+print_unit_cost = lookup_print_cost(total_qty, colors_per_location, num_locations)
+print_subtotal = print_unit_cost * total_qty
+
+# Total project cost
+subtotal = garment_subtotal + setup_fee_total + print_subtotal
+total = apply_margin_rules(subtotal)  # Optional extra margin/rounding
+
+deposit_due = total * deposit_percentage  # e.g., 0.5
+
+Requirement: All of these tables (garment cost tiers, print cost tiers, setup fees, deposit % config) must be editable in an admin interface—not hardcoded.
+
+⸻
+
+5. Admin Panel Requirements
+
+This can be:
+	•	A custom app admin (if Shopify app).
+	•	Or a simple internal dashboard if hosted separately.
+
+5.1 Garment Management
+	•	List of curated garments:
+	•	Name: “Comfort Colors 1717”
+	•	Brand (Comfort Colors, Bella+Canvas, AS Colour, etc.)
+	•	Description
+	•	Active/Inactive toggle
+	•	Thumbnail image upload
+	•	Available colors (with optional upcharge flags)
+	•	Size range (XS–3XL)
+	•	Base cost per size (if needed)
+	•	Pricing rule reference (which tier set it uses)
+	•	Ability to:
+	•	Add new garment.
+	•	Edit existing.
+	•	Deactivate garments.
+
+5.2 Pricing Config
+	•	Quantity tier definitions, e.g.:
+	•	Tier 1: 24–47
+	•	Tier 2: 48–71
+	•	Tier 3: 72–143
+	•	etc.
+	•	Garment pricing per tier:
+	•	Base cost and/or desired margin.
+	•	Print pricing:
+	•	Setup fee per screen.
+	•	Per-shirt print pricing matrix:
+	•	Rows: quantity tiers
+	•	Columns: # of colors (1–4)
+	•	Additional multiplier for multiple locations (e.g., front + back).
+	•	Deposit settings:
+	•	Deposit percentage (e.g., 50%).
+	•	Whether to allow override per order (admin only).
+
+5.3 Order Management
+
+For each custom order:
+	•	View:
+	•	Customer info.
+	•	Garment + color.
+	•	Size/quantity breakdown.
+	•	Print locations + # of ink colors.
+	•	Artwork files: preview + download.
+	•	Price breakdown & deposit collected.
+	•	Current status (New, Pending Art Review, Art Approved, In Production, Balance Due, Completed).
+	•	Actions:
+	•	Change status.
+	•	Edit internal order notes.
+	•	Adjust pricing (with comment/log).
+	•	Trigger emails (art approved, balance due, etc.).
+
+⸻
+
+6. Tech Stack & Integration Notes
+
+Given you’re already heavily on Shopify, recommended approach:
+
+Option: Custom Shopify App + Theme Section
+	•	Front-end:
+	•	React/Next or Vanilla JS app embedded in a Shopify theme page via app proxy or custom section.
+	•	Uses Shopify Storefront or Ajax APIs for checkout.
+	•	Backend:
+	•	Node/TypeScript or similar hosted app.
+	•	Handles:
+	•	Quoting logic
+	•	Storing configs
+	•	Artwork uploads (S3 or equivalent)
+	•	Order config JSON
+	•	Checkout:
+	•	Create draft order or cart with:
+	•	One line item: “Custom Screen Print Order”
+	•	Metafield or line item properties storing order configuration.
+	•	Partial payment via Shopify’s deposit/partial payment mechanism or a pattern using two linked orders.
+
+Future Integration: Printavo
+
+Long-term, once MVP is working:
+	•	Map data fields to Printavo jobs:
+	•	Customer info
+	•	Garments + quantities
+	•	Print locations
+	•	Ink colors
+	•	Artwork links
+	•	Create a “Send to Printavo” button in admin:
+	•	Posts order config to Printavo via their API.
+	•	Returns job ID stored on order.
+	•	This lets your online orders flow straight into your production queue.
+
+⸻
+
+If you’d like, next I can:
+	•	Draft the data model (e.g., JSON schema for CustomOrderConfig) so a dev can implement it directly, or
+	•	Sketch a page-by-page wireframe description (“above the fold, sidebar, call-to-actions”) for a designer.
