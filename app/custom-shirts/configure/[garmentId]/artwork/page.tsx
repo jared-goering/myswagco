@@ -5,7 +5,13 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useOrderStore } from '@/lib/store/orderStore'
 import { PrintLocation, ArtworkTransform } from '@/types'
+import { motion, AnimatePresence } from 'framer-motion'
+import * as Popover from '@radix-ui/react-popover'
+import * as Tabs from '@radix-ui/react-tabs'
 import DesignEditor from '@/components/DesignEditor'
+import FileUploadCard from '@/components/FileUploadCard'
+import ArtworkGallery from '@/components/ArtworkGallery'
+import Toast from '@/components/Toast'
 
 export default function ArtworkUpload() {
   const router = useRouter()
@@ -13,8 +19,15 @@ export default function ArtworkUpload() {
   const garmentId = params.garmentId as string
 
   const { printConfig, artworkFiles, setArtworkFile, artworkTransforms, setArtworkTransform } = useOrderStore()
-  const [uploading, setUploading] = useState(false)
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
+  const [showGallery, setShowGallery] = useState(false)
+  const [showRequirements, setShowRequirements] = useState(false)
+  const [hasShownCompletionToast, setHasShownCompletionToast] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; show: boolean; confetti?: boolean }>({
+    message: '',
+    type: 'info',
+    show: false,
+  })
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
@@ -25,21 +38,52 @@ export default function ArtworkUpload() {
     if (enabledLocations.length > 0 && !activeTab) {
       setActiveTab(enabledLocations[0])
     }
-  }, [enabledLocations])
+  }, [enabledLocations.length])
+
+  // Check if all files uploaded (only show toast once)
+  useEffect(() => {
+    const allUploaded = enabledLocations.every(location => artworkFiles[location])
+    if (allUploaded && enabledLocations.length > 0 && !hasShownCompletionToast) {
+      setHasShownCompletionToast(true)
+      setToast({
+        message: '🎉 All artwork uploaded successfully!',
+        type: 'success',
+        show: true,
+        confetti: true,
+      })
+    }
+    // Reset the flag if files are removed
+    if (!allUploaded && hasShownCompletionToast) {
+      setHasShownCompletionToast(false)
+    }
+  }, [artworkFiles, enabledLocations, hasShownCompletionToast])
 
   function handleFileSelect(location: PrintLocation, file: File | null) {
     setArtworkFile(location, file)
     // Switch to the tab of the uploaded file
     if (file) {
       setActiveTab(location)
+      setToast({
+        message: `Artwork uploaded for ${getLocationLabel(location)}`,
+        type: 'success',
+        show: true,
+      })
     }
+  }
+
+  function handleFileRemove(location: PrintLocation) {
+    setArtworkFile(location, null)
+    setToast({
+      message: `Artwork removed from ${getLocationLabel(location)}`,
+      type: 'info',
+      show: true,
+    })
   }
 
   function handleTransformChange(location: PrintLocation, transform: ArtworkTransform) {
     setArtworkTransform(location, transform)
   }
 
-  // Maximum print dimensions in inches per location
   const MAX_DIMENSIONS: Record<PrintLocation, { width: number; height: number }> = {
     front: { width: 11, height: 17 },
     back: { width: 11, height: 17 },
@@ -48,7 +92,6 @@ export default function ArtworkUpload() {
     full_back: { width: 13, height: 19 },
   }
 
-  // Print area dimensions in pixels (must match DesignEditor.tsx)
   const PRINT_AREA_PIXELS: Record<PrintLocation, { width: number; height: number }> = {
     front: { width: 165, height: 255 },
     back: { width: 165, height: 255 },
@@ -57,7 +100,6 @@ export default function ArtworkUpload() {
     full_back: { width: 195, height: 285 },
   }
 
-  // Validation functions
   function getValidationWarnings(location: PrintLocation): string[] {
     const warnings: string[] = []
     const file = artworkFiles[location]
@@ -65,11 +107,9 @@ export default function ArtworkUpload() {
 
     if (!file || !transform) return warnings
 
-    // Calculate dimensions in inches (estimate based on pixels)
     const maxDims = MAX_DIMENSIONS[location]
     const printAreaPx = PRINT_AREA_PIXELS[location]
     
-    // Create temporary image to get dimensions
     const img = new Image()
     img.src = URL.createObjectURL(file)
     const widthPx = img.width * transform.scale
@@ -77,17 +117,14 @@ export default function ArtworkUpload() {
     const widthInches = (widthPx / printAreaPx.width) * maxDims.width
     const heightInches = (heightPx / printAreaPx.height) * maxDims.height
 
-    // Check if artwork exceeds maximum print area
     if (widthInches > maxDims.width || heightInches > maxDims.height) {
       warnings.push(`Design exceeds maximum print area of ${maxDims.width}" × ${maxDims.height}". Please resize.`)
     }
 
-    // Check if artwork is too small (scale less than 0.3)
     if (transform.scale < 0.3) {
       warnings.push('Design appears very small. Consider using a larger design for better print quality.')
     }
 
-    // Check if significantly rotated
     const normalizedRotation = Math.abs(transform.rotation % 360)
     if (normalizedRotation > 15 && normalizedRotation < 345) {
       warnings.push('Design is rotated. Rotated designs may have different pricing or printing considerations.')
@@ -121,117 +158,193 @@ export default function ArtworkUpload() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/custom-shirts" className="text-2xl font-bold text-primary-600">
-            My Swag Co
-          </Link>
-          <nav className="text-sm text-gray-600">
-            <span className="font-semibold text-primary-600">Step 3</span> / Upload Artwork
-          </nav>
-        </div>
-      </header>
+  // Progress calculation
+  const uploadedCount = enabledLocations.filter(loc => artworkFiles[loc]).length
+  const totalCount = enabledLocations.length
+  const progress = totalCount > 0 ? (uploadedCount / totalCount) * 100 : 0
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+      {/* Toast Notifications */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.show}
+        onClose={() => setToast({ ...toast, show: false })}
+        showConfetti={toast.confetti}
+      />
+
+      {/* Header */}
+      <motion.header
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/custom-shirts" className="text-2xl font-bold text-gradient">
+              My Swag Co
+            </Link>
+            <nav className="flex items-center gap-6">
+              <div className="text-sm text-gray-600">
+                <span className="font-semibold text-primary-600">Step 3</span> / Upload Artwork
+              </div>
+              {/* Progress indicator */}
+              <div className="hidden sm:flex items-center gap-3">
+                <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-primary-600 to-primary-400"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-gray-600">
+                  {uploadedCount}/{totalCount}
+                </span>
+              </div>
+            </nav>
+          </div>
+        </div>
+      </motion.header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+        {/* Title Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-8 lg:mb-12"
+        >
+          <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">
             Upload Your Artwork
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-lg max-w-2xl mx-auto">
             Upload high-resolution files for each print location and position your design
           </p>
-        </div>
+          
+          {/* Quick Actions */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+            <button
+              onClick={() => setShowGallery(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-lg font-medium text-sm text-gray-700 hover:text-primary-700 transition-all shadow-sm hover:shadow-md"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              View Examples
+            </button>
+            
+            <Popover.Root open={showRequirements} onOpenChange={setShowRequirements}>
+              <Popover.Trigger asChild>
+                <button className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-lg font-medium text-sm text-gray-700 hover:text-primary-700 transition-all shadow-sm hover:shadow-md">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  File Requirements
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  className="z-50 w-80 bg-white rounded-lg shadow-xl border-2 border-gray-200 p-4 animate-slide-up"
+                  sideOffset={5}
+                >
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      File Requirements
+                    </h3>
+                    <ul className="space-y-2 text-sm text-gray-700">
+                      <li className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-success-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span><strong>Formats:</strong> PNG, JPG, PDF, AI, EPS, SVG</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-success-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span><strong>Max Size:</strong> 50MB per file</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-success-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span><strong>Resolution:</strong> 300dpi recommended</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-primary-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                        </svg>
+                        <span><strong>Best Quality:</strong> Vector files (AI, EPS, SVG)</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <Popover.Arrow className="fill-white" />
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          </div>
+        </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-6">
+        <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 mb-8">
           {/* Left Column: File Uploads */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="font-semibold text-blue-900 mb-2">File Requirements</h3>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Accepted formats: PNG, JPG, PDF, AI, EPS, SVG</li>
-                  <li>• Maximum file size: 50MB</li>
-                  <li>• High resolution (300dpi) gives best results</li>
-                  <li>• Vector files (AI, EPS, SVG) are preferred for best quality</li>
-                </ul>
-              </div>
-
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="space-y-4"
+          >
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 lg:p-6">
               <div className="space-y-6">
-                {enabledLocations.map((location) => {
+                {enabledLocations.map((location, index) => {
                   const colors = printConfig.locations[location]?.num_colors || 1
                   const file = artworkFiles[location]
 
                   return (
-                    <div key={location} className="border border-gray-200 rounded-lg p-6">
-                      <h3 className="font-semibold text-lg mb-2">
-                        {getLocationLabel(location)}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {colors} color{colors > 1 ? 's' : ''}
-                      </p>
-
-                      {file ? (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <svg className="w-8 h-8 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <div>
-                                <p className="font-medium text-green-900">{file.name}</p>
-                                <p className="text-sm text-green-700">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleFileSelect(location, null)}
-                              className="text-red-600 hover:text-red-700 font-medium"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <label className="block border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 cursor-pointer transition-colors">
-                          <input
-                            type="file"
-                            accept=".png,.jpg,.jpeg,.pdf,.ai,.eps,.svg"
-                            onChange={(e) => {
-                              const selectedFile = e.target.files?.[0]
-                              if (selectedFile) {
-                                handleFileSelect(location, selectedFile)
-                              }
-                            }}
-                            className="hidden"
-                          />
-                          <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p className="text-gray-700 font-medium mb-1">
-                            Drop file here or click to browse
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            PNG, JPG, PDF, AI, EPS, SVG (max 50MB)
-                          </p>
-                        </label>
-                      )}
-                    </div>
+                    <motion.div
+                      key={location}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <FileUploadCard
+                        location={location}
+                        label={getLocationLabel(location)}
+                        colors={colors}
+                        file={file}
+                        onFileSelect={(file) => handleFileSelect(location, file)}
+                        onFileRemove={() => handleFileRemove(location)}
+                      />
+                    </motion.div>
                   )
                 })}
               </div>
 
               {/* Text-Only Design Option */}
-              <div className="mt-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="font-semibold mb-2">Don't have artwork?</h3>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="mt-6 p-4 lg:p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200"
+              >
+                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Don't have artwork?
+                </h3>
                 <p className="text-gray-600 text-sm mb-3">
                   If you just need text printed on your shirts, you can work with our team to create a simple text-based design. 
                   Upload a text file or document describing what you want, and we'll follow up with you.
                 </p>
-                <label className="inline-block bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg cursor-pointer text-sm font-medium">
+                <label className="inline-flex items-center gap-2 bg-white border-2 border-gray-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2 rounded-lg cursor-pointer text-sm font-medium transition-all">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload Text Description
                   <input
                     type="file"
                     accept=".txt,.doc,.docx,.pdf"
@@ -243,111 +356,160 @@ export default function ArtworkUpload() {
                     }}
                     className="hidden"
                   />
-                  Upload Text Description
                 </label>
-              </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right Column: Live Design Preview */}
-          <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24">
-            <h2 className="text-xl font-semibold mb-4">Design Preview</h2>
-
-            {/* Tabs for print locations */}
-            {enabledLocations.length > 0 && (
-              <div className="mb-4 border-b border-gray-200">
-                <div className="flex flex-wrap -mb-px">
-                  {enabledLocations.map((location) => (
-                    <button
-                      key={location}
-                      onClick={() => setActiveTab(location)}
-                      className={`px-4 py-2 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === location
-                          ? 'border-primary-600 text-primary-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      {getLocationLabel(location)}
-                      {artworkFiles[location] && (
-                        <span className="ml-2 text-green-600">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Design Editor */}
-            {activeTab && (
-              <div className="mt-4">
-                <div className="flex justify-center">
-                  <DesignEditor
-                    artworkFile={artworkFiles[activeTab]}
-                    printLocation={activeTab}
-                    transform={artworkTransforms[activeTab] || null}
-                    onTransformChange={(transform) => handleTransformChange(activeTab, transform)}
-                  />
-                </div>
-
-                {/* Validation Warnings */}
-                {getValidationWarnings(activeTab).length > 0 && (
-                  <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex items-start">
-                      <svg className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-yellow-900 mb-1">Design Warnings</h4>
-                        <ul className="text-sm text-yellow-800 space-y-1">
-                          {getValidationWarnings(activeTab).map((warning, idx) => (
-                            <li key={idx}>• {warning}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="lg:sticky lg:top-24 lg:self-start"
+          >
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 lg:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Design Preview</h2>
+                {uploadedCount > 0 && (
+                  <span className="badge-success">
+                    {uploadedCount}/{totalCount} Complete
+                  </span>
                 )}
-
-                {/* Design Tips */}
-                <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <h4 className="font-semibold text-gray-900 mb-2 text-sm">Design Tips</h4>
-                  <ul className="text-xs text-gray-600 space-y-1">
-                    <li>• Keep important elements within the print area boundaries</li>
-                    <li>• Designs should be at least 300dpi at the desired print size</li>
-                    <li>• Allow at least 0.5" margin from the print area edges</li>
-                    <li>• Vector files (AI, EPS, SVG) provide the best quality</li>
-                  </ul>
-                </div>
               </div>
-            )}
-          </div>
+
+              {/* Enhanced Tabs */}
+              {enabledLocations.length > 0 && (
+                <Tabs.Root value={activeTab || enabledLocations[0]} onValueChange={(val) => setActiveTab(val as PrintLocation)}>
+                  <Tabs.List className="flex flex-wrap gap-2 mb-6">
+                    {enabledLocations.map((location) => (
+                      <Tabs.Trigger
+                        key={location}
+                        value={location}
+                        className={`
+                          flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all
+                          ${activeTab === location
+                            ? 'bg-primary-600 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }
+                        `}
+                      >
+                        {getLocationLabel(location)}
+                        {artworkFiles[location] && (
+                          <motion.span
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className={activeTab === location ? 'text-white' : 'text-success-600'}
+                          >
+                            ✓
+                          </motion.span>
+                        )}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+
+                  {enabledLocations.map((location) => (
+                    <Tabs.Content key={location} value={location} className="outline-none">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={location}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <DesignEditor
+                            artworkFile={artworkFiles[location]}
+                            printLocation={location}
+                            transform={artworkTransforms[location] || null}
+                            onTransformChange={(transform) => handleTransformChange(location, transform)}
+                          />
+
+                          {/* Validation Warnings */}
+                          <AnimatePresence>
+                            {getValidationWarnings(location).length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="mt-4 bg-warning-50 border-2 border-warning-300 rounded-lg p-4"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <svg className="w-5 h-5 text-warning-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-warning-900 mb-1">Design Warnings</h4>
+                                    <ul className="text-sm text-warning-800 space-y-1">
+                                      {getValidationWarnings(location).map((warning, idx) => (
+                                        <li key={idx}>• {warning}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      </AnimatePresence>
+                    </Tabs.Content>
+                  ))}
+                </Tabs.Root>
+              )}
+            </div>
+          </motion.div>
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between max-w-7xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto"
+        >
           <Link
             href={`/custom-shirts/configure/${garmentId}`}
-            className="px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
+            className="w-full sm:w-auto btn-secondary"
           >
-            Back
+            ← Back
           </Link>
-          <div className="flex flex-col items-end">
-            <button
+          <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+            <motion.button
               onClick={handleContinue}
               disabled={!canContinue()}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              whileHover={canContinue() ? { scale: 1.02 } : {}}
+              whileTap={canContinue() ? { scale: 0.98 } : {}}
+              className="w-full sm:w-auto btn-primary"
             >
-              Continue to Checkout
-            </button>
-            {hasAnyWarnings() && (
-              <p className="text-xs text-yellow-600 mt-2">
-                ⚠️ There are design warnings. You can still proceed.
-              </p>
+              Continue to Checkout →
+            </motion.button>
+            {hasAnyWarnings() && canContinue() && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-xs text-warning-600 flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                There are design warnings. You can still proceed.
+              </motion.p>
+            )}
+            {!canContinue() && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-xs text-gray-500"
+              >
+                Upload artwork for all locations to continue
+              </motion.p>
             )}
           </div>
-        </div>
+        </motion.div>
       </div>
+
+      {/* Gallery Modal */}
+      <ArtworkGallery isOpen={showGallery} onClose={() => setShowGallery(false)} />
     </div>
   )
 }
-

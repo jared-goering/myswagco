@@ -1,20 +1,49 @@
-import React from 'react'
+'use client'
+
+import React, { useState } from 'react'
 import { PrintLocation } from '@/types'
+import { motion } from 'framer-motion'
 
 interface ShirtMockupProps {
   printLocation: PrintLocation
   className?: string
+  showColorPicker?: boolean
 }
 
-export default function ShirtMockup({ printLocation, className = '' }: ShirtMockupProps) {
+export default function ShirtMockup({ printLocation, className = '', showColorPicker = false }: ShirtMockupProps) {
+  const [shirtColor, setShirtColor] = useState('#f3f4f6')
+
+  const colors = [
+    { name: 'Gray', value: '#f3f4f6' },
+    { name: 'White', value: '#ffffff' },
+    { name: 'Black', value: '#1f2937' },
+    { name: 'Navy', value: '#1e3a8a' },
+    { name: 'Red', value: '#dc2626' },
+    { name: 'Green', value: '#16a34a' },
+  ]
   const renderFrontView = () => (
     <svg viewBox="0 0 400 500" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Shadow */}
+      <defs>
+        <filter id="softShadow">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+          <feOffset dx="0" dy="4" result="offsetblur"/>
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.3"/>
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
       {/* Shirt outline - front view */}
       <path
         d="M 100 50 L 80 100 L 80 500 L 320 500 L 320 100 L 300 50 L 280 30 Q 270 20 260 20 L 250 20 Q 240 10 200 10 Q 160 10 150 20 L 140 20 Q 130 20 120 30 Z"
-        fill="#f3f4f6"
+        fill={shirtColor}
         stroke="#d1d5db"
         strokeWidth="2"
+        filter="url(#softShadow)"
       />
       
       {/* Neck opening */}
@@ -45,12 +74,27 @@ export default function ShirtMockup({ printLocation, className = '' }: ShirtMock
 
   const renderBackView = () => (
     <svg viewBox="0 0 400 500" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Shadow */}
+      <defs>
+        <filter id="softShadow">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+          <feOffset dx="0" dy="4" result="offsetblur"/>
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.3"/>
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
       {/* Shirt outline - back view */}
       <path
         d="M 100 50 L 80 100 L 80 500 L 320 500 L 320 100 L 300 50 L 280 30 Q 270 20 260 20 L 240 20 Q 230 20 220 20 L 180 20 Q 170 20 160 20 L 140 20 Q 130 20 120 30 Z"
-        fill="#f3f4f6"
+        fill={shirtColor}
         stroke="#d1d5db"
         strokeWidth="2"
+        filter="url(#softShadow)"
       />
       
       {/* Back neck */}
@@ -81,12 +125,27 @@ export default function ShirtMockup({ printLocation, className = '' }: ShirtMock
 
   const renderLeftChestView = () => (
     <svg viewBox="0 0 400 500" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Shadow */}
+      <defs>
+        <filter id="softShadow">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+          <feOffset dx="0" dy="4" result="offsetblur"/>
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.3"/>
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
       {/* Shirt outline - front view */}
       <path
         d="M 100 50 L 80 100 L 80 500 L 320 500 L 320 100 L 300 50 L 280 30 Q 270 20 260 20 L 250 20 Q 240 10 200 10 Q 160 10 150 20 L 140 20 Q 130 20 120 30 Z"
-        fill="#f3f4f6"
+        fill={shirtColor}
         stroke="#d1d5db"
         strokeWidth="2"
+        filter="url(#softShadow)"
       />
       
       {/* Neck opening */}
@@ -117,12 +176,27 @@ export default function ShirtMockup({ printLocation, className = '' }: ShirtMock
 
   const renderRightChestView = () => (
     <svg viewBox="0 0 400 500" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Shadow */}
+      <defs>
+        <filter id="softShadow">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+          <feOffset dx="0" dy="4" result="offsetblur"/>
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.3"/>
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
       {/* Shirt outline - front view */}
       <path
         d="M 100 50 L 80 100 L 80 500 L 320 500 L 320 100 L 300 50 L 280 30 Q 270 20 260 20 L 250 20 Q 240 10 200 10 Q 160 10 150 20 L 140 20 Q 130 20 120 30 Z"
-        fill="#f3f4f6"
+        fill={shirtColor}
         stroke="#d1d5db"
         strokeWidth="2"
+        filter="url(#softShadow)"
       />
       
       {/* Neck opening */}
@@ -153,12 +227,27 @@ export default function ShirtMockup({ printLocation, className = '' }: ShirtMock
 
   const renderFullBackView = () => (
     <svg viewBox="0 0 400 500" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Shadow */}
+      <defs>
+        <filter id="softShadow">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+          <feOffset dx="0" dy="4" result="offsetblur"/>
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.3"/>
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
       {/* Shirt outline - back view */}
       <path
         d="M 100 50 L 80 100 L 80 500 L 320 500 L 320 100 L 300 50 L 280 30 Q 270 20 260 20 L 240 20 Q 230 20 220 20 L 180 20 Q 170 20 160 20 L 140 20 Q 130 20 120 30 Z"
-        fill="#f3f4f6"
+        fill={shirtColor}
         stroke="#d1d5db"
         strokeWidth="2"
+        filter="url(#softShadow)"
       />
       
       {/* Back neck */}
@@ -187,19 +276,61 @@ export default function ShirtMockup({ printLocation, className = '' }: ShirtMock
     </svg>
   )
 
-  switch (printLocation) {
-    case 'front':
-      return renderFrontView()
-    case 'back':
-      return renderBackView()
-    case 'left_chest':
-      return renderLeftChestView()
-    case 'right_chest':
-      return renderRightChestView()
-    case 'full_back':
-      return renderFullBackView()
-    default:
-      return renderFrontView()
-  }
+  const mockupView = (() => {
+    switch (printLocation) {
+      case 'front':
+        return renderFrontView()
+      case 'back':
+        return renderBackView()
+      case 'left_chest':
+        return renderLeftChestView()
+      case 'right_chest':
+        return renderRightChestView()
+      case 'full_back':
+        return renderFullBackView()
+      default:
+        return renderFrontView()
+    }
+  })()
+
+  return (
+    <div className="relative">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        {mockupView}
+      </motion.div>
+
+      {/* Color Picker */}
+      {showColorPicker && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 p-3"
+        >
+          <div className="text-xs font-semibold text-gray-700 mb-2 text-center">Shirt Color</div>
+          <div className="flex gap-2">
+            {colors.map((color) => (
+              <motion.button
+                key={color.value}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShirtColor(color.value)}
+                className={`
+                  w-8 h-8 rounded-full border-2 transition-all
+                  ${shirtColor === color.value ? 'border-primary-500 ring-2 ring-primary-200' : 'border-gray-300 hover:border-gray-400'}
+                `}
+                style={{ backgroundColor: color.value }}
+                title={color.name}
+                aria-label={`Select ${color.name} color`}
+              />
+            ))}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
 }
 

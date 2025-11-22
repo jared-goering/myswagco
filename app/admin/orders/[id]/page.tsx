@@ -174,13 +174,14 @@ export default function AdminOrderDetail() {
                 <div className="pt-3 border-t">
                   <p className="text-sm text-gray-600 mb-2">Size Breakdown:</p>
                   <div className="grid grid-cols-4 gap-2 text-sm">
-                    {Object.entries(order.size_quantities).map(([size, qty]) => (
-                      qty > 0 && (
+                    {Object.entries(order.size_quantities).map(([size, qty]) => {
+                      const quantity = qty as number
+                      return quantity > 0 && (
                         <div key={size} className="bg-gray-50 px-2 py-1 rounded">
-                          <span className="font-medium">{size}:</span> {qty as number}
+                          <span className="font-medium">{size}:</span> {quantity}
                         </div>
                       )
-                    ))}
+                    })}
                   </div>
                 </div>
                 <div className="pt-3 border-t">

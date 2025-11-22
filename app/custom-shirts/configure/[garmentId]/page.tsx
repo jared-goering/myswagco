@@ -10,7 +10,6 @@ const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
 const PRINT_LOCATIONS: { value: PrintLocation; label: string }[] = [
   { value: 'front', label: 'Front' },
   { value: 'back', label: 'Back' },
-  { value: 'left_chest', label: 'Left Chest' },
 ]
 
 export default function ConfigurationWizard() {
@@ -219,7 +218,7 @@ export default function ConfigurationWizard() {
                       <input
                         type="number"
                         min="0"
-                        value={sizeQuantities[size] || ''}
+                        value={sizeQuantities[size as keyof typeof sizeQuantities] || ''}
                         onChange={(e) => handleSizeQuantityChange(size, e.target.value)}
                         className="w-full border border-gray-300 rounded px-3 py-2"
                         placeholder="0"
