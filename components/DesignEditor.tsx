@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Stage, Layer, Image as KonvaImage, Transformer, Rect, Text, Group } from 'react-konva'
-import { PrintLocation, ArtworkTransform } from '@/types'
+import { PrintLocation, ArtworkTransform, Garment } from '@/types'
 import Konva from 'konva'
 import useImage from 'use-image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -14,6 +14,10 @@ interface DesignEditorProps {
   printLocation: PrintLocation
   transform: ArtworkTransform | null
   onTransformChange: (transform: ArtworkTransform) => void
+  garment: Garment | null
+  selectedColors: string[]
+  activeColor: string
+  onColorChange: (color: string) => void
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -36,7 +40,7 @@ const MAX_PRINT_DIMENSIONS: Record<PrintLocation, { width: number; height: numbe
 
 // Print area dimensions in pixels (scaled to match actual shirt body)
 const PRINT_AREAS: Record<PrintLocation, { width: number; height: number; x: number; y: number }> = {
-  front: { width: 165, height: 255, x: 167.5, y: 155 },
+  front: { width: 165, height: 255, x: 167.5, y: 135 },
   back: { width: 165, height: 255, x: 167.5, y: 130 },
   left_chest: { width: 60, height: 60, x: 290, y: 165 },
   right_chest: { width: 60, height: 60, x: 150, y: 165 },
@@ -53,8 +57,26 @@ function getPixelsPerInch(location: PrintLocation): { x: number; y: number } {
   }
 }
 
-// Get shirt SVG based on print location
-function getShirtSvgUrl(location: PrintLocation): string | null {
+// Get shirt image URL - either from garment color images or fallback to SVG
+function getShirtImageUrl(location: PrintLocation, garment: Garment | null, activeColor: string): string | null {
+  if (garment && activeColor) {
+    // For back locations, try back image first, then front image as fallback
+    if (location === 'back' || location === 'full_back') {
+      if (garment.color_back_images?.[activeColor]) {
+        return garment.color_back_images[activeColor]
+      }
+      // Fallback to front image if no back image exists
+      if (garment.color_images?.[activeColor]) {
+        return garment.color_images[activeColor]
+      }
+    }
+    // For front locations, use front image
+    else if (garment.color_images?.[activeColor]) {
+      return garment.color_images[activeColor]
+    }
+  }
+  
+  // Fallback to SVG if no garment images
   if (location === 'front' || location === 'left_chest' || location === 'right_chest') {
     return '/shirt-front.svg'
   } else if (location === 'back' || location === 'full_back') {
@@ -72,7 +94,11 @@ export default function DesignEditor({
   artworkFile, 
   printLocation, 
   transform, 
-  onTransformChange 
+  onTransformChange,
+  garment,
+  selectedColors,
+  activeColor,
+  onColorChange
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
@@ -86,9 +112,9 @@ export default function DesignEditor({
   const [history, setHistory] = useState<HistoryState[]>([])
   const [historyStep, setHistoryStep] = useState(-1)
   
-  // Load shirt SVG
-  const shirtSvgUrl = getShirtSvgUrl(printLocation)
-  const [shirtImage] = useImage(shirtSvgUrl || '', 'anonymous')
+  // Load shirt image (either actual garment photo or SVG)
+  const shirtImageUrl = getShirtImageUrl(printLocation, garment, activeColor)
+  const [shirtImage] = useImage(shirtImageUrl || '', 'anonymous')
 
   const printArea = PRINT_AREAS[printLocation]
   const maxDimensions = MAX_PRINT_DIMENSIONS[printLocation]
@@ -534,6 +560,69 @@ export default function DesignEditor({
           canRedo={historyStep < history.length - 1}
         />
       </div>
+
+      {/* Color Switcher - Only show when multiple colors are selected */}
+      {selectedColors.length > 1 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4"
+        >
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-4 shadow-soft">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-black text-charcoal-700 uppercase tracking-wide">Preview Color</h4>
+              <span className="text-xs text-charcoal-500 font-semibold">
+                {selectedColors.length} colors selected
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedColors.map((color) => {
+                const isActive = color === activeColor
+                const colorImageUrl = garment?.color_images?.[color]
+                
+                return (
+                  <motion.button
+                    key={color}
+                    onClick={() => onColorChange(color)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`
+                      relative flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all
+                      ${isActive
+                        ? 'bg-primary-500 text-white shadow-bento ring-2 ring-primary-200'
+                        : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200 border-2 border-surface-300'
+                      }
+                    `}
+                  >
+                    {colorImageUrl && (
+                      <div className="w-6 h-6 rounded-md overflow-hidden border border-white/20 flex-shrink-0">
+                        <img
+                          src={colorImageUrl}
+                          alt={color}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <span>{color}</span>
+                    {isActive && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="ml-1"
+                      >
+                        ✓
+                      </motion.span>
+                    )}
+                  </motion.button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-charcoal-500 mt-3 font-semibold">
+              Switch between colors to preview your design on each garment color
+            </p>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }

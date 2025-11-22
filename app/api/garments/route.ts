@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         base_cost: body.base_cost,
         available_colors: body.available_colors,
         color_images: body.color_images || {},
+        color_back_images: body.color_back_images || {},
         size_range: body.size_range,
         pricing_tier_id: body.pricing_tier_id,
         active: body.active ?? true,

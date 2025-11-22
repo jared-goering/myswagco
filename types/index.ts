@@ -10,7 +10,8 @@ export interface Garment {
   base_cost: number
   thumbnail_url: string | null
   available_colors: string[]
-  color_images: Record<string, string> // Maps color name to image URL
+  color_images: Record<string, string> // Maps color name to front image URL
+  color_back_images?: Record<string, string> // Maps color name to back image URL
   size_range: string[]
   pricing_tier_id: string
   created_at: string

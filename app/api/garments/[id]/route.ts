@@ -78,6 +78,7 @@ export async function PATCH(
     if (body.active !== undefined) updates.active = body.active
     if (body.thumbnail_url !== undefined) updates.thumbnail_url = body.thumbnail_url
     if (body.color_images !== undefined) updates.color_images = body.color_images
+    if (body.color_back_images !== undefined) updates.color_back_images = body.color_back_images
     
     // Update garment using admin client
     const { data: garment, error } = await supabaseAdmin
@@ -112,25 +113,50 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Soft delete - just set active to false
-    const { data: garment, error } = await supabaseAdmin
-      .from('garments')
-      .update({ active: false })
-      .eq('id', params.id)
-      .select()
-      .single()
+    const { searchParams } = new URL(request.url)
+    const permanent = searchParams.get('permanent') === 'true'
     
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Garment not found' },
-          { status: 404 }
-        )
+    if (permanent) {
+      // Hard delete - permanently remove from database
+      const { data: garment, error } = await supabaseAdmin
+        .from('garments')
+        .delete()
+        .eq('id', params.id)
+        .select()
+        .single()
+      
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return NextResponse.json(
+            { error: 'Garment not found' },
+            { status: 404 }
+          )
+        }
+        throw error
       }
-      throw error
+      
+      return NextResponse.json({ message: 'Garment permanently deleted', garment })
+    } else {
+      // Soft delete - just set active to false
+      const { data: garment, error } = await supabaseAdmin
+        .from('garments')
+        .update({ active: false })
+        .eq('id', params.id)
+        .select()
+        .single()
+      
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return NextResponse.json(
+            { error: 'Garment not found' },
+            { status: 404 }
+          )
+        }
+        throw error
+      }
+      
+      return NextResponse.json(garment)
     }
-    
-    return NextResponse.json(garment)
   } catch (error) {
     console.error('Error deleting garment:', error)
     return NextResponse.json(

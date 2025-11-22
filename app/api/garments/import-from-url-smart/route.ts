@@ -7,6 +7,12 @@ const anthropic = new Anthropic({
 
 const SUPPORTED_SUPPLIERS = ['ssactivewear.com', 'ascolour.com']
 
+// S&S Activewear API Configuration
+const SSACTIVEWEAR_API_BASE = 'https://api.ssactivewear.com/v2'
+const SSACTIVEWEAR_CDN_BASE = 'https://cdn.ssactivewear.com'
+const SSACTIVEWEAR_API_KEY = process.env.SSACTIVEWEAR_API_KEY
+const SSACTIVEWEAR_ACCOUNT_NUMBER = process.env.SSACTIVEWEAR_ACCOUNT_NUMBER
+
 interface ImportedGarmentData {
   name: string
   brand: string
@@ -17,13 +23,224 @@ interface ImportedGarmentData {
   thumbnail_url: string | null
   base_cost: number | null
   color_images?: { [color: string]: string }
+  color_back_images?: { [color: string]: string } // NEW: Back view images
+}
+
+/**
+ * Fetch product data from S&S Activewear official API
+ * This is MUCH faster and more reliable than web scraping!
+ */
+async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentData | null> {
+  // Extract style ID from URL (e.g., /p/bella/3001cvc -> 3001cvc)
+  const styleMatch = url.match(/\/p\/([^\/]+)\/([^\/\?]+)/)
+  if (!styleMatch) {
+    console.error('Could not extract style ID from S&S URL:', url)
+    return null
+  }
+
+  const brand = styleMatch[1]
+  const styleId = styleMatch[2].toUpperCase()
+
+  console.log('🔑 Fetching from S&S API:', { brand, styleId })
+
+  try {
+    // S&S API uses Basic Auth with Account Number as username and API Key as password
+    const credentials = SSACTIVEWEAR_ACCOUNT_NUMBER 
+      ? `${SSACTIVEWEAR_ACCOUNT_NUMBER}:${SSACTIVEWEAR_API_KEY}`
+      : `${SSACTIVEWEAR_API_KEY}:`
+    
+    const authHeader = `Basic ${Buffer.from(credentials).toString('base64')}`
+    
+    // Try different S&S API endpoints
+    // Option 1: Get all styles and filter (more reliable)
+    const stylesResponse = await fetch(`${SSACTIVEWEAR_API_BASE}/styles`, {
+      headers: {
+        'Authorization': authHeader,
+        'Accept': 'application/json'
+      }
+    })
+
+    if (!stylesResponse.ok) {
+      console.error('S&S API styles fetch failed:', stylesResponse.status, stylesResponse.statusText)
+      return null
+    }
+
+    const allStyles = await stylesResponse.json()
+    
+    // Find the matching style - match by BOTH style and brand
+    let styleData = null
+    if (Array.isArray(allStyles)) {
+      // First try: exact match on style name AND brand
+      styleData = allStyles.find((s: any) => {
+        const styleName = String(s.styleName || s.StyleName || '').toUpperCase()
+        const brandName = String(s.brandName || '').toUpperCase()
+        const brandFromUrl = brand.toUpperCase().replace(/[-_]/g, ' ')
+        
+        // Check if brand matches (handle variations like "comfort-colors" vs "COMFORT COLORS")
+        const brandMatches = brandName.includes(brandFromUrl) || brandFromUrl.includes(brandName.split(' ')[0])
+        
+        return brandMatches && styleName === styleId
+      })
+      
+      // Second try: match by style name if brand match fails (less strict)
+      if (!styleData) {
+        styleData = allStyles.find((s: any) => {
+          const styleName = String(s.styleName || s.StyleName || '').toUpperCase()
+          const uniqueStyleName = String(s.uniqueStyleName || '').toUpperCase()
+          const brandName = String(s.brandName || '').toUpperCase()
+          const brandFromUrl = brand.toUpperCase().replace(/[-_]/g, ' ')
+          
+          const brandMatches = brandName.includes(brandFromUrl) || brandFromUrl.includes(brandName.split(' ')[0])
+          
+          return brandMatches && (
+            styleName === styleId || 
+            uniqueStyleName === styleId ||
+            styleName.includes(styleId)
+          )
+        })
+      }
+    }
+    
+    if (!styleData) {
+      console.error('S&S API: Style not found:', { brand, styleId })
+      return null
+    }
+    
+    console.log('✅ S&S API found style:', {
+      styleID: styleData.styleID,
+      styleName: styleData.styleName,
+      brandName: styleData.brandName
+    })
+    
+    // Now fetch detailed product data including colors/sizes/images
+    const productsResponse = await fetch(`${SSACTIVEWEAR_API_BASE}/products/?style=${styleData.styleID}`, {
+      headers: {
+        'Authorization': authHeader,
+        'Accept': 'application/json'
+      }
+    })
+    
+    if (!productsResponse.ok) {
+      console.error('S&S API products fetch failed:', productsResponse.status)
+      // Continue with basic style data even if products fail
+    } else {
+      const products = await productsResponse.json()
+      console.log('📦 S&S API products response:', {
+        isArray: Array.isArray(products),
+        length: Array.isArray(products) ? products.length : 'N/A'
+      })
+      
+      // Log sample product to see what image fields are available
+      if (Array.isArray(products) && products.length > 0) {
+        console.log('🔍 Sample product fields:', Object.keys(products[0]))
+        console.log('🖼️  Image fields in first product:', {
+          colorFrontImage: products[0].colorFrontImage || null,
+          colorBackImage: products[0].colorBackImage || null,
+          colorSideImage: products[0].colorSideImage || null,
+          frontImage: products[0].frontImage || null,
+          backImage: products[0].backImage || null,
+          sideImage: products[0].sideImage || null,
+          image: products[0].image || null,
+          imageUrl: products[0].imageUrl || null,
+          colorName: products[0].colorName
+        })
+        styleData.products = products
+      }
+    }
+
+    // Transform S&S API data to our format
+    const products = styleData.products || []
+    
+    // Extract unique colors and their images (front + back)
+    const colorFrontMap = new Map<string, string>()
+    const colorBackMap = new Map<string, string>()
+    const sizeSet = new Set<string>()
+    let basePrice: number | null = null
+    
+    products.forEach((product: any) => {
+      // Extract color name
+      const colorName = product.colorName || product.color
+      
+      // Extract FRONT image
+      let colorFrontImage = product.colorFrontImage || product.frontImage || product.image
+      if (colorFrontImage && !colorFrontImage.startsWith('http')) {
+        colorFrontImage = `${SSACTIVEWEAR_CDN_BASE}/${colorFrontImage}`
+      }
+      if (colorName && colorFrontImage && !colorFrontMap.has(colorName)) {
+        colorFrontMap.set(colorName, colorFrontImage)
+      }
+      
+      // Extract BACK image
+      let colorBackImage = product.colorBackImage || product.backImage
+      if (colorBackImage && !colorBackImage.startsWith('http')) {
+        colorBackImage = `${SSACTIVEWEAR_CDN_BASE}/${colorBackImage}`
+      }
+      if (colorName && colorBackImage && !colorBackMap.has(colorName)) {
+        colorBackMap.set(colorName, colorBackImage)
+      }
+      
+      // Extract size
+      const size = product.sizeName || product.size
+      if (size) {
+        sizeSet.add(size)
+      }
+      
+      // Get wholesale price (use first available piece price)
+      if (!basePrice && product.piecePrice) {
+        basePrice = parseFloat(product.piecePrice)
+      }
+    })
+    
+    const availableColors = Array.from(colorFrontMap.keys())
+    const colorImages: Record<string, string> = Object.fromEntries(colorFrontMap)
+    const colorBackImages: Record<string, string> = Object.fromEntries(colorBackMap)
+    const sizeRange = Array.from(sizeSet)
+    
+    // Clean HTML from description
+    const cleanDescription = (styleData.description || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    // Convert style image to absolute URL if needed
+    let thumbnailUrl = colorImages[availableColors[0]] || styleData.styleImage || null
+    if (thumbnailUrl && !thumbnailUrl.startsWith('http')) {
+      thumbnailUrl = `${SSACTIVEWEAR_CDN_BASE}/${thumbnailUrl}`
+    }
+
+    console.log('✅ S&S API import successful:', {
+      colors: availableColors.length,
+      color_front_images: Object.keys(colorImages).length,
+      color_back_images: Object.keys(colorBackImages).length,
+      sizes: sizeRange.length
+    })
+
+    return {
+      name: `${styleData.styleName || styleData.title} - ${styleId}`,
+      brand: styleData.brandName || brand,
+      description: cleanDescription || `${styleData.title || styleData.styleName} by ${styleData.brandName}`,
+      category: 'T-Shirt', // S&S API might have category data - check styleData.category
+      available_colors: availableColors,
+      size_range: sizeRange,
+      thumbnail_url: thumbnailUrl,
+      base_cost: basePrice,
+      color_images: colorImages,
+      color_back_images: colorBackImages
+    }
+  } catch (error) {
+    console.error('❌ Error fetching from S&S API:', error)
+    return null
+  }
 }
 
 /**
  * Smart Import Strategy:
- * 1. Try Anthropic's native browser tool (if available)
- * 2. Fall back to enhanced HTML scraping with Claude
- * 3. Works on Vercel and all deployment platforms
+ * 1. Check if S&S Activewear + API key available → use official API
+ * 2. Try Anthropic's native browser tool (if available)
+ * 3. Fall back to enhanced HTML scraping with Claude
+ * 4. Works on Vercel and all deployment platforms
  */
 export async function POST(request: NextRequest) {
   try {
@@ -60,8 +277,29 @@ export async function POST(request: NextRequest) {
     }
 
     const isAsColour = url.toLowerCase().includes('ascolour.com')
+    const isSSActivewear = url.toLowerCase().includes('ssactivewear.com')
 
     console.log('🚀 Starting smart import for:', url)
+
+    // Strategy 0: If S&S Activewear and we have API key, use official API (fastest & most reliable!)
+    if (isSSActivewear && SSACTIVEWEAR_API_KEY) {
+      console.log('🔑 Using S&S Activewear Official API')
+      try {
+        const apiData = await fetchFromSSActivewearAPI(url)
+        if (apiData) {
+          console.log('✅ S&S API succeeded! Found', apiData.available_colors.length, 'colors')
+          return NextResponse.json(apiData)
+        } else {
+          console.log('⚠️  S&S API failed, falling back to web scraping')
+        }
+      } catch (error) {
+        console.log('⚠️  S&S API error, falling back to web scraping:', error)
+      }
+    } else if (isSSActivewear && !SSACTIVEWEAR_API_KEY) {
+      console.warn('⚠️  S&S Activewear URL detected but SSACTIVEWEAR_API_KEY not configured')
+      console.warn('   Add SSACTIVEWEAR_API_KEY to .env.local for faster, more reliable imports')
+      // Continue to web scraping fallback
+    }
 
     // Strategy 1: Try Anthropic's web fetch tool (available now!)
     if (strategy === 'browser' || strategy === 'auto') {

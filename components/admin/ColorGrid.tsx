@@ -5,10 +5,13 @@ import { useState } from 'react'
 interface ColorGridProps {
   colors: string[]
   colorImages: Record<string, string>
+  colorBackImages: Record<string, string>
   colorImagePreviews: Record<string, string>
+  colorBackImagePreviews: Record<string, string>
   onAddColor: (color: string) => void
   onRemoveColor: (color: string) => void
   onImageChange: (color: string, file: File) => void
+  onBackImageChange: (color: string, file: File) => void
   onReorder?: (colors: string[]) => void
   errors?: string
 }
@@ -16,16 +19,20 @@ interface ColorGridProps {
 export default function ColorGrid({
   colors,
   colorImages,
+  colorBackImages,
   colorImagePreviews,
+  colorBackImagePreviews,
   onAddColor,
   onRemoveColor,
   onImageChange,
+  onBackImageChange,
   onReorder,
   errors
 }: ColorGridProps) {
   const [colorInput, setColorInput] = useState('')
   const [isAddingColor, setIsAddingColor] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<Record<string, 'front' | 'back'>>({}) // Track active tab per color
 
   function handleAddColor() {
     if (colorInput.trim()) {
@@ -100,25 +107,30 @@ export default function ColorGrid({
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {/* Add Color Card */}
         {isAddingColor && (
-          <div className="bento-item border-2 border-primary-300 bg-primary-50/50">
+          <div className="bg-white rounded-xl border-2 border-primary-400 p-4 shadow-soft-lg">
             <div className="space-y-3">
-              <input
-                type="text"
-                value={colorInput}
-                onChange={(e) => setColorInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                placeholder="Color name..."
-                autoFocus
-                className="w-full px-3 py-2 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-sm font-bold"
-              />
-              <div className="flex gap-2">
+              <div>
+                <label className="block text-xs font-bold text-charcoal-600 mb-1.5 uppercase tracking-wide">
+                  Color Name
+                </label>
+                <input
+                  type="text"
+                  value={colorInput}
+                  onChange={(e) => setColorInput(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="e.g., Navy Blue"
+                  autoFocus
+                  className="w-full px-3 py-2.5 border-2 border-surface-300 rounded-lg focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-sm font-semibold placeholder:text-charcoal-300"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
                 <button
                   type="button"
                   onClick={handleAddColor}
                   disabled={!colorInput.trim()}
-                  className="flex-1 px-3 py-2 bg-primary-500 text-white rounded-lg font-bold text-sm hover:bg-primary-600 disabled:bg-surface-300 disabled:cursor-not-allowed transition-all"
+                  className="w-full px-4 py-2.5 bg-primary-500 text-white rounded-lg font-bold text-sm hover:bg-primary-600 disabled:bg-surface-300 disabled:text-surface-500 disabled:cursor-not-allowed transition-all shadow-soft hover:shadow-soft-md"
                 >
-                  Add
+                  Add Color
                 </button>
                 <button
                   type="button"
@@ -126,7 +138,7 @@ export default function ColorGrid({
                     setColorInput('')
                     setIsAddingColor(false)
                   }}
-                  className="px-3 py-2 bg-surface-200 text-charcoal-600 rounded-lg font-bold text-sm hover:bg-surface-300 transition-all"
+                  className="w-full px-4 py-2.5 bg-surface-100 text-charcoal-700 rounded-lg font-bold text-sm hover:bg-surface-200 transition-all"
                 >
                   Cancel
                 </button>
@@ -143,89 +155,179 @@ export default function ColorGrid({
             onDragStart={() => handleDragStart(index)}
             onDragOver={(e) => handleDragOver(e, index)}
             onDragEnd={handleDragEnd}
-            className={`group relative bento-item hover:shadow-soft-lg transition-all duration-200 ${
+            className={`group relative bg-white rounded-xl border-2 border-surface-200 p-3 hover:shadow-soft-lg hover:border-surface-300 transition-all duration-200 ${
               draggedIndex === index ? 'opacity-50' : ''
             } ${onReorder ? 'cursor-move' : ''}`}
           >
+            {/* Tab Navigation */}
+            <div className="mb-2 flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab(prev => ({ ...prev, [color]: 'front' }))}
+                className={`flex-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  (activeTab[color] || 'front') === 'front'
+                    ? 'bg-primary-500 text-white shadow-soft'
+                    : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                }`}
+              >
+                Front
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab(prev => ({ ...prev, [color]: 'back' }))}
+                className={`flex-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                  activeTab[color] === 'back'
+                    ? 'bg-primary-500 text-white shadow-soft'
+                    : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                }`}
+              >
+                Back
+                {colorBackImagePreviews[color] && (
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
             {/* Image Preview */}
-            <div className="mb-3 relative">
-              {colorImagePreviews[color] ? (
-                <div className="relative">
-                  <img
-                    src={colorImagePreviews[color]}
-                    alt={color}
-                    className="w-full h-32 object-cover rounded-xl border-2 border-surface-200"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-xl transition-all duration-200 flex items-center justify-center">
-                    <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) onImageChange(color, file)
-                        }}
-                        className="hidden"
-                      />
-                      <div className="px-4 py-2 bg-white rounded-lg font-bold text-sm shadow-bento flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Change
-                      </div>
-                    </label>
+            <div className="mb-2 relative">
+              {(activeTab[color] || 'front') === 'front' ? (
+                // Front Image
+                colorImagePreviews[color] ? (
+                  <div className="relative bg-white rounded-lg">
+                    <img
+                      src={colorImagePreviews[color]}
+                      alt={`${color} - Front`}
+                      className="w-full h-36 object-contain rounded-lg"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-xl transition-all duration-200 flex items-center justify-center">
+                      <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) onImageChange(color, file)
+                          }}
+                          className="hidden"
+                        />
+                        <div className="px-4 py-2 bg-white rounded-lg font-bold text-sm shadow-bento flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          Change
+                        </div>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) onImageChange(color, file)
+                      }}
+                      className="hidden"
+                    />
+                    <div className="w-full h-32 bg-surface-100 border-2 border-dashed border-surface-300 rounded-xl flex flex-col items-center justify-center hover:border-primary-400 hover:bg-primary-50/50 transition-all group">
+                      <svg className="w-8 h-8 text-surface-400 group-hover:text-primary-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-xs font-bold text-charcoal-400 mt-1">Upload Front</p>
+                    </div>
+                  </label>
+                )
               ) : (
-                <label className="cursor-pointer block">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) onImageChange(color, file)
-                    }}
-                    className="hidden"
-                  />
-                  <div className="w-full h-32 bg-surface-100 border-2 border-dashed border-surface-300 rounded-xl flex flex-col items-center justify-center hover:border-primary-400 hover:bg-primary-50/50 transition-all group">
-                    <svg className="w-8 h-8 text-surface-400 group-hover:text-primary-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <p className="text-xs font-bold text-charcoal-400 mt-1">Upload</p>
+                // Back Image
+                colorBackImagePreviews[color] ? (
+                  <div className="relative bg-white rounded-lg">
+                    <img
+                      src={colorBackImagePreviews[color]}
+                      alt={`${color} - Back`}
+                      className="w-full h-36 object-contain rounded-lg"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-xl transition-all duration-200 flex items-center justify-center">
+                      <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) onBackImageChange(color, file)
+                          }}
+                          className="hidden"
+                        />
+                        <div className="px-4 py-2 bg-white rounded-lg font-bold text-sm shadow-bento flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          Change
+                        </div>
+                      </label>
+                    </div>
                   </div>
-                </label>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) onBackImageChange(color, file)
+                      }}
+                      className="hidden"
+                    />
+                    <div className="w-full h-32 bg-surface-100 border-2 border-dashed border-surface-300 rounded-xl flex flex-col items-center justify-center hover:border-primary-400 hover:bg-primary-50/50 transition-all group">
+                      <svg className="w-8 h-8 text-surface-400 group-hover:text-primary-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-xs font-bold text-charcoal-400 mt-1">Upload Back</p>
+                    </div>
+                  </label>
+                )
               )}
             </div>
 
-            {/* Color Name */}
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-black text-charcoal-700 text-sm truncate">{color}</h4>
+            {/* Color Name and Status */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-black text-charcoal-700 text-sm mb-1 truncate">{color}</h4>
+                <div className="flex items-center gap-1">
+                  {colorImagePreviews[color] ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-100 px-2 py-0.5 rounded-full">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Image
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-warning-700 bg-warning-100 px-2 py-0.5 rounded-full">
+                      No image
+                    </span>
+                  )}
+                  {colorBackImagePreviews[color] && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-charcoal-600 bg-surface-200 px-2 py-0.5 rounded-full">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Back
+                    </span>
+                  )}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => onRemoveColor(color)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-error-100 rounded-lg"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-error-100 rounded-lg"
                 title="Remove color"
               >
                 <svg className="w-4 h-4 text-error-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-            </div>
-
-            {/* Status Badge */}
-            <div className="flex items-center gap-1">
-              {colorImagePreviews[color] ? (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-100 px-2 py-1 rounded-full">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Image
-                </span>
-              ) : (
-                <span className="text-xs font-bold text-warning-700 bg-warning-100 px-2 py-1 rounded-full">
-                  No image
-                </span>
-              )}
             </div>
 
             {/* Drag Handle */}

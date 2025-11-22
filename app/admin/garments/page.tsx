@@ -80,6 +80,45 @@ export default function AdminGarments() {
     }
   }
 
+  async function handleDelete(garment: Garment) {
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete "${garment.name}"?\n\n` +
+      `This action CANNOT be undone. The garment and all its data will be permanently removed.\n\n` +
+      `Consider using "Deactivate" instead if you might want to restore it later.`
+    )
+    
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/garments/${garment.id}?permanent=true`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete garment')
+      }
+
+      // Remove from local state immediately
+      setGarments(prevGarments => prevGarments.filter(g => g.id !== garment.id))
+
+      setToast({
+        isVisible: true,
+        message: `"${garment.name}" has been permanently deleted`,
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Error deleting garment:', error)
+      setToast({
+        isVisible: true,
+        message: 'Failed to delete garment',
+        type: 'error'
+      })
+      // Refresh on error
+      fetchGarments()
+    }
+  }
+
   // Filter garments based on search and status
   const filteredGarments = garments.filter(garment => {
     const matchesSearch = searchQuery === '' || 
@@ -402,25 +441,35 @@ export default function AdminGarments() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex lg:flex-col gap-2 justify-end">
+                  <div className="flex lg:flex-col gap-2 justify-end items-end">
                     <button
                       onClick={() => router.push(`/admin/garments/${garment.id}/edit`)}
-                      className="btn-secondary flex items-center gap-2 whitespace-nowrap"
+                      className="px-4 py-2 bg-white border-2 border-surface-300 text-charcoal-700 rounded-lg font-bold text-sm transition-all hover:border-surface-400 hover:bg-surface-50 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-[120px]"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                       Edit
                     </button>
                     <button
                       onClick={() => handleToggleActive(garment)}
-                      className={`px-6 py-3 rounded-xl font-black text-sm transition-all shadow-soft hover:shadow-soft-md whitespace-nowrap ${
+                      className={`px-4 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap min-w-[120px] flex items-center justify-center ${
                         garment.active
                           ? 'bg-surface-200 text-charcoal-700 hover:bg-surface-300'
                           : 'bg-success-500 text-white hover:bg-success-600'
                       }`}
                     >
                       {garment.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(garment)}
+                      className="px-4 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap min-w-[120px] border-2 border-error-500 text-error-500 hover:bg-error-500 hover:text-white flex items-center justify-center gap-1.5"
+                      title="Permanently delete this garment"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
                     </button>
                   </div>
                 </div>

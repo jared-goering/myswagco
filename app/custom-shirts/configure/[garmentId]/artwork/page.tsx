@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useOrderStore } from '@/lib/store/orderStore'
-import { PrintLocation, ArtworkTransform } from '@/types'
+import { PrintLocation, ArtworkTransform, Garment } from '@/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as Popover from '@radix-ui/react-popover'
 import * as Tabs from '@radix-ui/react-tabs'
@@ -18,12 +18,14 @@ export default function ArtworkUpload() {
   const params = useParams()
   const garmentId = params.garmentId as string
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkTransforms, setArtworkTransform } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkTransforms, setArtworkTransform, selectedColors } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
   const [hasShownCompletionToast, setHasShownCompletionToast] = useState(false)
   const [textDescription, setTextDescription] = useState('')
+  const [garment, setGarment] = useState<Garment | null>(null)
+  const [activeColor, setActiveColor] = useState<string>(selectedColors[0] || '')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; show: boolean; confetti?: boolean }>({
     message: '',
     type: 'info',
@@ -34,12 +36,35 @@ export default function ArtworkUpload() {
     .filter(([, config]) => config?.enabled)
     .map(([location]) => location as PrintLocation)
 
+  // Fetch garment data on mount
+  useEffect(() => {
+    async function fetchGarment() {
+      try {
+        const response = await fetch(`/api/garments/${garmentId}`)
+        if (response.ok) {
+          const garmentData = await response.json()
+          setGarment(garmentData)
+        }
+      } catch (error) {
+        console.error('Error fetching garment:', error)
+      }
+    }
+    fetchGarment()
+  }, [garmentId])
+
   // Set initial active tab to first enabled location
   useEffect(() => {
     if (enabledLocations.length > 0 && !activeTab) {
       setActiveTab(enabledLocations[0])
     }
   }, [enabledLocations.length])
+
+  // Set initial active color from selected colors
+  useEffect(() => {
+    if (selectedColors.length > 0 && !activeColor) {
+      setActiveColor(selectedColors[0])
+    }
+  }, [selectedColors])
 
   // Check if all files uploaded (only show toast once)
   useEffect(() => {
@@ -458,6 +483,10 @@ export default function ArtworkUpload() {
                             printLocation={location}
                             transform={artworkTransforms[location] || null}
                             onTransformChange={(transform) => handleTransformChange(location, transform)}
+                            garment={garment}
+                            selectedColors={selectedColors}
+                            activeColor={activeColor}
+                            onColorChange={setActiveColor}
                           />
 
                           {/* Validation Warnings */}

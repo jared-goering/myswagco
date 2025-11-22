@@ -38,6 +38,7 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
     base_cost: initialData?.base_cost || 0,
     available_colors: initialData?.available_colors || [],
     color_images: initialData?.color_images || {},
+    color_back_images: initialData?.color_back_images || {},
     size_range: initialData?.size_range || [],
     pricing_tier_id: initialData?.pricing_tier_id || '',
     active: initialData?.active ?? true,
@@ -48,6 +49,10 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
   const [colorImageFiles, setColorImageFiles] = useState<Record<string, File>>({})
   const [colorImagePreviews, setColorImagePreviews] = useState<Record<string, string>>(
     initialData?.color_images || {}
+  )
+  const [colorBackImageFiles, setColorBackImageFiles] = useState<Record<string, File>>({})
+  const [colorBackImagePreviews, setColorBackImagePreviews] = useState<Record<string, string>>(
+    initialData?.color_back_images || {}
   )
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -195,6 +200,15 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
     reader.readAsDataURL(file)
   }
 
+  function handleColorBackImageChange(color: string, file: File) {
+    setColorBackImageFiles(prev => ({ ...prev, [color]: file }))
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setColorBackImagePreviews(prev => ({ ...prev, [color]: reader.result as string }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   function handleSizeToggle(size: string) {
     const newSizes = formData.size_range.includes(size)
       ? formData.size_range.filter(s => s !== size)
@@ -202,11 +216,16 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
     handleFieldChange('size_range', newSizes)
   }
 
-  async function uploadColorImages(): Promise<Record<string, string>> {
-    const uploadedImages: Record<string, string> = { ...formData.color_images }
+  async function uploadColorImages(): Promise<{
+    frontImages: Record<string, string>
+    backImages: Record<string, string>
+  }> {
+    const uploadedFrontImages: Record<string, string> = { ...formData.color_images }
+    const uploadedBackImages: Record<string, string> = { ...formData.color_back_images }
     
     setIsUploading(true)
     try {
+      // Upload front images
       for (const [color, file] of Object.entries(colorImageFiles)) {
         const formData = new FormData()
         formData.append('file', file)
@@ -218,14 +237,36 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
 
         if (!response.ok) {
           const error = await response.json()
-          throw new Error(error.error || `Failed to upload image for ${color}`)
+          throw new Error(error.error || `Failed to upload front image for ${color}`)
         }
 
         const data = await response.json()
-        uploadedImages[color] = data.url
+        uploadedFrontImages[color] = data.url
+      }
+
+      // Upload back images
+      for (const [color, file] of Object.entries(colorBackImageFiles)) {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await fetch('/api/garments/upload-image', {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || `Failed to upload back image for ${color}`)
+        }
+
+        const data = await response.json()
+        uploadedBackImages[color] = data.url
       }
       
-      return uploadedImages
+      return {
+        frontImages: uploadedFrontImages,
+        backImages: uploadedBackImages
+      }
     } catch (error) {
       console.error('Error uploading color images:', error)
       setToast({
@@ -287,16 +328,24 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
         size_range: importedData.size_range || prev.size_range,
         base_cost: importedData.base_cost || prev.base_cost,
         thumbnail_url: importedData.thumbnail_url || prev.thumbnail_url,
-        color_images: importedData.color_images || prev.color_images
+        color_images: importedData.color_images || prev.color_images,
+        color_back_images: importedData.color_back_images || prev.color_back_images
       }))
 
       if (importedData.color_images) {
         setColorImagePreviews(importedData.color_images)
       }
 
+      if (importedData.color_back_images) {
+        setColorBackImagePreviews(importedData.color_back_images)
+      }
+
       let successMessage = `Product data imported! Found ${importedData.available_colors?.length || 0} colors`
       if (importedData.color_images && Object.keys(importedData.color_images).length > 0) {
-        successMessage += ` with ${Object.keys(importedData.color_images).length} color images`
+        successMessage += ` with ${Object.keys(importedData.color_images).length} front images`
+      }
+      if (importedData.color_back_images && Object.keys(importedData.color_back_images).length > 0) {
+        successMessage += ` and ${Object.keys(importedData.color_back_images).length} back images`
       }
       successMessage += '. Review and adjust as needed.'
 
@@ -336,9 +385,12 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
 
     try {
       let colorImages = formData.color_images
-      if (Object.keys(colorImageFiles).length > 0) {
+      let colorBackImages = formData.color_back_images
+      if (Object.keys(colorImageFiles).length > 0 || Object.keys(colorBackImageFiles).length > 0) {
         try {
-          colorImages = await uploadColorImages()
+          const uploadedImages = await uploadColorImages()
+          colorImages = uploadedImages.frontImages
+          colorBackImages = uploadedImages.backImages
         } catch (uploadError) {
           setIsSubmitting(false)
           return
@@ -348,6 +400,7 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
       const payload = {
         ...formData,
         color_images: colorImages,
+        color_back_images: colorBackImages,
         thumbnail_url: Object.values(colorImages)[0] || formData.thumbnail_url
       }
 
@@ -718,10 +771,13 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
           <ColorGrid
             colors={formData.available_colors}
             colorImages={formData.color_images}
+            colorBackImages={formData.color_back_images}
             colorImagePreviews={colorImagePreviews}
+            colorBackImagePreviews={colorBackImagePreviews}
             onAddColor={handleAddColor}
             onRemoveColor={handleRemoveColor}
             onImageChange={handleColorImageChange}
+            onBackImageChange={handleColorBackImageChange}
             onReorder={(colors) => handleFieldChange('available_colors', colors)}
             errors={errors.available_colors && touchedFields.has('available_colors') ? errors.available_colors : undefined}
           />
