@@ -23,6 +23,7 @@ export default function ArtworkUpload() {
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
   const [hasShownCompletionToast, setHasShownCompletionToast] = useState(false)
+  const [textDescription, setTextDescription] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; show: boolean; confetti?: boolean }>({
     message: '',
     type: 'info',
@@ -149,7 +150,10 @@ export default function ArtworkUpload() {
   }
 
   function canContinue(): boolean {
-    return enabledLocations.every(location => artworkFiles[location] !== null && artworkFiles[location] !== undefined)
+    // Can continue if they have text description OR all artwork is uploaded
+    const hasTextDescription = textDescription.trim().length > 0
+    const hasAllArtwork = enabledLocations.every(location => artworkFiles[location] !== null && artworkFiles[location] !== undefined)
+    return hasTextDescription || hasAllArtwork
   }
 
   function handleContinue() {
@@ -164,7 +168,7 @@ export default function ArtworkUpload() {
   const progress = totalCount > 0 ? (uploadedCount / totalCount) * 100 : 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+    <div className="min-h-screen bg-surface-200">
       {/* Toast Notifications */}
       <Toast
         message={toast.message}
@@ -178,28 +182,29 @@ export default function ArtworkUpload() {
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm"
+        className="border-b border-surface-300 bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-soft"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/custom-shirts" className="text-2xl font-bold text-gradient">
+            <Link href="/custom-shirts" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
               My Swag Co
             </Link>
             <nav className="flex items-center gap-6">
-              <div className="text-sm text-gray-600">
-                <span className="font-semibold text-primary-600">Step 3</span> / Upload Artwork
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
+                <span className="text-sm font-bold text-charcoal-700">Upload Artwork</span>
               </div>
               {/* Progress indicator */}
               <div className="hidden sm:flex items-center gap-3">
-                <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="w-32 h-2 bg-surface-300 rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full bg-gradient-to-r from-primary-600 to-primary-400"
+                    className="h-full bg-gradient-to-r from-primary-500 to-primary-600"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.5 }}
                   />
                 </div>
-                <span className="text-xs font-medium text-gray-600">
+                <span className="text-xs font-black text-charcoal-600">
                   {uploadedCount}/{totalCount}
                 </span>
               </div>
@@ -215,10 +220,10 @@ export default function ArtworkUpload() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8 lg:mb-12"
         >
-          <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">
+          <h1 className="text-4xl lg:text-5xl font-black text-charcoal-700 mb-4 tracking-tight">
             Upload Your Artwork
           </h1>
-          <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+          <p className="text-charcoal-500 text-lg max-w-2xl mx-auto font-semibold">
             Upload high-resolution files for each print location and position your design
           </p>
           
@@ -226,7 +231,7 @@ export default function ArtworkUpload() {
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
             <button
               onClick={() => setShowGallery(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-lg font-medium text-sm text-gray-700 hover:text-primary-700 transition-all shadow-sm hover:shadow-md"
+              className="inline-flex items-center gap-2 px-5 py-3 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 rounded-bento font-bold text-sm text-charcoal-700 hover:text-primary-700 transition-all shadow-soft hover:shadow-bento"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -236,7 +241,7 @@ export default function ArtworkUpload() {
             
             <Popover.Root open={showRequirements} onOpenChange={setShowRequirements}>
               <Popover.Trigger asChild>
-                <button className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-lg font-medium text-sm text-gray-700 hover:text-primary-700 transition-all shadow-sm hover:shadow-md">
+                <button className="inline-flex items-center gap-2 px-5 py-3 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 rounded-bento font-bold text-sm text-charcoal-700 hover:text-primary-700 transition-all shadow-soft hover:shadow-bento">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
@@ -245,17 +250,17 @@ export default function ArtworkUpload() {
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
-                  className="z-50 w-80 bg-white rounded-lg shadow-xl border-2 border-gray-200 p-4 animate-slide-up"
+                  className="z-50 w-80 bg-white rounded-bento-lg shadow-bento border-2 border-surface-300 p-6 animate-slide-up"
                   sideOffset={5}
                 >
                   <div className="space-y-3">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <svg className="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                    <h3 className="font-black text-charcoal-700 flex items-center gap-2 text-lg">
+                      <svg className="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                       </svg>
                       File Requirements
                     </h3>
-                    <ul className="space-y-2 text-sm text-gray-700">
+                    <ul className="space-y-2 text-sm text-charcoal-600 font-semibold">
                       <li className="flex items-start gap-2">
                         <svg className="w-4 h-4 text-success-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -297,7 +302,7 @@ export default function ArtworkUpload() {
             transition={{ delay: 0.1 }}
             className="space-y-4"
           >
-            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 lg:p-6">
+            <div className="bento-card">
               <div className="space-y-6">
                 {enabledLocations.map((location, index) => {
                   const colors = printConfig.locations[location]?.num_colors || 1
@@ -328,35 +333,65 @@ export default function ArtworkUpload() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className="mt-6 p-4 lg:p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200"
+                className="mt-6 p-6 bg-gradient-to-br from-surface-50 to-surface-100 rounded-bento-lg border-2 border-surface-300"
               >
-                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <h3 className="font-black text-charcoal-700 mb-2 flex items-center gap-2 text-lg">
+                  <svg className="w-5 h-5 text-charcoal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   Don't have artwork?
                 </h3>
-                <p className="text-gray-600 text-sm mb-3">
-                  If you just need text printed on your shirts, you can work with our team to create a simple text-based design. 
-                  Upload a text file or document describing what you want, and we'll follow up with you.
+                <p className="text-charcoal-500 text-sm mb-4 font-semibold">
+                  If you just need text printed on your shirts, tell us what you want below. Our team will create a simple text-based design and follow up with you.
                 </p>
-                <label className="inline-flex items-center gap-2 bg-white border-2 border-gray-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2 rounded-lg cursor-pointer text-sm font-medium transition-all">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  Upload Text Description
-                  <input
-                    type="file"
-                    accept=".txt,.doc,.docx,.pdf"
-                    onChange={(e) => {
-                      const selectedFile = e.target.files?.[0]
-                      if (selectedFile && enabledLocations.length > 0) {
-                        handleFileSelect(enabledLocations[0], selectedFile)
-                      }
-                    }}
-                    className="hidden"
+                
+                {/* Text Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-black text-charcoal-600 mb-2 uppercase tracking-wide">
+                    Describe your text design
+                  </label>
+                  <textarea
+                    value={textDescription}
+                    onChange={(e) => setTextDescription(e.target.value)}
+                    placeholder="Example: 'IOWA STATE CHAMPIONSHIP 2024' in bold letters on the front, and 'GO HAWKS!' on the back"
+                    rows={4}
+                    className="w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none resize-none text-sm font-bold text-charcoal-700"
                   />
-                </label>
+                  {textDescription && (
+                    <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                      <svg className="w-4 h-4 text-success-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      We'll include this with your order
+                    </p>
+                  )}
+                </div>
+
+                {/* Optional File Upload */}
+                <div className="pt-3 border-t border-surface-300">
+                  <p className="text-xs text-charcoal-500 mb-2 font-bold">Optional: Upload reference images or documents</p>
+                  <label className="inline-flex items-center gap-2 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2.5 rounded-bento cursor-pointer text-sm font-black transition-all">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload File
+                    <input
+                      type="file"
+                      accept=".txt,.doc,.docx,.pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => {
+                        const selectedFile = e.target.files?.[0]
+                        if (selectedFile) {
+                          setToast({
+                            message: 'Reference file uploaded - we\'ll review it with your order',
+                            type: 'success',
+                            show: true,
+                          })
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </motion.div>
             </div>
           </motion.div>
@@ -368,9 +403,9 @@ export default function ArtworkUpload() {
             transition={{ delay: 0.2 }}
             className="lg:sticky lg:top-24 lg:self-start"
           >
-            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 lg:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Design Preview</h2>
+            <div className="bento-card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-black text-charcoal-700 tracking-tight">Design Preview</h2>
                 {uploadedCount > 0 && (
                   <span className="badge-success">
                     {uploadedCount}/{totalCount} Complete
@@ -387,10 +422,10 @@ export default function ArtworkUpload() {
                         key={location}
                         value={location}
                         className={`
-                          flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all
+                          flex items-center gap-2 px-5 py-3 rounded-bento font-bold text-sm transition-all
                           ${activeTab === location
-                            ? 'bg-primary-600 text-white shadow-md'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-primary-500 text-white shadow-bento'
+                            : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200'
                           }
                         `}
                       >
@@ -432,15 +467,15 @@ export default function ArtworkUpload() {
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
                                 exit={{ opacity: 0, height: 0 }}
-                                className="mt-4 bg-warning-50 border-2 border-warning-300 rounded-lg p-4"
+                                className="mt-6 bg-data-yellow/20 border-2 border-data-yellow/40 rounded-bento-lg p-6"
                               >
                                 <div className="flex items-start gap-3">
-                                  <svg className="w-5 h-5 text-warning-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <svg className="w-6 h-6 text-data-yellow mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                   </svg>
                                   <div className="flex-1">
-                                    <h4 className="font-semibold text-warning-900 mb-1">Design Warnings</h4>
-                                    <ul className="text-sm text-warning-800 space-y-1">
+                                    <h4 className="font-black text-charcoal-700 mb-2">Design Warnings</h4>
+                                    <ul className="text-sm text-charcoal-600 font-semibold space-y-1">
                                       {getValidationWarnings(location).map((warning, idx) => (
                                         <li key={idx}>• {warning}</li>
                                       ))}
@@ -487,7 +522,7 @@ export default function ArtworkUpload() {
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-xs text-warning-600 flex items-center gap-1"
+                className="text-xs text-data-yellow font-bold flex items-center gap-1"
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -499,9 +534,9 @@ export default function ArtworkUpload() {
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-xs text-gray-500"
+                className="text-xs text-charcoal-500 font-semibold"
               >
-                Upload artwork for all locations to continue
+                Upload artwork for all locations or describe your text design to continue
               </motion.p>
             )}
           </div>

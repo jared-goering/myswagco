@@ -15,7 +15,9 @@
 4. Click "Run" to execute the SQL
 5. Verify that all tables were created successfully
 
-## 3. Create Storage Bucket for Artwork
+## 3. Create Storage Buckets
+
+### A. Artwork Bucket (for customer uploads)
 
 1. Navigate to Storage in the Supabase dashboard
 2. Create a new bucket called `artwork`
@@ -40,6 +42,38 @@ CREATE POLICY "Service role can delete artwork"
 ON storage.objects FOR DELETE
 TO service_role
 USING (bucket_id = 'artwork');
+```
+
+### B. Garment Thumbnails Bucket (for product images)
+
+1. In Storage, create a new bucket called `garment-thumbnails`
+2. Set the bucket to **Public** (so product images are publicly accessible)
+3. Create policies for access control:
+
+```sql
+-- Allow public read access to garment thumbnails
+CREATE POLICY "Public can view garment thumbnails"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'garment-thumbnails');
+
+-- Allow service role to upload files
+CREATE POLICY "Service role can upload garment thumbnails"
+ON storage.objects FOR INSERT
+TO service_role
+WITH CHECK (bucket_id = 'garment-thumbnails');
+
+-- Allow service role to update files
+CREATE POLICY "Service role can update garment thumbnails"
+ON storage.objects FOR UPDATE
+TO service_role
+USING (bucket_id = 'garment-thumbnails');
+
+-- Allow service role to delete files
+CREATE POLICY "Service role can delete garment thumbnails"
+ON storage.objects FOR DELETE
+TO service_role
+USING (bucket_id = 'garment-thumbnails');
 ```
 
 ## 4. Get Your API Keys

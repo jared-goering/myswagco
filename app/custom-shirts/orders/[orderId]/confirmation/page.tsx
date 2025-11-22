@@ -31,18 +31,18 @@ export default function OrderConfirmation() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-surface-200 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
       </div>
     )
   }
 
   if (!order) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-surface-200 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Order Not Found</h1>
-          <Link href="/custom-shirts" className="text-primary-600 hover:text-primary-700">
+          <h1 className="text-3xl font-black text-charcoal-700 mb-4">Order Not Found</h1>
+          <Link href="/custom-shirts" className="text-primary-600 hover:text-primary-700 font-bold">
             Return to Home
           </Link>
         </div>
@@ -53,11 +53,11 @@ export default function OrderConfirmation() {
   const totalQty = Object.values(order.size_quantities).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-200">
       {/* Header */}
-      <header className="border-b bg-white">
+      <header className="border-b border-surface-300 bg-white shadow-soft">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <Link href="/" className="text-2xl font-bold text-primary-600">
+          <Link href="/" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
             My Swag Co
           </Link>
         </div>
@@ -65,117 +65,119 @@ export default function OrderConfirmation() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Success Message */}
-        <div className="bg-green-50 border-2 border-green-500 rounded-lg p-8 mb-8 text-center">
-          <div className="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        <div className="bento-card bg-gradient-to-br from-data-green/10 to-data-green/20 border-2 border-data-green/40 text-center mb-8">
+          <div className="w-20 h-20 bg-data-green text-white rounded-bento-lg flex items-center justify-center mx-auto mb-6 shadow-bento">
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-4xl md:text-5xl font-black text-charcoal-700 mb-4 tracking-tight">
             Order Confirmed!
           </h1>
-          <p className="text-lg text-gray-700">
+          <p className="text-xl text-charcoal-600 font-semibold">
             Thank you for your order. We've received your deposit payment.
           </p>
         </div>
 
         {/* Order Details */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-6">Order Details</h2>
+        <div className="bento-card mb-8">
+          <h2 className="text-3xl font-black text-charcoal-700 mb-8 tracking-tight">Order Details</h2>
           
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Order ID</p>
-              <p className="font-mono text-sm">{order.id}</p>
+              <p className="text-sm text-charcoal-500 font-bold uppercase tracking-wide mb-2">Order ID</p>
+              <p className="font-mono text-sm font-bold text-charcoal-700 bg-surface-100 px-3 py-2 rounded-bento inline-block">{order.id}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600 mb-1">Email</p>
-              <p>{order.email}</p>
+              <p className="text-sm text-charcoal-500 font-bold uppercase tracking-wide mb-2">Email</p>
+              <p className="font-bold text-charcoal-700">{order.email}</p>
             </div>
           </div>
 
-          <div className="border-t pt-6">
-            <h3 className="font-semibold mb-3">Order Summary</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Garment:</span>
-                <span className="font-medium">{order.garments.name}</span>
+          <div className="border-t-2 border-surface-300 pt-6">
+            <h3 className="text-xl font-black text-charcoal-700 mb-4">Order Summary</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-baseline">
+                <span className="text-charcoal-500 font-semibold">Garment:</span>
+                <span className="font-black text-charcoal-700">{order.garments.name}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Color:</span>
-                <span className="font-medium">{order.garment_color}</span>
+              <div className="flex justify-between items-baseline">
+                <span className="text-charcoal-500 font-semibold">Color:</span>
+                <span className="font-black text-charcoal-700">{order.garment_color}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Quantity:</span>
-                <span className="font-medium">{totalQty} pieces</span>
+              <div className="flex justify-between items-baseline">
+                <span className="text-charcoal-500 font-semibold">Total Quantity:</span>
+                <span className="font-black text-charcoal-700">{totalQty} pieces</span>
               </div>
             </div>
           </div>
 
-          <div className="border-t pt-6 mt-6">
-            <h3 className="font-semibold mb-3">Payment Summary</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Order Cost:</span>
-                <span className="font-medium">${order.total_cost.toFixed(2)}</span>
+          <div className="border-t-2 border-surface-300 pt-6 mt-6">
+            <h3 className="text-xl font-black text-charcoal-700 mb-4">Payment Summary</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-baseline">
+                <span className="text-charcoal-500 font-semibold">Total Order Cost:</span>
+                <span className="font-black text-charcoal-700 text-lg">${order.total_cost.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-green-600">
-                <span>Deposit Paid:</span>
-                <span className="font-semibold">${order.deposit_amount.toFixed(2)}</span>
+              <div className="flex justify-between items-baseline">
+                <span className="text-data-green font-bold">Deposit Paid:</span>
+                <span className="font-black text-data-green text-xl">${order.deposit_amount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Balance Due (before shipping):</span>
-                <span className="font-medium">${order.balance_due.toFixed(2)}</span>
+              <div className="flex justify-between items-baseline">
+                <span className="text-charcoal-500 font-semibold">Balance Due (before shipping):</span>
+                <span className="font-black text-charcoal-700 text-lg">${order.balance_due.toFixed(2)}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Next Steps */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-3">What Happens Next?</h3>
-          <ol className="space-y-2 text-blue-800">
-            <li className="flex items-start">
-              <span className="font-semibold mr-2">1.</span>
-              <span>Our team will review your artwork within 1-2 business days</span>
+        <div className="bento-card bg-gradient-to-br from-data-blue/10 to-data-blue/20 border-2 border-data-blue/30 mb-8">
+          <h3 className="text-2xl font-black text-charcoal-700 mb-6 tracking-tight">What Happens Next?</h3>
+          <ol className="space-y-4">
+            <li className="flex items-start gap-3">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-data-blue text-white rounded-bento font-black text-sm flex-shrink-0">1</span>
+              <span className="font-semibold text-charcoal-700">Our team will review your artwork within 1-2 business days</span>
             </li>
-            <li className="flex items-start">
-              <span className="font-semibold mr-2">2.</span>
-              <span>If everything looks good, your order will be automatically approved and move into production</span>
+            <li className="flex items-start gap-3">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-data-blue text-white rounded-bento font-black text-sm flex-shrink-0">2</span>
+              <span className="font-semibold text-charcoal-700">If everything looks good, your order will be automatically approved and move into production</span>
             </li>
-            <li className="flex items-start">
-              <span className="font-semibold mr-2">3.</span>
-              <span>We'll email you if we need any clarification or changes to your artwork</span>
+            <li className="flex items-start gap-3">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-data-blue text-white rounded-bento font-black text-sm flex-shrink-0">3</span>
+              <span className="font-semibold text-charcoal-700">We'll email you if we need any clarification or changes to your artwork</span>
             </li>
-            <li className="flex items-start">
-              <span className="font-semibold mr-2">4.</span>
-              <span>Before shipping, we'll contact you to collect the remaining balance</span>
+            <li className="flex items-start gap-3">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-data-blue text-white rounded-bento font-black text-sm flex-shrink-0">4</span>
+              <span className="font-semibold text-charcoal-700">Before shipping, we'll contact you to collect the remaining balance</span>
             </li>
-            <li className="flex items-start">
-              <span className="font-semibold mr-2">5.</span>
-              <span>Most orders ship in ~14 business days after art approval</span>
+            <li className="flex items-start gap-3">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-data-blue text-white rounded-bento font-black text-sm flex-shrink-0">5</span>
+              <span className="font-semibold text-charcoal-700">Most orders ship in ~14 business days after art approval</span>
             </li>
           </ol>
         </div>
 
         {/* Confirmation Email Notice */}
-        <div className="bg-white rounded-lg shadow-sm p-6 text-center">
-          <svg className="w-12 h-12 text-primary-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-          <p className="text-gray-700 mb-2">
-            We've sent a confirmation email to <span className="font-semibold">{order.email}</span>
+        <div className="bento-card text-center mb-8">
+          <div className="w-16 h-16 bg-primary-100 rounded-bento-lg flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-charcoal-700 font-semibold text-lg mb-3">
+            We've sent a confirmation email to <span className="font-black text-primary-600">{order.email}</span>
           </p>
-          <p className="text-sm text-gray-600">
+          <p className="text-charcoal-500 font-semibold">
             If you have any questions, just reply to that email.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-8 text-center">
+        <div className="text-center">
           <Link
             href="/custom-shirts"
-            className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
+            className="inline-block btn-primary"
           >
             Start Another Order
           </Link>

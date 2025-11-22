@@ -1,12 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import AdminLayout from '@/components/AdminLayout'
+import Toast from '@/components/Toast'
 import { Garment } from '@/types'
 
 export default function AdminGarments() {
+  const router = useRouter()
   const [garments, setGarments] = useState<Garment[]>([])
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState({
+    isVisible: false,
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info'
+  })
 
   useEffect(() => {
     fetchGarments()
@@ -14,7 +22,8 @@ export default function AdminGarments() {
 
   async function fetchGarments() {
     try {
-      const response = await fetch('/api/garments')
+      // Add admin=true to fetch all garments (not just active)
+      const response = await fetch('/api/garments?admin=true')
       if (response.ok) {
         const data = await response.json()
         setGarments(data)
@@ -26,19 +35,60 @@ export default function AdminGarments() {
     }
   }
 
+  async function handleToggleActive(garment: Garment) {
+    try {
+      const response = await fetch(`/api/garments/${garment.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ active: !garment.active })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update garment')
+      }
+
+      setToast({
+        isVisible: true,
+        message: `Garment ${!garment.active ? 'activated' : 'deactivated'} successfully`,
+        type: 'success'
+      })
+
+      // Refresh garments list
+      fetchGarments()
+    } catch (error) {
+      console.error('Error toggling garment:', error)
+      setToast({
+        isVisible: true,
+        message: 'Failed to update garment status',
+        type: 'error'
+      })
+    }
+  }
+
+  function handleEdit(garmentId: string) {
+    router.push(`/admin/garments/${garmentId}/edit`)
+  }
+
+  function handleAddNew() {
+    router.push('/admin/garments/new')
+  }
+
   return (
     <AdminLayout>
       <div>
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Garments</h1>
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">Garment Management</h3>
-          <p className="text-sm text-blue-800">
-            Garments are managed through your Supabase database. To add, edit, or remove garments, 
-            please update the <code className="bg-blue-100 px-1 rounded">garments</code> table directly in your Supabase dashboard.
-          </p>
+          <button
+            onClick={handleAddNew}
+            className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add New Garment
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -69,11 +119,14 @@ export default function AdminGarments() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {garments.map((garment) => (
-                    <tr key={garment.id}>
+                    <tr key={garment.id} className={!garment.active ? 'bg-gray-50 opacity-75' : ''}>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{garment.name}</div>
                         <div className="text-sm text-gray-500 line-clamp-1">{garment.description}</div>
@@ -110,6 +163,28 @@ export default function AdminGarments() {
                           {garment.active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEdit(garment.id)}
+                            className="text-primary-600 hover:text-primary-900 font-medium"
+                            title="Edit garment"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleToggleActive(garment)}
+                            className={`font-medium ${
+                              garment.active
+                                ? 'text-red-600 hover:text-red-900'
+                                : 'text-green-600 hover:text-green-900'
+                            }`}
+                            title={garment.active ? 'Deactivate garment' : 'Activate garment'}
+                          >
+                            {garment.active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -118,6 +193,13 @@ export default function AdminGarments() {
           )}
         </div>
       </div>
+
+      <Toast
+        isVisible={toast.isVisible}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+      />
     </AdminLayout>
   )
 }

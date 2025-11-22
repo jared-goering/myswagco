@@ -43,28 +43,29 @@ export default function Checkout() {
 
   if (!garment || !store.quote) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-surface-200 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-200">
       {/* Header */}
-      <header className="border-b bg-white">
+      <header className="border-b border-surface-300 bg-white shadow-soft">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/custom-shirts" className="text-2xl font-bold text-primary-600">
+          <Link href="/custom-shirts" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
             My Swag Co
           </Link>
-          <nav className="text-sm text-gray-600">
-            <span className="font-semibold text-primary-600">Step 4</span> / Checkout
+          <nav className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">4</span>
+            <span className="text-sm font-bold text-charcoal-700">Checkout</span>
           </nav>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">
+        <h1 className="text-5xl md:text-6xl font-black text-charcoal-700 mb-12 text-center tracking-tight">
           Review & Checkout
         </h1>
 
@@ -89,23 +90,23 @@ function OrderSummary({ garment }: { garment: Garment }) {
   const totalQty = Object.values(store.sizeQuantities).reduce((sum, qty) => sum + (qty || 0), 0)
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24">
-      <h3 className="text-xl font-semibold mb-4">Order Summary</h3>
+    <div className="bento-card sticky top-24 bg-gradient-to-br from-charcoal-700 to-charcoal-800 text-white">
+      <h3 className="text-2xl font-black mb-6 tracking-tight">Order Summary</h3>
       
-      <div className="space-y-3 pb-4 border-b">
+      <div className="space-y-4 pb-6 border-b border-white/20">
         <div>
-          <p className="font-medium">{garment.name}</p>
-          <p className="text-sm text-gray-600">{store.garmentColor}</p>
+          <p className="font-black text-lg">{garment.name}</p>
+          <p className="text-sm text-white/70 font-semibold">{store.garmentColor}</p>
+        </div>
+        <div className="flex items-baseline gap-3">
+          <p className="text-white/70 font-semibold">Quantity:</p>
+          <p className="text-3xl font-black">{totalQty}</p>
         </div>
         <div>
-          <p className="text-sm text-gray-600">Total Quantity:</p>
-          <p className="font-medium">{totalQty} pieces</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-600">Print Locations:</p>
+          <p className="text-white/70 font-semibold mb-2">Print Locations:</p>
           {Object.entries(store.printConfig.locations).map(([location, config]) => 
             config?.enabled && (
-              <p key={location} className="text-sm">
+              <p key={location} className="text-sm font-bold capitalize">
                 {location}: {config.num_colors} color{config.num_colors > 1 ? 's' : ''}
               </p>
             )
@@ -114,33 +115,33 @@ function OrderSummary({ garment }: { garment: Garment }) {
       </div>
 
       {store.quote && (
-        <div className="space-y-2 pt-4">
-          <div className="flex justify-between text-sm">
-            <span>Garments</span>
-            <span>${store.quote.garment_cost.toFixed(2)}</span>
+        <div className="space-y-4 pt-6">
+          <div className="flex justify-between">
+            <span className="text-white/70 font-semibold">Garments</span>
+            <span className="font-black">${store.quote.garment_cost.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span>Print Cost</span>
-            <span>${store.quote.print_cost.toFixed(2)}</span>
+          <div className="flex justify-between">
+            <span className="text-white/70 font-semibold">Print Cost</span>
+            <span className="font-black">${store.quote.print_cost.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span>Setup Fees</span>
-            <span>${store.quote.setup_fees.toFixed(2)}</span>
+          <div className="flex justify-between">
+            <span className="text-white/70 font-semibold">Setup Fees</span>
+            <span className="font-black">${store.quote.setup_fees.toFixed(2)}</span>
           </div>
-          <div className="border-t pt-2 mt-2">
-            <div className="flex justify-between font-semibold">
-              <span>Total</span>
-              <span>${store.quote.total.toFixed(2)}</span>
+          <div className="border-t border-white/20 pt-4">
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="text-white/90 font-black text-lg">Total</span>
+              <span className="text-4xl font-black text-primary-400">${store.quote.total.toFixed(2)}</span>
             </div>
           </div>
-          <div className="bg-primary-50 rounded p-3 mt-4">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="font-medium">Deposit (50%)</span>
-              <span className="font-semibold">${store.quote.deposit_amount.toFixed(2)}</span>
+          <div className="bg-white/10 rounded-bento-lg p-4 mt-4">
+            <div className="flex justify-between mb-2">
+              <span className="font-bold">Deposit (50%)</span>
+              <span className="font-black text-data-green text-xl">${store.quote.deposit_amount.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm text-gray-600">
+            <div className="flex justify-between text-sm text-white/70">
               <span>Balance Due Later</span>
-              <span>${store.quote.balance_due.toFixed(2)}</span>
+              <span className="font-bold">${store.quote.balance_due.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -238,11 +239,11 @@ function CheckoutForm({ garment }: { garment: Garment }) {
 
   if (step === 'info') {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-xl font-semibold mb-6">Customer Information</h3>
+      <div className="bento-card">
+        <h3 className="text-3xl font-black text-charcoal-700 mb-8 tracking-tight">Customer Information</h3>
         <form onSubmit={handleCustomerInfoSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-black text-charcoal-600 mb-2 uppercase tracking-wide">
               Full Name *
             </label>
             <input
@@ -250,12 +251,12 @@ function CheckoutForm({ garment }: { garment: Garment }) {
               required
               value={store.customerName}
               onChange={(e) => store.setCustomerInfo({ customerName: e.target.value })}
-              className="w-full border border-gray-300 rounded px-3 py-2"
+              className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-black text-charcoal-600 mb-2 uppercase tracking-wide">
               Email *
             </label>
             <input
@@ -263,12 +264,12 @@ function CheckoutForm({ garment }: { garment: Garment }) {
               required
               value={store.email}
               onChange={(e) => store.setCustomerInfo({ email: e.target.value })}
-              className="w-full border border-gray-300 rounded px-3 py-2"
+              className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-black text-charcoal-600 mb-2 uppercase tracking-wide">
               Phone *
             </label>
             <input
@@ -276,12 +277,12 @@ function CheckoutForm({ garment }: { garment: Garment }) {
               required
               value={store.phone}
               onChange={(e) => store.setCustomerInfo({ phone: e.target.value })}
-              className="w-full border border-gray-300 rounded px-3 py-2"
+              className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
             />
           </div>
 
           <div>
-            <h4 className="font-medium mb-3">Shipping Address</h4>
+            <h4 className="text-xl font-black text-charcoal-700 mb-4">Shipping Address</h4>
             <div className="space-y-4">
               <input
                 type="text"
@@ -291,7 +292,7 @@ function CheckoutForm({ garment }: { garment: Garment }) {
                 onChange={(e) => store.setCustomerInfo({ 
                   shippingAddress: { ...store.shippingAddress, line1: e.target.value }
                 })}
-                className="w-full border border-gray-300 rounded px-3 py-2"
+                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
               />
               <input
                 type="text"
@@ -300,7 +301,7 @@ function CheckoutForm({ garment }: { garment: Garment }) {
                 onChange={(e) => store.setCustomerInfo({ 
                   shippingAddress: { ...store.shippingAddress, line2: e.target.value }
                 })}
-                className="w-full border border-gray-300 rounded px-3 py-2"
+                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
               />
               <div className="grid grid-cols-2 gap-4">
                 <input
@@ -311,7 +312,7 @@ function CheckoutForm({ garment }: { garment: Garment }) {
                   onChange={(e) => store.setCustomerInfo({ 
                     shippingAddress: { ...store.shippingAddress, city: e.target.value }
                   })}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
+                  className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
                 />
                 <input
                   type="text"
@@ -321,7 +322,7 @@ function CheckoutForm({ garment }: { garment: Garment }) {
                   onChange={(e) => store.setCustomerInfo({ 
                     shippingAddress: { ...store.shippingAddress, state: e.target.value }
                   })}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
+                  className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
                 />
               </div>
               <input
@@ -332,28 +333,28 @@ function CheckoutForm({ garment }: { garment: Garment }) {
                 onChange={(e) => store.setCustomerInfo({ 
                   shippingAddress: { ...store.shippingAddress, postal_code: e.target.value }
                 })}
-                className="w-full border border-gray-300 rounded px-3 py-2"
+                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
               />
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="bento-card bg-error-50 border-2 border-error-200 text-error-700">
               {error}
             </div>
           )}
 
-          <div className="flex justify-between pt-4">
+          <div className="flex justify-between pt-6">
             <Link
               href={`/custom-shirts/configure/${garmentId}/artwork`}
-              className="px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
+              className="px-8 py-4 border-2 border-surface-300 rounded-bento-lg font-black text-charcoal-700 hover:bg-surface-50 hover:shadow-soft transition-all inline-block"
             >
               Back
             </Link>
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold disabled:opacity-50"
+              className="px-8 py-4 bg-primary-500 hover:bg-primary-600 text-white rounded-bento-lg font-black shadow-soft hover:shadow-bento transition-all disabled:opacity-50"
             >
               {submitting ? 'Processing...' : 'Continue to Payment'}
             </button>
@@ -405,15 +406,15 @@ function PaymentForm({ orderId }: { orderId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      <h3 className="text-xl font-semibold mb-6">Payment Information</h3>
+    <div className="bento-card">
+      <h3 className="text-3xl font-black text-charcoal-700 mb-8 tracking-tight">Payment Information</h3>
       <form onSubmit={handleSubmit}>
-        <div className="mb-6">
+        <div className="mb-8">
           <PaymentElement />
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="bento-card bg-error-50 border-2 border-error-200 text-error-700 mb-6">
             {error}
           </div>
         )}
@@ -421,12 +422,12 @@ function PaymentForm({ orderId }: { orderId: string }) {
         <button
           type="submit"
           disabled={!stripe || submitting}
-          className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 rounded-lg disabled:opacity-50"
+          className="w-full bg-primary-500 hover:bg-primary-600 text-white font-black py-5 rounded-bento-lg disabled:opacity-50 shadow-soft hover:shadow-bento transition-all text-lg"
         >
           {submitting ? 'Processing...' : 'Pay Deposit'}
         </button>
 
-        <p className="text-sm text-gray-600 text-center mt-4">
+        <p className="text-sm text-charcoal-500 text-center mt-6 font-semibold">
           Your order will be submitted and artwork reviewed within 1-2 business days
         </p>
       </form>

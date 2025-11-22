@@ -48,8 +48,8 @@ export const customerInfoSchema = z.object({
   email: z.string().email('Valid email is required'),
   phone: z.string().min(10, 'Phone number is required'),
   shipping_address: shippingAddressSchema,
-  organization_name: z.string().optional(),
-  need_by_date: z.string().optional(),
+  organization_name: z.string().optional().transform(val => val === '' ? null : val),
+  need_by_date: z.string().optional().transform(val => val === '' ? null : val),
 })
 
 // Order creation schema

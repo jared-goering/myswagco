@@ -3,20 +3,32 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 255, 255, 255;
-  --background-end-rgb: 255, 255, 255;
+  --foreground-rgb: 26, 26, 26;
+  --background-start-rgb: 242, 244, 247;
+  --background-end-rgb: 244, 246, 248;
   
-  /* Enhanced Design System Variables */
+  /* Soft-Tech Modern Design System Variables */
   --spacing-unit: 0.5rem; /* 8px grid system */
+  --spacing-bento: 2rem; /* 32px for Bento card padding */
   
   /* Colors with opacity support */
-  --color-primary: 59 130 246; /* rgb(59, 130, 246) */
-  --color-success: 34 197 94; /* rgb(34, 197, 94) */
-  --color-warning: 245 158 11; /* rgb(245, 158, 11) */
-  --color-error: 239 68 68; /* rgb(239, 68, 68) */
+  --color-primary: 255 87 34; /* Vibrant Tangerine rgb(255, 87, 34) */
+  --color-success: 107 207 127; /* Pastel Green rgb(107, 207, 127) */
+  --color-warning: 255 217 61; /* Pastel Yellow rgb(255, 217, 61) */
+  --color-error: 255 107 107; /* Pastel Red rgb(255, 107, 107) */
   
-  /* Typography scale */
+  /* Surface colors */
+  --surface-base: 255, 255, 255;
+  --surface-elevated: 250, 251, 252;
+  --surface-cool: 244, 246, 248;
+  --surface-off-white: 242, 244, 247;
+  
+  /* Text colors */
+  --text-primary: 26, 26, 26; /* Deep Charcoal */
+  --text-secondary: 74, 74, 74; /* Slate */
+  --text-muted: 160, 160, 160;
+  
+  /* Typography scale - Display sizes for Bento */
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -25,23 +37,29 @@
   --font-size-2xl: 1.5rem;
   --font-size-3xl: 1.875rem;
   --font-size-4xl: 2.25rem;
+  --font-size-5xl: 3rem;
+  --font-size-6xl: 3.75rem;
+  --font-size-display: 4.5rem; /* 72px for large metrics */
   
   /* Line heights */
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
   
-  /* Border radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* Border radius - Bento style */
+  --radius-sm: 0.75rem; /* 12px */
+  --radius-md: 1rem; /* 16px */
+  --radius-lg: 1.5rem; /* 24px */
+  --radius-xl: 2rem; /* 32px */
+  --radius-bento: 1.5rem;
+  --radius-bento-lg: 2rem;
   
-  /* Shadows */
+  /* Shadows - Ultra soft */
   --shadow-soft-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-soft: 0 2px 4px 0 rgba(0, 0, 0, 0.06);
   --shadow-soft-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-soft-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-bento: 0px 4px 24px rgba(0, 0, 0, 0.06);
+  --shadow-soft-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
   
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -51,12 +69,7 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: rgb(var(--background-start-rgb));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -75,45 +88,53 @@ body {
 }
 
 @layer components {
-  /* Card styles */
+  /* Bento Card styles */
   .card {
-    @apply bg-white rounded-xl shadow-md border border-gray-100;
+    @apply bg-white rounded-bento shadow-bento;
   }
   
   .card-hover {
-    @apply card transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+    @apply card transition-all duration-200 hover:shadow-soft-lg hover:-translate-y-0.5;
   }
   
-  /* Button variants */
+  .bento-card {
+    @apply bg-white rounded-bento-lg p-8 shadow-bento;
+  }
+  
+  .bento-card-hover {
+    @apply bento-card transition-all duration-200 hover:shadow-soft-lg hover:-translate-y-0.5;
+  }
+  
+  /* Button variants - Soft-Tech Modern */
   .btn-primary {
-    @apply px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-lg font-semibold shadow-md hover:shadow-lg hover:from-primary-700 hover:to-primary-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-8 py-4 bg-primary-500 text-white rounded-bento-lg font-black shadow-soft-md hover:shadow-bento hover:bg-primary-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   
   .btn-secondary {
-    @apply px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 rounded-lg font-semibold shadow-sm hover:shadow-md hover:border-gray-300 hover:bg-gray-50 transition-all duration-200;
+    @apply px-8 py-4 bg-white border-2 border-surface-300 text-charcoal-700 rounded-bento-lg font-black shadow-soft hover:shadow-soft-md hover:border-surface-400 hover:bg-surface-50 transition-all duration-200;
   }
   
   .btn-ghost {
-    @apply px-4 py-2 text-gray-700 rounded-lg hover:bg-gray-100 transition-all duration-200;
+    @apply px-6 py-3 text-charcoal-700 rounded-bento hover:bg-surface-100 transition-all duration-200 font-bold;
   }
   
   /* Input styles */
   .input {
-    @apply w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-200 outline-none;
+    @apply w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-200 outline-none bg-white;
   }
   
   /* Upload zone */
   .upload-zone {
-    @apply border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 hover:bg-primary-50/50 cursor-pointer transition-all duration-200;
+    @apply border-2 border-dashed border-surface-300 rounded-bento p-8 text-center hover:border-primary-400 hover:bg-primary-50/50 cursor-pointer transition-all duration-200;
   }
   
   .upload-zone-active {
     @apply border-primary-500 bg-primary-50;
   }
   
-  /* Badge styles */
+  /* Badge styles - Soft UI */
   .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold;
   }
   
   .badge-success {
@@ -132,9 +153,23 @@ body {
     @apply badge bg-primary-100 text-primary-800;
   }
   
+  /* Floating badge - like "+46%" pill */
+  .badge-floating {
+    @apply badge shadow-bento bg-white border border-surface-300;
+  }
+  
   /* Tooltip styles */
   .tooltip {
-    @apply px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg;
+    @apply px-3 py-2 bg-charcoal-700 text-white text-xs rounded-xl shadow-bento;
+  }
+  
+  /* Display text for large metrics */
+  .text-display {
+    @apply text-6xl md:text-7xl lg:text-8xl font-black tracking-tight;
+  }
+  
+  .text-metric {
+    @apply text-5xl md:text-6xl font-black tracking-tight;
   }
 }
 
@@ -148,7 +183,7 @@ body {
     @apply bg-white/80 backdrop-blur-md;
   }
   
-  /* Gradient text */
+  /* Gradient text - Tangerine */
   .text-gradient {
     @apply bg-gradient-to-r from-primary-600 to-primary-400 bg-clip-text text-transparent;
   }
@@ -160,16 +195,16 @@ body {
   
   /* Custom shadows */
   .shadow-glow {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 20px rgba(255, 87, 34, 0.3);
   }
   
   .shadow-glow-success {
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    box-shadow: 0 0 20px rgba(107, 207, 127, 0.3);
   }
   
-  /* Animated gradient background */
+  /* Animated gradient background - Tangerine theme */
   .bg-gradient-animate {
-    background: linear-gradient(270deg, #3b82f6, #2563eb, #1d4ed8);
+    background: linear-gradient(270deg, #ff5722, #ff8566, #ff5722);
     background-size: 600% 600%;
     animation: gradientShift 10s ease infinite;
   }
@@ -180,17 +215,26 @@ body {
     100% { background-position: 0% 50%; }
   }
   
-  /* Grid patterns */
+  /* Grid patterns - Softer */
   .pattern-dots {
     background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
-    background-size: 16px 16px;
+    background-size: 20px 20px;
   }
   
   .pattern-grid {
     background-image: 
-      linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-      linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
-    background-size: 16px 16px;
+      linear-gradient(to right, #f2f4f7 1px, transparent 1px),
+      linear-gradient(to bottom, #f2f4f7 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  /* Bento Grid utilities */
+  .bento-grid {
+    @apply grid gap-6 md:gap-8;
+  }
+  
+  .bento-item {
+    @apply bg-white rounded-bento-lg p-8 shadow-bento;
   }
 }
 

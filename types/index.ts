@@ -9,6 +9,7 @@ export interface Garment {
   base_cost: number
   thumbnail_url: string | null
   available_colors: string[]
+  color_images: Record<string, string> // Maps color name to image URL
   size_range: string[]
   pricing_tier_id: string
   created_at: string

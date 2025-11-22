@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  const res = NextResponse.next()
+  let res = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
   
   // Check if the path is an admin route
   if (request.nextUrl.pathname.startsWith('/admin')) {
@@ -13,7 +17,52 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-      const supabase = createMiddlewareClient({ req: request, res })
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return request.cookies.get(name)?.value
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              request.cookies.set({
+                name,
+                value,
+                ...options,
+              })
+              res = NextResponse.next({
+                request: {
+                  headers: request.headers,
+                },
+              })
+              res.cookies.set({
+                name,
+                value,
+                ...options,
+              })
+            },
+            remove(name: string, options: CookieOptions) {
+              request.cookies.set({
+                name,
+                value: '',
+                ...options,
+              })
+              res = NextResponse.next({
+                request: {
+                  headers: request.headers,
+                },
+              })
+              res.cookies.set({
+                name,
+                value: '',
+                ...options,
+              })
+            },
+          },
+        }
+      )
+      
       const { data: { session } } = await supabase.auth.getSession()
 
       // If no session, redirect to login
