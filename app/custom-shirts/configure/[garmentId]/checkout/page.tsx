@@ -87,7 +87,7 @@ export default function Checkout() {
 
 function OrderSummary({ garment }: { garment: Garment }) {
   const store = useOrderStore()
-  const totalQty = Object.values(store.sizeQuantities).reduce((sum, qty) => sum + (qty || 0), 0)
+  const totalQty = store.getTotalQuantity()
 
   return (
     <div className="bento-card sticky top-24 bg-gradient-to-br from-charcoal-700 to-charcoal-800 text-white">
@@ -96,10 +96,24 @@ function OrderSummary({ garment }: { garment: Garment }) {
       <div className="space-y-4 pb-6 border-b border-white/20">
         <div>
           <p className="font-black text-lg">{garment.name}</p>
-          <p className="text-sm text-white/70 font-semibold">{store.garmentColor}</p>
+          {store.selectedColors.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-white/50 font-semibold uppercase tracking-wide">Colors:</p>
+              {store.selectedColors.map((color) => {
+                const colorQty = Object.values(store.colorSizeQuantities[color] || {}).reduce((sum, qty) => sum + (qty || 0), 0)
+                return (
+                  <p key={color} className="text-sm text-white/70 font-semibold">
+                    {color} ({colorQty} pcs)
+                  </p>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-white/70 font-semibold">No colors selected</p>
+          )}
         </div>
         <div className="flex items-baseline gap-3">
-          <p className="text-white/70 font-semibold">Quantity:</p>
+          <p className="text-white/70 font-semibold">Total Quantity:</p>
           <p className="text-3xl font-black">{totalQty}</p>
         </div>
         <div>
@@ -168,13 +182,10 @@ function CheckoutForm({ garment }: { garment: Garment }) {
     setSubmitting(true)
 
     try {
-      // Create order
-      const totalQty = Object.values(store.sizeQuantities).reduce((sum, qty) => sum + (qty || 0), 0)
-      
+      // Create order with multi-color support
       const orderData = {
         garment_id: garmentId,
-        garment_color: store.garmentColor,
-        size_quantities: store.sizeQuantities,
+        color_size_quantities: store.colorSizeQuantities,
         print_config: store.printConfig,
         customer_name: store.customerName,
         email: store.email,

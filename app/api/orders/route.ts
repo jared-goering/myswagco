@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orderCreationSchema } from '@/lib/schemas'
-import { calculateQuote, calculateTotalQuantity } from '@/lib/pricing'
+import { calculateQuote, calculateTotalQuantity, calculateTotalQuantityFromColors } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
@@ -10,8 +10,18 @@ export async function POST(request: NextRequest) {
     // Validate request
     const validatedData = orderCreationSchema.parse(body)
     
-    // Calculate total quantity
-    const totalQuantity = calculateTotalQuantity(validatedData.size_quantities as Record<string, number>)
+    // Calculate total quantity (supports both legacy and multi-color)
+    let totalQuantity: number
+    if (validatedData.color_size_quantities) {
+      totalQuantity = calculateTotalQuantityFromColors(validatedData.color_size_quantities)
+    } else if (validatedData.size_quantities) {
+      totalQuantity = calculateTotalQuantity(validatedData.size_quantities as Record<string, number>)
+    } else {
+      return NextResponse.json(
+        { error: 'Size quantities are required' },
+        { status: 400 }
+      )
+    }
     
     // Validate minimum quantity
     if (totalQuantity < 24) {
@@ -39,8 +49,9 @@ export async function POST(request: NextRequest) {
         organization_name: validatedData.organization_name,
         need_by_date: validatedData.need_by_date,
         garment_id: validatedData.garment_id,
-        garment_color: validatedData.garment_color,
-        size_quantities: validatedData.size_quantities,
+        garment_color: validatedData.garment_color || (validatedData.color_size_quantities ? Object.keys(validatedData.color_size_quantities)[0] : ''),
+        size_quantities: validatedData.size_quantities || {},
+        color_size_quantities: validatedData.color_size_quantities,
         total_quantity: totalQuantity,
         print_config: validatedData.print_config,
         total_cost: quote.total,

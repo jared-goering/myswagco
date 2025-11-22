@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
 
     // Call Claude API to extract structured data
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-haiku-4-5-20251001', // Using Haiku for speed and cost efficiency
       max_tokens: 4000, // Increased for comprehensive color extraction
       messages: [
         {

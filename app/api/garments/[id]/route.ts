@@ -46,6 +46,7 @@ export async function PATCH(
     if (body.name !== undefined) updates.name = body.name
     if (body.brand !== undefined) updates.brand = body.brand
     if (body.description !== undefined) updates.description = body.description
+    if (body.category !== undefined) updates.category = body.category
     if (body.base_cost !== undefined) {
       if (typeof body.base_cost !== 'number' || body.base_cost <= 0) {
         return NextResponse.json(

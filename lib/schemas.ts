@@ -25,6 +25,9 @@ export const sizeQuantitiesSchema = z.object({
   '3XL': z.number().min(0).optional(),
 })
 
+// Color size quantities schema (maps color names to size quantities)
+export const colorSizeQuantitiesSchema = z.record(z.string(), sizeQuantitiesSchema)
+
 // Shipping address schema
 export const shippingAddressSchema = z.object({
   line1: z.string().min(1, 'Address is required'),
@@ -52,13 +55,22 @@ export const customerInfoSchema = z.object({
   need_by_date: z.string().optional().transform(val => val === '' ? null : val),
 })
 
-// Order creation schema
+// Order creation schema (supports both legacy and multi-color)
 export const orderCreationSchema = z.object({
   garment_id: z.string().uuid(),
-  garment_color: z.string().min(1, 'Color is required'),
-  size_quantities: sizeQuantitiesSchema,
+  // Legacy single-color support (optional if color_size_quantities provided)
+  garment_color: z.string().optional(),
+  size_quantities: sizeQuantitiesSchema.optional(),
+  // New multi-color support
+  color_size_quantities: colorSizeQuantitiesSchema.optional(),
   print_config: printConfigSchema,
-}).merge(customerInfoSchema)
+}).merge(customerInfoSchema).refine(
+  (data) => {
+    // Either legacy fields or new multi-color field must be provided
+    return (data.garment_color && data.size_quantities) || data.color_size_quantities
+  },
+  { message: 'Either single-color or multi-color quantities must be provided' }
+)
 
 // Garment schema
 export const garmentSchema = z.object({

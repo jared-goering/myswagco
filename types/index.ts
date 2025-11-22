@@ -5,6 +5,7 @@ export interface Garment {
   name: string
   brand: string
   description: string
+  category: string | null
   active: boolean
   base_cost: number
   thumbnail_url: string | null
@@ -57,6 +58,9 @@ export interface SizeQuantities {
   '3XL'?: number
 }
 
+// Maps color name to size quantities for multi-color orders
+export type ColorSizeQuantities = Record<string, SizeQuantities>
+
 export type OrderStatus = 
   | 'pending_art_review'
   | 'art_approved'
@@ -77,8 +81,9 @@ export interface Order {
   need_by_date?: string
   
   garment_id: string
-  garment_color: string
-  size_quantities: SizeQuantities
+  garment_color: string // Legacy - kept for backwards compatibility
+  size_quantities: SizeQuantities // Legacy - kept for backwards compatibility
+  color_size_quantities?: ColorSizeQuantities // New multi-color support
   total_quantity: number
   
   print_config: PrintConfig

@@ -50,7 +50,12 @@ export default function OrderConfirmation() {
     )
   }
 
-  const totalQty = Object.values(order.size_quantities).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+  // Calculate total quantity from either multi-color or legacy structure
+  const totalQty = order.color_size_quantities 
+    ? Object.values(order.color_size_quantities).reduce((total: number, sizeQty) => {
+        return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+      }, 0)
+    : Object.values(order.size_quantities).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
 
   return (
     <div className="min-h-screen bg-surface-200">
@@ -101,10 +106,25 @@ export default function OrderConfirmation() {
                 <span className="text-charcoal-500 font-semibold">Garment:</span>
                 <span className="font-black text-charcoal-700">{order.garments.name}</span>
               </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-charcoal-500 font-semibold">Color:</span>
-                <span className="font-black text-charcoal-700">{order.garment_color}</span>
-              </div>
+              {order.color_size_quantities ? (
+                <div>
+                  <span className="text-charcoal-500 font-semibold block mb-2">Colors:</span>
+                  {Object.entries(order.color_size_quantities).map(([color, sizeQty]) => {
+                    const colorQty = Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+                    return (
+                      <div key={color} className="flex justify-between items-baseline ml-4 text-sm">
+                        <span className="text-charcoal-600 font-semibold">{color}:</span>
+                        <span className="font-bold text-charcoal-700">{colorQty} pieces</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex justify-between items-baseline">
+                  <span className="text-charcoal-500 font-semibold">Color:</span>
+                  <span className="font-black text-charcoal-700">{order.garment_color}</span>
+                </div>
+              )}
               <div className="flex justify-between items-baseline">
                 <span className="text-charcoal-500 font-semibold">Total Quantity:</span>
                 <span className="font-black text-charcoal-700">{totalQty} pieces</span>

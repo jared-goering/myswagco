@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Validate required fields
-    const requiredFields = ['name', 'brand', 'description', 'base_cost', 'available_colors', 'size_range', 'pricing_tier_id']
+    const requiredFields = ['name', 'brand', 'description', 'base_cost', 'available_colors', 'size_range', 'pricing_tier_id', 'category']
     for (const field of requiredFields) {
       if (!body[field]) {
         return NextResponse.json(
@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
         name: body.name,
         brand: body.brand,
         description: body.description,
+        category: body.category,
         base_cost: body.base_cost,
         available_colors: body.available_colors,
         color_images: body.color_images || {},

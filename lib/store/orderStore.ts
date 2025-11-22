@@ -1,13 +1,13 @@
 import { create } from 'zustand'
-import { PrintConfig, SizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation } from '@/types'
+import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation } from '@/types'
 
 interface OrderState {
   // Garment selection
   garmentId: string | null
-  garmentColor: string
+  selectedColors: string[]
   
-  // Size and quantities
-  sizeQuantities: SizeQuantities
+  // Size and quantities (multi-color support)
+  colorSizeQuantities: ColorSizeQuantities
   
   // Print configuration
   printConfig: PrintConfig
@@ -38,8 +38,10 @@ interface OrderState {
   
   // Actions
   setGarmentId: (id: string) => void
-  setGarmentColor: (color: string) => void
-  setSizeQuantities: (quantities: SizeQuantities) => void
+  addColor: (color: string) => void
+  removeColor: (color: string) => void
+  setColorSizeQuantity: (color: string, size: string, quantity: number) => void
+  getTotalQuantity: () => number
   setPrintConfig: (config: PrintConfig) => void
   setCustomerInfo: (info: Partial<OrderState>) => void
   setArtworkFile: (location: string, file: File | null) => void
@@ -50,8 +52,8 @@ interface OrderState {
 
 const initialState = {
   garmentId: null,
-  garmentColor: '',
-  sizeQuantities: {},
+  selectedColors: [] as string[],
+  colorSizeQuantities: {} as ColorSizeQuantities,
   printConfig: {
     locations: {}
   },
@@ -73,12 +75,50 @@ const initialState = {
   quote: null
 }
 
-export const useOrderStore = create<OrderState>((set) => ({
+export const useOrderStore = create<OrderState>((set, get) => ({
   ...initialState,
   
   setGarmentId: (id) => set({ garmentId: id }),
-  setGarmentColor: (color) => set({ garmentColor: color }),
-  setSizeQuantities: (quantities) => set({ sizeQuantities: quantities }),
+  
+  addColor: (color) => set((state) => ({
+    selectedColors: [...state.selectedColors, color],
+    colorSizeQuantities: {
+      ...state.colorSizeQuantities,
+      [color]: {}
+    }
+  })),
+  
+  removeColor: (color) => set((state) => {
+    const newSelectedColors = state.selectedColors.filter(c => c !== color)
+    const newColorSizeQuantities = { ...state.colorSizeQuantities }
+    delete newColorSizeQuantities[color]
+    return {
+      selectedColors: newSelectedColors,
+      colorSizeQuantities: newColorSizeQuantities
+    }
+  }),
+  
+  setColorSizeQuantity: (color, size, quantity) => set((state) => ({
+    colorSizeQuantities: {
+      ...state.colorSizeQuantities,
+      [color]: {
+        ...state.colorSizeQuantities[color],
+        [size]: quantity
+      }
+    }
+  })),
+  
+  getTotalQuantity: () => {
+    const state = get()
+    let total = 0
+    Object.values(state.colorSizeQuantities).forEach(sizeQty => {
+      Object.values(sizeQty).forEach(qty => {
+        total += qty || 0
+      })
+    })
+    return total
+  },
+  
   setPrintConfig: (config) => set({ printConfig: config }),
   setCustomerInfo: (info) => set(info),
   setArtworkFile: (location, file) => 

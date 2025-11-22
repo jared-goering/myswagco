@@ -214,3 +214,14 @@ export function calculateTotalQuantity(sizeQuantities: Record<string, number>): 
   return Object.values(sizeQuantities).reduce((sum, qty) => sum + (qty || 0), 0)
 }
 
+/**
+ * Helper to calculate total quantity from color-size quantities
+ */
+export function calculateTotalQuantityFromColors(colorSizeQuantities: Record<string, Record<string, number>>): number {
+  let total = 0
+  Object.values(colorSizeQuantities).forEach(sizeQty => {
+    total += calculateTotalQuantity(sizeQty)
+  })
+  return total
+}
+
