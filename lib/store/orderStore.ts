@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation } from '@/types'
+import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus } from '@/types'
 
 interface OrderState {
   // Garment selection
@@ -27,8 +27,14 @@ interface OrderState {
     country: string
   }
   
-  // Artwork files
+  // Artwork files (client-side File objects)
   artworkFiles: { [location: string]: File | null }
+  
+  // Artwork file records (from database)
+  artworkFileRecords: { [location: string]: ArtworkFile | null }
+  
+  // Vectorized SVG data (as data URLs for preview and upload)
+  vectorizedSvgData: { [location: string]: string | null }
   
   // Artwork transforms (position, scale, rotation)
   artworkTransforms: { [location: string]: ArtworkTransform }
@@ -45,7 +51,10 @@ interface OrderState {
   setPrintConfig: (config: PrintConfig) => void
   setCustomerInfo: (info: Partial<OrderState>) => void
   setArtworkFile: (location: string, file: File | null) => void
+  setArtworkFileRecord: (location: string, record: ArtworkFile | null) => void
   setArtworkTransform: (location: PrintLocation, transform: ArtworkTransform) => void
+  setVectorizedFile: (location: string, vectorizedUrl: string, status: VectorizationStatus) => void
+  hasUnvectorizedRasterFiles: () => boolean
   setQuote: (quote: QuoteResponse | null) => void
   reset: () => void
 }
@@ -71,6 +80,8 @@ const initialState = {
     country: 'US'
   },
   artworkFiles: {},
+  artworkFileRecords: {},
+  vectorizedSvgData: {},
   artworkTransforms: {},
   quote: null
 }
@@ -125,10 +136,41 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set((state) => ({
       artworkFiles: { ...state.artworkFiles, [location]: file }
     })),
+  setArtworkFileRecord: (location, record) =>
+    set((state) => ({
+      artworkFileRecords: { ...state.artworkFileRecords, [location]: record }
+    })),
   setArtworkTransform: (location, transform) =>
     set((state) => ({
       artworkTransforms: { ...state.artworkTransforms, [location]: transform }
     })),
+  setVectorizedFile: (location, vectorizedUrl, status) =>
+    set((state) => {
+      const record = state.artworkFileRecords[location]
+      if (record) {
+        return {
+          artworkFileRecords: {
+            ...state.artworkFileRecords,
+            [location]: {
+              ...record,
+              vectorized_file_url: vectorizedUrl,
+              vectorization_status: status
+            }
+          },
+          vectorizedSvgData: {
+            ...state.vectorizedSvgData,
+            [location]: vectorizedUrl
+          }
+        }
+      }
+      return state
+    }),
+  hasUnvectorizedRasterFiles: () => {
+    const state = get()
+    return Object.values(state.artworkFileRecords).some(
+      record => record && !record.is_vector && record.vectorization_status !== 'completed'
+    )
+  },
   setQuote: (quote) => set({ quote }),
   reset: () => set(initialState)
 }))

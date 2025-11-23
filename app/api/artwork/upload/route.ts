@@ -7,12 +7,24 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     const orderId = formData.get('order_id') as string
     const location = formData.get('location') as string
+    const transformStr = formData.get('transform') as string | null
     
     if (!file || !orderId || !location) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
+    }
+    
+    // Parse transform data if provided
+    let transform = null
+    if (transformStr) {
+      try {
+        transform = JSON.parse(transformStr)
+      } catch (e) {
+        console.error('Error parsing transform data:', e)
+        // Continue without transform data - it's optional
+      }
     }
     
     // Validate file type
@@ -31,6 +43,14 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    
+    // Determine if file is vector format
+    const fileExtension = file.name.split('.').pop()?.toLowerCase()
+    const vectorExtensions = ['svg', 'ai', 'eps']
+    const isVector = vectorExtensions.includes(fileExtension || '')
+    
+    // Set vectorization status based on file type
+    const vectorizationStatus = isVector ? 'not_needed' : 'pending'
     
     // Validate file size (50MB max)
     const maxSize = 50 * 1024 * 1024 // 50MB in bytes
@@ -75,7 +95,10 @@ export async function POST(request: NextRequest) {
         location: location,
         file_url: urlData.publicUrl,
         file_name: file.name,
-        file_size: file.size
+        file_size: file.size,
+        is_vector: isVector,
+        vectorization_status: vectorizationStatus,
+        transform: transform
       })
       .select()
       .single()

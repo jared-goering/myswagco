@@ -19,7 +19,7 @@ export default function ArtworkUpload() {
   const params = useParams()
   const garmentId = params.garmentId as string
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkTransforms, setArtworkTransform, selectedColors } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
@@ -32,12 +32,15 @@ export default function ArtworkUpload() {
     type: 'info',
     show: false,
   })
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [maxInkColors, setMaxInkColors] = useState<number>(4)
+  const [detectedColors, setDetectedColors] = useState<{ [location: string]: number }>({})
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
     .map(([location]) => location as PrintLocation)
 
-  // Fetch garment data on mount
+  // Fetch garment data and app config on mount
   useEffect(() => {
     async function fetchGarment() {
       try {
@@ -50,7 +53,21 @@ export default function ArtworkUpload() {
         console.error('Error fetching garment:', error)
       }
     }
+    
+    async function fetchAppConfig() {
+      try {
+        const response = await fetch('/api/app-config')
+        if (response.ok) {
+          const config = await response.json()
+          setMaxInkColors(config.max_ink_colors || 4)
+        }
+      } catch (error) {
+        console.error('Error fetching app config:', error)
+      }
+    }
+    
     fetchGarment()
+    fetchAppConfig()
   }, [garmentId])
 
   // Set initial active tab to first enabled location
@@ -85,10 +102,29 @@ export default function ArtworkUpload() {
     }
   }, [artworkFiles, enabledLocations, hasShownCompletionToast])
 
-  function handleFileSelect(location: PrintLocation, file: File | null) {
+  async function handleFileSelect(location: PrintLocation, file: File | null) {
     setArtworkFile(location, file)
-    // Switch to the tab of the uploaded file
+    
     if (file) {
+      // Detect file type for immediate UI feedback
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      const vectorExtensions = ['svg', 'ai', 'eps']
+      const isVector = vectorExtensions.includes(fileExtension || '')
+      
+      // Create a client-side record for immediate UI feedback
+      const tempRecord = {
+        id: `temp-${location}-${Date.now()}`,
+        order_id: 'pending',
+        location: location,
+        file_url: URL.createObjectURL(file),
+        file_name: file.name,
+        file_size: file.size,
+        is_vector: isVector,
+        vectorization_status: isVector ? 'not_needed' as const : 'pending' as const,
+        created_at: new Date().toISOString()
+      }
+      
+      setArtworkFileRecord(location, tempRecord)
       setActiveTab(location)
       setToast({
         message: `Artwork uploaded for ${getLocationLabel(location)}`,
@@ -100,11 +136,85 @@ export default function ArtworkUpload() {
 
   function handleFileRemove(location: PrintLocation) {
     setArtworkFile(location, null)
+    setArtworkFileRecord(location, null)
     setToast({
       message: `Artwork removed from ${getLocationLabel(location)}`,
       type: 'info',
       show: true,
     })
+  }
+
+  async function handleVectorize(artworkFileId: string) {
+    try {
+      // Find which location this artwork belongs to
+      const location = Object.entries(artworkFileRecords).find(
+        ([, record]) => record?.id === artworkFileId
+      )?.[0] as PrintLocation | undefined
+      
+      if (!location) {
+        throw new Error('Could not find artwork location')
+      }
+      
+      const file = artworkFiles[location]
+      
+      if (!file) {
+        throw new Error('File not found')
+      }
+      
+      // Use temporary vectorization endpoint (doesn't require order)
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/artwork/vectorize-temp', {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        
+        if (result.svg_data_url) {
+          // Update the record with the vectorized data URL
+          setVectorizedFile(location, result.svg_data_url, 'completed')
+          
+          const colorCount = result.color_count || 0
+          
+          // Store detected colors for this location
+          setDetectedColors(prev => ({
+            ...prev,
+            [location]: colorCount
+          }))
+          
+          const colorInfo = colorCount ? ` (${colorCount} color${colorCount !== 1 ? 's' : ''} detected)` : ''
+          
+          // Check if color count exceeds maximum
+          if (colorCount > maxInkColors) {
+            setToast({
+              message: `Artwork vectorized for ${getLocationLabel(location)}!${colorInfo} ⚠️ Warning: Design has ${colorCount} colors but maximum is ${maxInkColors}. This may increase costs or require color reduction.`,
+              type: 'warning',
+              show: true,
+            })
+          } else {
+            setToast({
+              message: `Artwork vectorized successfully for ${getLocationLabel(location)}!${colorInfo}`,
+              type: 'success',
+              show: true,
+            })
+          }
+        }
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || 'Vectorization failed')
+      }
+    } catch (error) {
+      console.error('Vectorization error:', error)
+      setToast({
+        message: error instanceof Error ? error.message : 'Failed to vectorize artwork',
+        type: 'error',
+        show: true,
+      })
+      throw error
+    }
   }
 
   function handleTransformChange(location: PrintLocation, transform: ArtworkTransform) {
@@ -176,10 +286,14 @@ export default function ArtworkUpload() {
   }
 
   function canContinue(): boolean {
-    // Can continue if they have text description OR all artwork is uploaded
+    // Can continue if they have text description OR all artwork is uploaded AND vectorized
     const hasTextDescription = textDescription.trim().length > 0
     const hasAllArtwork = enabledLocations.every(location => artworkFiles[location] !== null && artworkFiles[location] !== undefined)
-    return hasTextDescription || hasAllArtwork
+    
+    // Check if any raster files need vectorization
+    const needsVectorization = hasUnvectorizedRasterFiles()
+    
+    return hasTextDescription || (hasAllArtwork && !needsVectorization)
   }
 
   function handleContinue() {
@@ -349,6 +463,7 @@ export default function ArtworkUpload() {
                         label={getLocationLabel(location)}
                         colors={colors}
                         file={file}
+                        artworkFileRecord={artworkFileRecords[location] || null}
                         onFileSelect={(file) => handleFileSelect(location, file)}
                         onFileRemove={() => handleFileRemove(location)}
                       />
@@ -484,6 +599,7 @@ export default function ArtworkUpload() {
                         >
                           <DesignEditor
                             artworkFile={artworkFiles[location]}
+                            artworkFileRecord={artworkFileRecords[location] || null}
                             printLocation={location}
                             transform={artworkTransforms[location] || null}
                             onTransformChange={(transform) => handleTransformChange(location, transform)}
@@ -491,6 +607,9 @@ export default function ArtworkUpload() {
                             selectedColors={selectedColors}
                             activeColor={activeColor}
                             onColorChange={setActiveColor}
+                            onVectorize={handleVectorize}
+                            maxInkColors={maxInkColors}
+                            detectedColors={detectedColors[location] || 0}
                           />
 
                           {/* Validation Warnings */}
@@ -569,7 +688,10 @@ export default function ArtworkUpload() {
                 animate={{ opacity: 1 }}
                 className="text-xs text-charcoal-500 font-semibold"
               >
-                Upload artwork for all locations or describe your text design to continue
+                {hasUnvectorizedRasterFiles() 
+                  ? 'Please vectorize all raster artwork before continuing'
+                  : 'Upload artwork for all locations or describe your text design to continue'
+                }
               </motion.p>
             )}
           </div>

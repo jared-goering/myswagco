@@ -117,13 +117,19 @@ export interface ArtworkTransform {
   rotation: number
 }
 
+export type VectorizationStatus = 'not_needed' | 'pending' | 'processing' | 'completed' | 'failed'
+
 export interface ArtworkFile {
   id: string
   order_id: string
   location: PrintLocation
   file_url: string
+  vectorized_file_url?: string | null
+  is_vector: boolean
+  vectorization_status: VectorizationStatus
   file_name: string
   file_size: number
+  transform?: ArtworkTransform // Position, scale, and rotation data
   created_at: string
 }
 

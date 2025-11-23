@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PrintLocation } from '@/types'
+import { PrintLocation, ArtworkFile } from '@/types'
 import QualityIndicator from './QualityIndicator'
 
 interface FileUploadCardProps {
@@ -10,6 +10,7 @@ interface FileUploadCardProps {
   label: string
   colors: number
   file: File | null
+  artworkFileRecord?: ArtworkFile | null
   onFileSelect: (file: File | null) => void
   onFileRemove: () => void
 }
@@ -19,6 +20,7 @@ export default function FileUploadCard({
   label,
   colors,
   file,
+  artworkFileRecord,
   onFileSelect,
   onFileRemove
 }: FileUploadCardProps) {
@@ -109,9 +111,45 @@ export default function FileUploadCard({
         className="group"
       >
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-black text-charcoal-700 tracking-tight">{label}</h3>
-            <p className="text-sm text-charcoal-500 font-bold">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-black text-charcoal-700 tracking-tight">{label}</h3>
+              {artworkFileRecord && (
+                <span className={`
+                  inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+                  ${artworkFileRecord.is_vector
+                    ? 'bg-success-100 text-success-700 border border-success-300'
+                    : artworkFileRecord.vectorization_status === 'completed'
+                    ? 'bg-success-100 text-success-700 border border-success-300'
+                    : 'bg-warning-100 text-warning-700 border border-warning-300'
+                  }
+                `}>
+                  {artworkFileRecord.is_vector ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Vector
+                    </>
+                  ) : artworkFileRecord.vectorization_status === 'completed' ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Vectorized
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Raster
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-charcoal-500 font-bold mt-1">
               {colors} color{colors > 1 ? 's' : ''}
             </p>
           </div>

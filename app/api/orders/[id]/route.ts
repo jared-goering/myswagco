@@ -43,11 +43,30 @@ export async function PATCH(
 ) {
   try {
     const body = await request.json()
-    const { status, internal_notes } = body
+    const { 
+      status, 
+      internal_notes, 
+      customer_name, 
+      email, 
+      phone, 
+      shipping_address,
+      garment_id,
+      garment_color,
+      size_quantities,
+      print_config
+    } = body
     
     const updateData: any = {}
     if (status) updateData.status = status
     if (internal_notes !== undefined) updateData.internal_notes = internal_notes
+    if (customer_name) updateData.customer_name = customer_name
+    if (email) updateData.email = email
+    if (phone) updateData.phone = phone
+    if (shipping_address) updateData.shipping_address = shipping_address
+    if (garment_id) updateData.garment_id = garment_id
+    if (garment_color) updateData.garment_color = garment_color
+    if (size_quantities) updateData.size_quantities = size_quantities
+    if (print_config) updateData.print_config = print_config
     
     const { data: order, error } = await supabaseAdmin
       .from('orders')

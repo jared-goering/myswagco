@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Stage, Layer, Image as KonvaImage, Transformer, Rect, Text, Group } from 'react-konva'
-import { PrintLocation, ArtworkTransform, Garment } from '@/types'
+import { PrintLocation, ArtworkTransform, Garment, ArtworkFile } from '@/types'
 import Konva from 'konva'
 import useImage from 'use-image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,6 +11,7 @@ import PrintAreaGuides from './PrintAreaGuides'
 
 interface DesignEditorProps {
   artworkFile: File | null
+  artworkFileRecord: ArtworkFile | null
   printLocation: PrintLocation
   transform: ArtworkTransform | null
   onTransformChange: (transform: ArtworkTransform) => void
@@ -18,6 +19,9 @@ interface DesignEditorProps {
   selectedColors: string[]
   activeColor: string
   onColorChange: (color: string) => void
+  onVectorize?: (artworkFileId: string) => Promise<void>
+  maxInkColors?: number
+  detectedColors?: number
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -91,19 +95,26 @@ interface HistoryState {
 }
 
 export default function DesignEditor({ 
-  artworkFile, 
+  artworkFile,
+  artworkFileRecord,
   printLocation, 
   transform, 
   onTransformChange,
   garment,
   selectedColors,
   activeColor,
-  onColorChange
+  onColorChange,
+  onVectorize,
+  maxInkColors = 4,
+  detectedColors = 0
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
   const [scaleX, setScaleX] = useState(1)
   const [scaleY, setScaleY] = useState(1)
+  const [isVectorizing, setIsVectorizing] = useState(false)
+  const [showVectorized, setShowVectorized] = useState(false)
+  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null)
   const imageRef = useRef<Konva.Image>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -204,43 +215,47 @@ export default function DesignEditor({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [image, transform, isSelected, onTransformChange, handleUndo, handleRedo])
 
-  // Load image when file changes
+  // Load image when file changes and create stable URL
   useEffect(() => {
     if (!artworkFile) {
       setImage(null)
+      setOriginalImageUrl(null)
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new window.Image()
-      img.onload = () => {
-        setImage(img)
+    // Create a stable blob URL for the original file
+    const blobUrl = URL.createObjectURL(artworkFile)
+    setOriginalImageUrl(blobUrl)
+
+    const img = new window.Image()
+    img.onload = () => {
+      setImage(img)
+      
+      // Set default transform if not already set
+      if (!transform) {
+        const scale = Math.min(
+          printArea.width / img.width,
+          printArea.height / img.height,
+          1
+        ) * 0.8 // Start at 80% of max size
         
-        // Set default transform if not already set
-        if (!transform) {
-          const scale = Math.min(
-            printArea.width / img.width,
-            printArea.height / img.height,
-            1
-          ) * 0.8 // Start at 80% of max size
-          
-          const scaledWidth = img.width * scale
-          const scaledHeight = img.height * scale
-          
-          const newTransform = {
-            x: printArea.x + (printArea.width - scaledWidth) / 2,
-            y: printArea.y + (printArea.height - scaledHeight) / 2,
-            scale,
-            rotation: 0,
-          }
-          onTransformChange(newTransform)
-          saveToHistory(newTransform)
+        const scaledWidth = img.width * scale
+        const scaledHeight = img.height * scale
+        
+        const newTransform = {
+          x: printArea.x + (printArea.width - scaledWidth) / 2,
+          y: printArea.y + (printArea.height - scaledHeight) / 2,
+          scale,
+          rotation: 0,
         }
+        onTransformChange(newTransform)
+        saveToHistory(newTransform)
       }
-      img.src = e.target?.result as string
     }
-    reader.readAsDataURL(artworkFile)
+    img.src = blobUrl
+    
+    // Cleanup blob URL on unmount
+    return () => URL.revokeObjectURL(blobUrl)
   }, [artworkFile, printLocation])
 
   // Update transformer when image is selected
@@ -368,6 +383,60 @@ export default function DesignEditor({
       imageRef.current.scaleY(scaleY * -1)
     }
   }
+
+  const handleVectorize = async () => {
+    if (!artworkFileRecord || !onVectorize) return
+    
+    setIsVectorizing(true)
+    try {
+      await onVectorize(artworkFileRecord.id)
+      setShowVectorized(true)
+    } catch (error) {
+      console.error('Vectorization failed:', error)
+    } finally {
+      setIsVectorizing(false)
+    }
+  }
+
+  // Determine which image to display
+  const displayImageUrl = artworkFileRecord?.vectorized_file_url && showVectorized
+    ? artworkFileRecord.vectorized_file_url
+    : originalImageUrl
+
+  // Update image when vectorized version becomes available
+  useEffect(() => {
+    if (artworkFileRecord?.vectorization_status === 'completed' && artworkFileRecord.vectorized_file_url) {
+      setShowVectorized(true)
+    }
+  }, [artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url])
+
+  // Reload image when toggling between original and vectorized
+  useEffect(() => {
+    const imageUrl = displayImageUrl
+    if (!imageUrl) return
+
+    const img = new window.Image()
+    img.onload = () => {
+      // Only adjust scale if the image dimensions actually changed
+      const oldImage = image
+      const dimensionsChanged = oldImage && (oldImage.width !== img.width || oldImage.height !== img.height)
+      
+      setImage(img)
+      
+      // If dimensions changed and we have a transform, adjust scale to maintain visual size
+      if (dimensionsChanged && transform && oldImage) {
+        const scaleRatio = oldImage.width / img.width
+        const newScale = transform.scale * scaleRatio
+        
+        // Update transform with new scale to maintain visual size
+        onTransformChange({
+          ...transform,
+          scale: newScale
+        })
+      }
+    }
+    img.src = imageUrl
+  }, [displayImageUrl])
 
   if (!image || !transform) {
     return (
@@ -544,6 +613,124 @@ export default function DesignEditor({
           </motion.div>
         )}
       </div>
+
+      {/* File Type Badge */}
+      {artworkFileRecord && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-center gap-2 mb-2"
+        >
+          <div className={`
+            inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold
+            ${artworkFileRecord.is_vector
+              ? 'bg-success-100 text-success-700 border-2 border-success-300'
+              : 'bg-warning-100 text-warning-700 border-2 border-warning-300'
+            }
+          `}>
+            {artworkFileRecord.is_vector ? (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Vector Format
+              </>
+            ) : artworkFileRecord.vectorization_status === 'completed' ? (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Vectorized ✓
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Raster - Needs Vectorization
+              </>
+            )}
+          </div>
+          
+          {/* Toggle between original and vectorized */}
+          {artworkFileRecord.vectorization_status === 'completed' && artworkFileRecord.vectorized_file_url && (
+            <button
+              onClick={() => setShowVectorized(!showVectorized)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-surface-100 hover:bg-surface-200 text-charcoal-700 border-2 border-surface-300 transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              {showVectorized ? 'Show Original' : 'Show Vectorized'}
+            </button>
+          )}
+          
+          {/* Color count warning */}
+          {detectedColors > maxInkColors && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-warning-100 text-warning-700 border-2 border-warning-300">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {detectedColors} colors (max: {maxInkColors})
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Vectorize Button - Prominent CTA */}
+      {artworkFileRecord && !artworkFileRecord.is_vector && artworkFileRecord.vectorization_status !== 'completed' && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="mb-4"
+        >
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-300 rounded-bento-lg p-6 shadow-bento">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-black text-charcoal-700 mb-1">Convert to Vector Format</h3>
+                <p className="text-sm text-charcoal-600 font-semibold mb-4">
+                  Your PNG file needs to be converted to vector format (SVG) for screen printing. This ensures crisp, clean prints at any size.
+                </p>
+                <button
+                  onClick={handleVectorize}
+                  disabled={isVectorizing}
+                  className={`
+                    px-6 py-3 rounded-bento font-black text-base flex items-center gap-2 transition-all
+                    ${isVectorizing
+                      ? 'bg-primary-300 text-primary-700 cursor-wait'
+                      : 'bg-primary-500 text-white hover:bg-primary-600 shadow-soft hover:shadow-bento'
+                    }
+                  `}
+                >
+                  {isVectorizing ? (
+                    <>
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Vectorizing... (5-15 seconds)</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                      <span>Vectorize for Print</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Toolbar */}
       <div className="flex justify-center">

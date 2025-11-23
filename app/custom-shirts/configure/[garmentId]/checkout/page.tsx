@@ -216,18 +216,47 @@ function CheckoutForm({ garment }: { garment: Garment }) {
       const order = await orderResponse.json()
       setOrderId(order.id)
 
-      // Upload artwork files
+      // Upload artwork files with transform data
       for (const [location, file] of Object.entries(store.artworkFiles)) {
         if (file) {
           const formData = new FormData()
           formData.append('file', file)
           formData.append('order_id', order.id)
           formData.append('location', location)
+          
+          // Include transform data (position, scale, rotation) if available
+          const transform = store.artworkTransforms[location]
+          if (transform) {
+            formData.append('transform', JSON.stringify(transform))
+          }
 
           await fetch('/api/artwork/upload', {
             method: 'POST',
             body: formData
           })
+          
+          // If file was vectorized, also upload the SVG version
+          const svgData = store.vectorizedSvgData[location]
+          if (svgData && svgData.startsWith('data:')) {
+            // Convert data URL to blob
+            const base64Data = svgData.split(',')[1]
+            const binaryData = atob(base64Data)
+            const bytes = new Uint8Array(binaryData.length)
+            for (let i = 0; i < binaryData.length; i++) {
+              bytes[i] = binaryData.charCodeAt(i)
+            }
+            const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
+            
+            const vectorFormData = new FormData()
+            vectorFormData.append('file', svgBlob, `${file.name.replace(/\.[^/.]+$/, '')}_vectorized.svg`)
+            vectorFormData.append('order_id', order.id)
+            vectorFormData.append('location', location)
+            
+            await fetch('/api/artwork/upload', {
+              method: 'POST',
+              body: vectorFormData
+            })
+          }
         }
       }
 
