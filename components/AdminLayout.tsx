@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -19,8 +20,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="bg-white border-b border-surface-300 shadow-soft sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <Link href="/admin" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-              My Swag Co Admin
+            <Link href="/admin" className="hover:opacity-80 transition-opacity flex items-center gap-2">
+              <Image 
+                src="/logo.png" 
+                alt="My Swag Co" 
+                width={160} 
+                height={48}
+                className="h-10 w-auto"
+                priority
+              />
+              <span className="text-lg font-bold text-charcoal-500">Admin</span>
             </Link>
             <nav className="hidden md:flex space-x-2">
               <Link href="/admin" className="text-charcoal-600 hover:text-primary-600 hover:bg-primary-50 font-bold px-4 py-2 rounded-xl transition-all">

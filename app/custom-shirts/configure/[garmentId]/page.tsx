@@ -164,19 +164,26 @@ export default function ConfigurationWizard() {
   return (
     <div className="min-h-screen bg-surface-200">
       {/* Header */}
-      <header className="border-b border-surface-300 bg-white sticky top-0 z-10 shadow-soft">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/custom-shirts" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-            My Swag Co
+      <header className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4">
+        <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-8 py-3 flex items-center gap-4">
+          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+            <Image 
+              src="/logo.png" 
+              alt="My Swag Co" 
+              width={150} 
+              height={45}
+              className="h-10 w-auto"
+              priority
+            />
           </Link>
           <nav className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">2</span>
-            <span className="text-sm font-bold text-charcoal-700">Configure Order</span>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Configure Order</span>
           </nav>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2">

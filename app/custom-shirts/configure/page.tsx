@@ -169,19 +169,26 @@ export default function GarmentSelection() {
   return (
     <div className="min-h-screen bg-surface-200">
       {/* Header */}
-      <header className="border-b border-surface-300 bg-white shadow-soft">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/custom-shirts" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-            My Swag Co
+      <header className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4">
+        <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-8 py-3 flex items-center gap-4">
+          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+            <Image 
+              src="/logo.png" 
+              alt="My Swag Co" 
+              width={150} 
+              height={45}
+              className="h-10 w-auto"
+              priority
+            />
           </Link>
           <nav className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">1</span>
-            <span className="text-sm font-bold text-charcoal-700">Choose Garment</span>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Choose Garment</span>
           </nav>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-24">
         <div className="text-center mb-12">
           <h1 className="text-5xl md:text-6xl font-black text-charcoal-700 mb-4 tracking-tight">
             Choose Your Garment

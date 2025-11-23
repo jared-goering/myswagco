@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function CustomShirtsLanding() {
   return (
@@ -6,8 +7,15 @@ export default function CustomShirtsLanding() {
       {/* Header */}
       <header className="border-b border-surface-300 bg-white shadow-soft">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <Link href="/" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-            My Swag Co
+          <Link href="/" className="hover:opacity-80 transition-opacity">
+            <Image 
+              src="/logo.png" 
+              alt="My Swag Co" 
+              width={200} 
+              height={60}
+              className="h-12 w-auto"
+              priority
+            />
           </Link>
         </div>
       </header>

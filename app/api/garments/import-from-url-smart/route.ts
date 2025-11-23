@@ -321,7 +321,8 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ Successfully extracted data:', {
       color_count: result.available_colors.length,
-      color_images_count: Object.keys(result.color_images || {}).length
+      color_front_images_count: Object.keys(result.color_images || {}).length,
+      color_back_images_count: Object.keys(result.color_back_images || {}).length
     })
 
     return NextResponse.json(result)
@@ -546,44 +547,79 @@ async function smartHtmlScraping(url: string, isAsColour: boolean): Promise<Impo
   }
 
   // 🎯 NEW: Extract color thumbnail mappings directly from HTML!
-  // AS Colour (BigCommerce) includes lines like: cat_thumb_Sand: https://cdn11.../5001_STAPLE_TEE_SAND_THUMB.jpg
-  const colorImageMappings: Record<string, string> = {}
+  // AS Colour (BigCommerce) includes both FRONT and BACK images
+  // We'll extract them into separate mappings
+  const colorFrontImageMappings: Record<string, string> = {}
+  const colorBackImageMappings: Record<string, string> = {}
   
   if (isAsColour) {
-    console.log('🎨 Extracting color image mappings from HTML...')
+    console.log('🎨 Extracting color image mappings from HTML (FRONT + BACK)...')
     
     // NEW APPROACH: Find URLs with color names embedded
     // Pattern: .../5001_STAPLE_TEE_FOG_BLUE_THUMB__XXXXX.jpg
     // Extract color from URL itself!
     
     // Match patterns like:
-    // 5001_STAPLE_TEE_FOG_BLUE_THUMB.jpg
-    // 5026_CLASSIC_TEE_GRAVEL_THUMB.jpg
-    // But EXCLUDE view keywords like MAIN, FRONT, BACK, SIDE, TURN, DETAIL, LOOSE
+    // 5001_STAPLE_TEE_FOG_BLUE_THUMB.jpg (FRONT)
+    // 5001_STAPLE_TEE_FOG_BLUE_BACK__XXXXX.jpg (BACK)
+    // 5026_CLASSIC_TEE_GRAVEL_THUMB.jpg (FRONT)
+    // 5026_CLASSIC_TEE_GRAVEL_BACK__XXXXX.jpg (BACK)
     
-    const urlPattern = /https:\/\/cdn11\.bigcommerce\.com\/[^"'\s]+\/([0-9]+_[A-Z_]+)_([A-Z_]+)(?:_THUMB)?__[^"'\s]+\.jpg/gi
-    const excludedKeywords = ['MAIN', 'FRONT', 'BACK', 'SIDE', 'TURN', 'DETAIL', 'LOOSE', 'MODEL']
+    // Updated pattern to match both _THUMB__ and _BACK__ suffixes
+    const urlPattern = /https:\/\/cdn11\.bigcommerce\.com\/[^"'\s]+\/([0-9]+_[A-Z_]+)_([A-Z_]+)(?:_(?:THUMB|BACK|FRONT))?__[^"'\s]+\.jpg/gi
+    // Keywords that indicate view type, not color (but we now want to CAPTURE BACK!)
+    const excludedViewKeywords = ['MAIN', 'SIDE', 'TURN', 'DETAIL', 'LOOSE', 'MODEL']
     
     let match
     
     while ((match = urlPattern.exec(html)) !== null) {
       const fullUrl = match[0]
-      const productCode = match[1] // e.g. 5001_STAPLE_TEE
-      const colorPart = match[2] // e.g. FOG_BLUE_THUMB or BACK
+      const productCode = match[1] // e.g. 5001_STAPLE_TEE or 5001_STAPLE_TEE_FOG_BLUE
+      const colorPart = match[2] // e.g. FOG_BLUE_THUMB, FOG_BLUE_BACK, BACK, or just a color
       
       // Clean up the color part
       let colorName = colorPart.replace('_THUMB', '')
       
-      // Check if this is a view type, not a color
-      if (excludedKeywords.includes(colorName)) {
-        continue // Skip this match
+      // Detect if this is a BACK view (URLs contain _BACK__ or _BACK_)
+      const isBackView = fullUrl.includes('_BACK__') || fullUrl.includes('_BACK_') || colorName.includes('_BACK')
+      // Detect if this is a FRONT view (has _THUMB or _FRONT, or is default with no view keyword)
+      const isFrontView = fullUrl.includes('_FRONT__') || fullUrl.includes('_THUMB__') || (!isBackView && !excludedViewKeywords.some(k => colorName === k || colorName.endsWith(`_${k}`)))
+      
+      // Special case: If colorPart is just a view keyword (BACK, FRONT), 
+      // extract color from the productCode instead
+      if (colorName === 'BACK' || colorName === 'FRONT' || excludedViewKeywords.includes(colorName)) {
+        // For URLs like 5001_STAPLE_TEE_FOG_BLUE_BACK__, 
+        // the color is in the productCode: 5001_STAPLE_TEE_FOG_BLUE
+        // Extract everything after the product style number
+        const parts = productCode.split('_')
+        // Skip first part (product number like 5001) and product name parts
+        // Assume format: NUMBER_PRODUCT_NAME_COLOR
+        // For 5001_STAPLE_TEE_FOG_BLUE, we want FOG_BLUE
+        if (parts.length > 2) {
+          // Take everything after the first 2 parts (number and product name)
+          colorName = parts.slice(2).join('_')
+        } else {
+          // Can't extract color, skip this URL
+          continue
+        }
       }
       
-      // Handle cases like "GRAVEL_BACK" where color is GRAVEL
-      for (const keyword of excludedKeywords) {
+      // Extract the color name by removing view keywords
+      if (colorName.endsWith('_BACK')) {
+        colorName = colorName.replace('_BACK', '')
+      }
+      if (colorName.endsWith('_FRONT')) {
+        colorName = colorName.replace('_FRONT', '')
+      }
+      for (const keyword of excludedViewKeywords) {
         if (colorName.endsWith(`_${keyword}`)) {
           colorName = colorName.replace(`_${keyword}`, '')
         }
+      }
+      
+      // Skip if no color name remains
+      if (!colorName || colorName.length === 0) {
+        continue
       }
       
       // Format color name nicely (FOG_BLUE → Fog Blue)
@@ -597,22 +633,84 @@ async function smartHtmlScraping(url: string, isAsColour: boolean): Promise<Impo
         .replace('_THUMB', '')
         .replace(/\.(\d+)\.(\d+)\.jpg/, '.1280.1280.jpg') // Use larger size
       
-      if (!colorImageMappings[formattedColor]) {
-        colorImageMappings[formattedColor] = fullSizeUrl
+      // Route to appropriate mapping based on view type
+      if (isBackView && !colorBackImageMappings[formattedColor]) {
+        colorBackImageMappings[formattedColor] = fullSizeUrl
+      } else if (isFrontView && !colorFrontImageMappings[formattedColor]) {
+        colorFrontImageMappings[formattedColor] = fullSizeUrl
       }
     }
     
-    console.log(`✅ Found ${Object.keys(colorImageMappings).length} color images from URLs!`)
+    console.log(`✅ Found ${Object.keys(colorFrontImageMappings).length} FRONT images and ${Object.keys(colorBackImageMappings).length} BACK images from URLs!`)
     
-    if (Object.keys(colorImageMappings).length > 0) {
+    if (Object.keys(colorFrontImageMappings).length > 0) {
       // Show sample of what we found
-      const sample = Object.entries(colorImageMappings).slice(0, 5)
-      console.log('   Sample mappings:', sample)
+      const frontSample = Object.entries(colorFrontImageMappings).slice(0, 5)
+      console.log('   Sample FRONT mappings:', frontSample)
       
-      extractedJson += '\n=== Color Image Mappings (extracted from image URLs) ===\n'
-      extractedJson += JSON.stringify(colorImageMappings, null, 2) + '\n'
+      extractedJson += '\n=== Color FRONT Image Mappings (extracted from image URLs) ===\n'
+      extractedJson += JSON.stringify(colorFrontImageMappings, null, 2) + '\n'
     } else {
-      console.log('⚠️  No color image URLs found in HTML')
+      console.log('⚠️  No FRONT color image URLs found in HTML')
+    }
+    
+    if (Object.keys(colorBackImageMappings).length > 0) {
+      // Show sample of what we found
+      const backSample = Object.entries(colorBackImageMappings).slice(0, 5)
+      console.log('   Sample BACK mappings:', backSample)
+      
+      extractedJson += '\n=== Color BACK Image Mappings (extracted from image URLs) ===\n'
+      extractedJson += JSON.stringify(colorBackImageMappings, null, 2) + '\n'
+    } else {
+      console.log('⚠️  No BACK color image URLs found in HTML')
+    }
+  }
+
+  // 🚀 FAST PATH: If we have complete data from URL extraction, skip Claude entirely!
+  // This saves ~200k tokens per request and avoids rate limits
+  const hasFrontImages = Object.keys(colorFrontImageMappings).length >= 60
+  const hasBackImages = Object.keys(colorBackImageMappings).length >= 60
+  const hasCompleteData = hasFrontImages && hasBackImages
+  
+  if (isAsColour && hasCompleteData) {
+    console.log('🚀 FAST PATH: Complete data found in URL extraction, skipping Claude!')
+    console.log(`   Found ${Object.keys(colorFrontImageMappings).length} front + ${Object.keys(colorBackImageMappings).length} back images`)
+    
+    // Extract basic metadata directly from HTML
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+    const productName = titleMatch ? titleMatch[1].split('|')[0].trim() : 'AS Colour Product'
+    
+    // Extract sizes from select dropdown
+    const sizeMatches = Array.from(html.matchAll(/<option[^>]*data-product-attribute-value[^>]*>([^<]+)<\/option>/gi))
+    const sizes = sizeMatches
+      .map(m => m[1].trim())
+      .filter(s => /^(XXS|XS|S|M|L|XL|2XL|3XL|4XL|5XL)$/i.test(s))
+    const uniqueSizes = [...new Set(sizes)]
+    
+    // Extract price
+    const priceMatch = html.match(/price[^>]*>\$?([0-9]+\.?[0-9]*)/i)
+    const basePrice = priceMatch ? parseFloat(priceMatch[1]) : null
+    
+    // Get all color names from our mappings
+    const availableColors = [...new Set([
+      ...Object.keys(colorFrontImageMappings),
+      ...Object.keys(colorBackImageMappings)
+    ])].sort()
+    
+    // Use first front image as thumbnail
+    const thumbnailUrl = Object.values(colorFrontImageMappings)[0] || null
+    
+    return {
+      name: productName,
+      brand: 'AS Colour',
+      description: `${productName} - Premium quality garment from AS Colour, available in ${availableColors.length} colors.`,
+      category: 'T-Shirt', // Could be extracted more intelligently
+      available_colors: availableColors,
+      size_range: uniqueSizes.length > 0 ? uniqueSizes : ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'],
+      thumbnail_url: thumbnailUrl,
+      base_cost: basePrice,
+      color_images: colorFrontImageMappings,
+      color_back_images: colorBackImageMappings
     }
   }
 
@@ -665,33 +763,50 @@ Extract and return a JSON object with:
 6. size_range: Array of sizes
 7. thumbnail_url: Main product image URL
 8. base_cost: Price as number (or null if not found)
-9. **color_images**: Object mapping colors to UNIQUE image URLs
+9. **color_images**: Object mapping colors to FRONT view image URLs
    - CRITICAL: Each color MUST have a DIFFERENT image URL
    - DO NOT map all colors to the same URL
    - Only include colors where you found an actual unique image
    - If you can only find images for 10 colors, only include those 10
+10. **color_back_images**: Object mapping colors to BACK view image URLs
+   - Look for URLs containing "_BACK_" or similar patterns
+   - Match the same colors as in color_images when possible
+   - Only include if back images are available
 
 ${isAsColour ? `
 🔥 AS COLOUR SPECIFIC INSTRUCTIONS:
 
-This BigCommerce site has 70+ colors with UNIQUE images!
+This BigCommerce site has 70+ colors with UNIQUE FRONT and BACK images!
 
-IMPORTANT: I've already extracted color image mappings from the HTML for you!
-Look in the "Color Image Mappings (from cat_thumb lines)" section above.
+IMPORTANT: I've already extracted BOTH front and back image mappings from the HTML for you!
+Look for these sections in the structured data above:
+- "Color FRONT Image Mappings (extracted from image URLs)"
+- "Color BACK Image Mappings (extracted from image URLs)"
 
-This contains lines like:
+They contain mappings like:
+FRONT Images:
 {
-  "Sand": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_SAND_THUMB.jpg",
-  "White": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_WHITE_THUMB.jpg",
+  "Sand": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_SAND.jpg",
+  "White": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_WHITE.jpg",
+  ...
+}
+
+BACK Images:
+{
+  "Sand": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_SAND_BACK.jpg",
+  "White": "https://cdn11.bigcommerce.com/.../5001_STAPLE_TEE_WHITE_BACK.jpg",
   ...
 }
 
 STEP 1 - Find all color names from <select> or <option> tags
 
-STEP 2 - Use the pre-extracted color image mappings I provided above
-Match the color names you found to the URLs in the color mappings
+STEP 2 - Use the pre-extracted FRONT image mappings for color_images
+Match the color names you found to the URLs in the FRONT mappings
 
-STEP 3 - Build your color_images object using these mappings
+STEP 3 - Use the pre-extracted BACK image mappings for color_back_images
+Match the same color names to the URLs in the BACK mappings
+
+STEP 4 - Build BOTH color_images and color_back_images objects
 DO NOT use the same URL for all colors - use the unique URLs I extracted!
 ` : ''}
 
@@ -720,6 +835,11 @@ Example output format (but with 50-80 colors, not just 3!):
     "White": "https://cdn.example.com/white.jpg",
     "Black": "https://cdn.example.com/black.jpg",
     ...<CONTINUE MAPPING ALL 50-80 COLORS>...
+  },
+  "color_back_images": {
+    "White": "https://cdn.example.com/white_back.jpg",
+    "Black": "https://cdn.example.com/black_back.jpg",
+    ...<CONTINUE MAPPING ALL 50-80 COLORS>...
   }
 }`
       }
@@ -747,25 +867,44 @@ Example output format (but with 50-80 colors, not just 3!):
   console.log('📊 Extraction results:', {
     name: extractedData.name,
     colors_found: extractedData.available_colors?.length || 0,
-    color_images_found: Object.keys(extractedData.color_images || {}).length,
+    color_front_images_found: Object.keys(extractedData.color_images || {}).length,
+    color_back_images_found: Object.keys(extractedData.color_back_images || {}).length,
     sample_colors: extractedData.available_colors?.slice(0, 10)
   })
 
-  // Check if all images are the same (common issue)
+  // Check if all FRONT images are the same (common issue)
   if (extractedData.color_images) {
     const imageUrls = Object.values(extractedData.color_images)
     const uniqueImageUrls = new Set(imageUrls)
     
     if (uniqueImageUrls.size === 1 && imageUrls.length > 1) {
-      console.warn(`⚠️  WARNING: All ${imageUrls.length} colors are mapped to the SAME image URL!`)
+      console.warn(`⚠️  WARNING: All ${imageUrls.length} colors are mapped to the SAME FRONT image URL!`)
       console.warn(`   Image URL: ${imageUrls[0]}`)
       console.warn(`   This means unique color images were not found in the page data.`)
     } else {
-      console.log(`✅ Found ${uniqueImageUrls.size} unique image URLs for ${imageUrls.length} colors`)
+      console.log(`✅ Found ${uniqueImageUrls.size} unique FRONT image URLs for ${imageUrls.length} colors`)
       // Show a sample
-      const sampleMappings = Object.entries(extractedData.color_images).slice(0, 5)
-      console.log('   Sample mappings:', sampleMappings)
+      const sampleMappings = Object.entries(extractedData.color_images).slice(0, 3)
+      console.log('   Sample FRONT mappings:', sampleMappings)
     }
+  }
+
+  // Check BACK images
+  if (extractedData.color_back_images) {
+    const backImageUrls = Object.values(extractedData.color_back_images)
+    const uniqueBackImageUrls = new Set(backImageUrls)
+    
+    if (uniqueBackImageUrls.size === 1 && backImageUrls.length > 1) {
+      console.warn(`⚠️  WARNING: All ${backImageUrls.length} colors are mapped to the SAME BACK image URL!`)
+      console.warn(`   Image URL: ${backImageUrls[0]}`)
+    } else {
+      console.log(`✅ Found ${uniqueBackImageUrls.size} unique BACK image URLs for ${backImageUrls.length} colors`)
+      // Show a sample
+      const sampleBackMappings = Object.entries(extractedData.color_back_images).slice(0, 3)
+      console.log('   Sample BACK mappings:', sampleBackMappings)
+    }
+  } else if (isAsColour) {
+    console.warn(`⚠️  No BACK images found for AS Colour product (expected to find back images)`)
   }
 
   // Warn if we got too few colors (AS Colour should have 50+)

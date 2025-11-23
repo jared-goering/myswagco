@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import NextImage from 'next/image'
 import { useOrderStore } from '@/lib/store/orderStore'
 import { PrintLocation, ArtworkTransform, Garment } from '@/types'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -207,38 +208,41 @@ export default function ArtworkUpload() {
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="border-b border-surface-300 bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-soft"
+        className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/custom-shirts" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-              My Swag Co
-            </Link>
-            <nav className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
-                <span className="text-sm font-bold text-charcoal-700">Upload Artwork</span>
+        <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-10 py-4 flex items-center gap-8">
+          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+            <NextImage 
+              src="/logo.png" 
+              alt="My Swag Co" 
+              width={150} 
+              height={45}
+              className="h-10 w-auto"
+              priority
+            />
+          </Link>
+          <nav className="flex items-center gap-4">
+            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Upload Artwork</span>
+            {/* Progress indicator */}
+            <div className="flex items-center gap-3 ml-2 pl-4 border-l border-surface-300">
+              <div className="w-20 h-2 bg-surface-300 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-primary-500 to-primary-600"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
               </div>
-              {/* Progress indicator */}
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="w-32 h-2 bg-surface-300 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-primary-500 to-primary-600"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
-                <span className="text-xs font-black text-charcoal-600">
-                  {uploadedCount}/{totalCount}
-                </span>
-              </div>
-            </nav>
-          </div>
+              <span className="text-sm font-black text-charcoal-600">
+                {uploadedCount}/{totalCount}
+              </span>
+            </div>
+          </nav>
         </div>
       </motion.header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-36 pb-8 lg:pb-12">
         {/* Title Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
