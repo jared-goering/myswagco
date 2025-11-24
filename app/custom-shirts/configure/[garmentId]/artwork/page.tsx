@@ -15,6 +15,7 @@ import ArtworkGallery from '@/components/ArtworkGallery'
 import Toast from '@/components/Toast'
 import ArtworkProgressChecklist from '@/components/ArtworkProgressChecklist'
 import ValidationSummaryCard, { ValidationIssue } from '@/components/ValidationSummaryCard'
+import AIDesignGenerator from '@/components/AIDesignGenerator'
 
 export default function ArtworkUpload() {
   const router = useRouter()
@@ -39,6 +40,7 @@ export default function ArtworkUpload() {
   const [detectedColors, setDetectedColors] = useState<{ [location: string]: number }>({})
   const [showDesignPreview, setShowDesignPreview] = useState(false)
   const [previewLocation, setPreviewLocation] = useState<PrintLocation | null>(null)
+  const [showAIGenerator, setShowAIGenerator] = useState(false)
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
@@ -146,6 +148,36 @@ export default function ArtworkUpload() {
       type: 'info',
       show: true,
     })
+  }
+
+  async function handleAIDesignGenerated(imageDataUrl: string, location: PrintLocation) {
+    // Convert the data URL to a File object
+    try {
+      const response = await fetch(imageDataUrl)
+      const blob = await response.blob()
+      const fileName = `ai-generated-design-${Date.now()}.png`
+      const file = new File([blob], fileName, { type: 'image/png' })
+      
+      // Set the file using the existing handler
+      await handleFileSelect(location, file)
+      
+      setToast({
+        message: `AI-generated design added to ${getLocationLabel(location)}! You can vectorize it for best print quality.`,
+        type: 'success',
+        show: true,
+        confetti: true,
+      })
+      
+      // Switch to the tab where the design was added
+      setActiveTab(location)
+    } catch (error) {
+      console.error('Error processing AI design:', error)
+      setToast({
+        message: 'Failed to process the AI-generated design',
+        type: 'error',
+        show: true,
+      })
+    }
   }
 
   async function handleVectorize(artworkFileId: string) {
@@ -650,7 +682,7 @@ export default function ArtworkUpload() {
                 getLocationLabel={getLocationLabel}
               />
 
-              {/* Text-Only Design Option */}
+              {/* Don't have artwork? - AI Generator + Text Options */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -664,11 +696,41 @@ export default function ArtworkUpload() {
                   Don't have artwork?
                 </h3>
                 <p className="text-charcoal-500 text-sm mb-4 font-medium leading-relaxed">
-                  If you just need text printed on your shirts, tell us what you want below. Our team will create a simple text-based design and follow up with you.
+                  Create a design with AI or describe what you need and our team will help.
                 </p>
+
+                {/* AI Design Generator Button */}
+                <button
+                  onClick={() => setShowAIGenerator(true)}
+                  className="w-full mb-4 p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group"
+                >
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="w-10 h-10 rounded-bento bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <span className="block text-lg font-black">Generate with AI</span>
+                      <span className="block text-sm text-white/80 font-medium">Create screen print-ready graphics instantly</span>
+                    </div>
+                    <svg className="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-surface-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-3 bg-gradient-to-br from-surface-50 to-surface-100 text-charcoal-500 font-semibold">or describe your design</span>
+                  </div>
+                </div>
                 
                 {/* Text Input */}
-                <div className="mb-4">
+                <div className="mt-4 mb-4">
                   <label className="block text-sm font-bold text-charcoal-600 mb-2">
                     Describe your text design
                   </label>
@@ -1011,6 +1073,14 @@ export default function ArtworkUpload() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* AI Design Generator Modal */}
+      <AIDesignGenerator
+        isOpen={showAIGenerator}
+        onClose={() => setShowAIGenerator(false)}
+        onDesignGenerated={handleAIDesignGenerated}
+        availableLocations={enabledLocations}
+      />
     </div>
   )
 }

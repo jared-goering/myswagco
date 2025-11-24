@@ -175,7 +175,7 @@ export default function FileUploadCard({
               {colors} color{colors > 1 ? 's' : ''}
             </p>
           </div>
-          {file && <QualityIndicator file={file} />}
+          {file && <QualityIndicator file={file} artworkFileRecord={artworkFileRecord} />}
         </div>
 
         <AnimatePresence mode="wait">

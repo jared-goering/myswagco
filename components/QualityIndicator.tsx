@@ -3,19 +3,38 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import TooltipHelp from './TooltipHelp'
+import { ArtworkFile } from '@/types'
 
 interface QualityIndicatorProps {
   file: File
+  artworkFileRecord?: ArtworkFile | null
   className?: string
 }
 
-type QualityLevel = 'excellent' | 'good' | 'poor'
+type QualityLevel = 'excellent' | 'good' | 'poor' | 'vectorized'
 
-export default function QualityIndicator({ file, className = '' }: QualityIndicatorProps) {
+export default function QualityIndicator({ file, artworkFileRecord, className = '' }: QualityIndicatorProps) {
   const [quality, setQuality] = React.useState<QualityLevel | null>(null)
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number } | null>(null)
 
+  // Check if file has been vectorized - this takes priority
+  const isVectorized = artworkFileRecord?.vectorization_status === 'completed' || artworkFileRecord?.is_vector
+
   React.useEffect(() => {
+    // If vectorized, always show excellent quality (vectors are resolution-independent)
+    if (isVectorized) {
+      setQuality('vectorized')
+      // Still get dimensions for display purposes
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        setDimensions({ width: img.width, height: img.height })
+        URL.revokeObjectURL(url)
+      }
+      img.src = url
+      return
+    }
+
     // Determine quality based on file type and size
     const fileExtension = file.name.split('.').pop()?.toLowerCase()
     const isVector = ['svg', 'ai', 'eps'].includes(fileExtension || '')
@@ -54,11 +73,26 @@ export default function QualityIndicator({ file, className = '' }: QualityIndica
     }
     
     img.src = url
-  }, [file])
+  }, [file, isVectorized])
 
   if (!quality) return null
 
   const config = {
+    vectorized: {
+      color: 'success',
+      label: 'Vectorized',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      ),
+      bgColor: 'bg-emerald-100',
+      textColor: 'text-emerald-800',
+      borderColor: 'border-emerald-300',
+      tooltip: dimensions 
+        ? `Vectorized! Original was ${dimensions.width}×${dimensions.height}px but has been converted to vector format. Vector graphics are resolution-independent and will print perfectly crisp at any size.`
+        : 'This file has been vectorized and will print perfectly at any size!'
+    },
     excellent: {
       color: 'success',
       label: 'Excellent Quality',
@@ -101,8 +135,8 @@ export default function QualityIndicator({ file, className = '' }: QualityIndica
       textColor: 'text-amber-800',
       borderColor: 'border-amber-300',
       tooltip: dimensions
-        ? `Your image is ${dimensions.width}×${dimensions.height}px. This is low resolution for screen printing and may appear pixelated, especially for larger designs. For best results: upload a higher resolution image (1200px+ on smallest side) or use a vector file (SVG, AI, EPS).`
-        : 'Low resolution may result in pixelated prints. Consider uploading a higher quality image.'
+        ? `Your image is ${dimensions.width}×${dimensions.height}px. This is low resolution for screen printing and may appear pixelated. Vectorize this file to convert it to a scalable format that prints perfectly at any size.`
+        : 'Low resolution may result in pixelated prints. Vectorize this file for best results.'
     }
   }
 

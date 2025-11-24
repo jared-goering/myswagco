@@ -120,6 +120,10 @@ export default function DesignEditor({
   const transformerRef = useRef<Konva.Transformer>(null)
   const stageRef = useRef<Konva.Stage>(null)
   
+  // Refs for tracking image loading state
+  const isInitialLoadRef = useRef(true)
+  const lastImageDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+  
   // History for undo/redo
   const [history, setHistory] = useState<HistoryState[]>([])
   const [historyStep, setHistoryStep] = useState(-1)
@@ -221,18 +225,31 @@ export default function DesignEditor({
     if (!artworkFile) {
       setImage(null)
       setOriginalImageUrl(null)
+      lastImageDimensionsRef.current = null
+      isInitialLoadRef.current = true
       return
     }
+
+    // Mark as initial load
+    isInitialLoadRef.current = true
 
     // Create a stable blob URL for the original file
     const blobUrl = URL.createObjectURL(artworkFile)
     setOriginalImageUrl(blobUrl)
 
+    // Determine which image to load (might be vectorized)
+    const urlToLoad = artworkFileRecord?.vectorization_status === 'completed' && artworkFileRecord?.vectorized_file_url
+      ? artworkFileRecord.vectorized_file_url
+      : blobUrl
+
     const img = new window.Image()
     img.onload = () => {
+      // Store dimensions for this image
+      lastImageDimensionsRef.current = { width: img.width, height: img.height }
+      
       setImage(img)
       
-      // Set default transform if not already set
+      // Set default transform if not already set (first time upload)
       if (!transform) {
         const scale = Math.min(
           printArea.width / img.width,
@@ -252,12 +269,18 @@ export default function DesignEditor({
         onTransformChange(newTransform)
         saveToHistory(newTransform)
       }
+      
+      // Mark initial load as complete after image is loaded
+      // Use requestAnimationFrame to ensure render cycle completes
+      requestAnimationFrame(() => {
+        isInitialLoadRef.current = false
+      })
     }
-    img.src = blobUrl
+    img.src = urlToLoad
     
     // Cleanup blob URL on unmount
     return () => URL.revokeObjectURL(blobUrl)
-  }, [artworkFile, printLocation])
+  }, [artworkFile, printLocation, artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url])
 
   // Update transformer when image is selected
   useEffect(() => {
@@ -412,32 +435,47 @@ export default function DesignEditor({
   }, [artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url])
 
   // Reload image when toggling between original and vectorized
+  // This effect ONLY handles switching between original/vectorized, NOT initial load
   useEffect(() => {
     const imageUrl = displayImageUrl
     if (!imageUrl) return
 
+    // Skip if this is handled by the artworkFile effect (initial load)
+    if (isInitialLoadRef.current) {
+      return
+    }
+
+    // Only run if we already have an image (i.e., toggling views)
+    if (!image) return
+
     const img = new window.Image()
     img.onload = () => {
-      // Only adjust scale if the image dimensions actually changed
-      const oldImage = image
-      const dimensionsChanged = oldImage && (oldImage.width !== img.width || oldImage.height !== img.height)
+      const prevDims = lastImageDimensionsRef.current
       
-      setImage(img)
-      
-      // If dimensions changed and we have a transform, adjust scale to maintain visual size
-      if (dimensionsChanged && transform && oldImage) {
-        const scaleRatio = oldImage.width / img.width
-        const newScale = transform.scale * scaleRatio
+      // Check if dimensions actually changed
+      if (prevDims && (prevDims.width !== img.width || prevDims.height !== img.height)) {
+        // Calculate the visual size we want to maintain (in pixels)
+        const currentVisualWidth = prevDims.width * (transform?.scale || 1)
+        const currentVisualHeight = prevDims.height * (transform?.scale || 1)
         
-        // Update transform with new scale to maintain visual size
-        onTransformChange({
-          ...transform,
-          scale: newScale
-        })
+        // Calculate new scale to maintain the same visual size
+        const newScale = currentVisualWidth / img.width
+        
+        // Sanity check - scale should be reasonable
+        if (newScale > 0 && newScale < 100 && transform) {
+          onTransformChange({
+            ...transform,
+            scale: newScale,
+          })
+        }
       }
+      
+      // Update dimensions ref and image
+      lastImageDimensionsRef.current = { width: img.width, height: img.height }
+      setImage(img)
     }
     img.src = imageUrl
-  }, [displayImageUrl])
+  }, [displayImageUrl, image, transform, onTransformChange])
 
   if (!image || !transform) {
     return (
