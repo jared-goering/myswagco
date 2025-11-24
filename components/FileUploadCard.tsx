@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PrintLocation, ArtworkFile } from '@/types'
 import QualityIndicator from './QualityIndicator'
+import TooltipHelp from './TooltipHelp'
 
 interface FileUploadCardProps {
   location: PrintLocation
@@ -108,48 +109,69 @@ export default function FileUploadCard({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="group"
+        className="group mb-8"
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h3 className="text-xl font-black text-charcoal-700 tracking-tight">{label}</h3>
               {artworkFileRecord && (
-                <span className={`
-                  inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
-                  ${artworkFileRecord.is_vector
-                    ? 'bg-success-100 text-success-700 border border-success-300'
-                    : artworkFileRecord.vectorization_status === 'completed'
-                    ? 'bg-success-100 text-success-700 border border-success-300'
-                    : 'bg-warning-100 text-warning-700 border border-warning-300'
+                <TooltipHelp
+                  content={
+                    artworkFileRecord.is_vector
+                      ? "Perfect! Vector files are print-ready and produce crisp, scalable prints."
+                      : artworkFileRecord.vectorization_status === 'completed'
+                      ? "Great! This file has been vectorized and is ready for screen printing."
+                      : "PNG/JPG files need vectorization for crisp prints. Use the 'Vectorize for Print' button in the preview."
                   }
-                `}>
-                  {artworkFileRecord.is_vector ? (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Vector
-                    </>
-                  ) : artworkFileRecord.vectorization_status === 'completed' ? (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Vectorized
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      Raster
-                    </>
-                  )}
-                </span>
+                  side="top"
+                >
+                  <span className={`
+                    inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-help
+                    ${artworkFileRecord.is_vector
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                      : artworkFileRecord.vectorization_status === 'completed'
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                      : artworkFileRecord.vectorization_status === 'processing'
+                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                      : 'bg-amber-100 text-amber-700 border border-amber-300'
+                    }
+                  `}>
+                    {artworkFileRecord.is_vector ? (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        Vector
+                      </>
+                    ) : artworkFileRecord.vectorization_status === 'completed' ? (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        Vectorized
+                      </>
+                    ) : artworkFileRecord.vectorization_status === 'processing' ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        Raster
+                      </>
+                    )}
+                  </span>
+                </TooltipHelp>
               )}
             </div>
-            <p className="text-sm text-charcoal-500 font-bold mt-1">
+            <p className="text-sm text-charcoal-500 font-semibold mt-1">
               {colors} color{colors > 1 ? 's' : ''}
             </p>
           </div>
@@ -164,12 +186,12 @@ export default function FileUploadCard({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="relative rounded-bento-lg border-2 border-data-green/40 bg-data-green/10 p-6 shadow-bento hover:shadow-soft-lg transition-all duration-200"
+              className="relative rounded-bento-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-soft hover:shadow-bento transition-all duration-200"
             >
               <div className="flex gap-4">
                 {/* Preview Thumbnail */}
                 <div 
-                  className="flex-shrink-0 w-24 h-24 rounded-bento bg-white border-2 border-data-green/40 overflow-hidden cursor-pointer hover:border-data-green transition-colors"
+                  className="flex-shrink-0 w-24 h-24 rounded-bento bg-white border-2 border-emerald-300 overflow-hidden cursor-pointer hover:border-emerald-500 hover:scale-105 transition-all"
                   onClick={() => preview && setShowFullPreview(true)}
                 >
                   {preview ? (
@@ -188,43 +210,48 @@ export default function FileUploadCard({
                 </div>
 
                 {/* File Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-black text-charcoal-700 truncate" title={file.name}>
-                        {file.name}
-                      </p>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-charcoal-500">
-                        <span className="font-bold px-2 py-1 bg-white rounded-full">{fileExtension}</span>
-                        <span className="font-bold">{fileSize} MB</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-charcoal-700 truncate" title={file.name}>
+                          {file.name}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-charcoal-500">
+                          <span className="font-semibold px-2 py-1 bg-white rounded-full border border-emerald-200">{fileExtension}</span>
+                          <span className="font-semibold">{fileSize} MB</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <svg className="w-7 h-7 text-data-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <motion.div 
+                      className="flex-shrink-0"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.2, type: "spring" }}
+                    >
+                      <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                    </div>
+                    </motion.div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex gap-2 mt-4">
                     <button
                       onClick={handleReplaceClick}
-                      className="text-xs font-black text-primary-700 hover:text-primary-800 px-4 py-2 rounded-xl hover:bg-white transition-colors"
+                      className="text-xs font-bold text-primary-700 hover:text-primary-800 px-4 py-2 rounded-xl hover:bg-white transition-all hover:shadow-sm"
                     >
                       Replace
                     </button>
                     {preview && (
                       <button
                         onClick={() => setShowFullPreview(true)}
-                        className="text-xs font-black text-charcoal-700 hover:text-charcoal-800 px-4 py-2 rounded-xl hover:bg-white transition-colors"
+                        className="text-xs font-bold text-charcoal-700 hover:text-charcoal-800 px-4 py-2 rounded-xl hover:bg-white transition-all hover:shadow-sm"
                       >
                         View Full
                       </button>
                     )}
                     <button
                       onClick={handleRemoveClick}
-                      className="text-xs font-black text-error-700 hover:text-error-800 px-4 py-2 rounded-xl hover:bg-error-100 transition-colors"
+                      className="text-xs font-bold text-red-700 hover:text-red-800 px-4 py-2 rounded-xl hover:bg-red-100 transition-all hover:shadow-sm"
                     >
                       Remove
                     </button>

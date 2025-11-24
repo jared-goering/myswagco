@@ -13,6 +13,8 @@ import DesignEditor from '@/components/DesignEditor'
 import FileUploadCard from '@/components/FileUploadCard'
 import ArtworkGallery from '@/components/ArtworkGallery'
 import Toast from '@/components/Toast'
+import ArtworkProgressChecklist from '@/components/ArtworkProgressChecklist'
+import ValidationSummaryCard, { ValidationIssue } from '@/components/ValidationSummaryCard'
 
 export default function ArtworkUpload() {
   const router = useRouter()
@@ -35,6 +37,8 @@ export default function ArtworkUpload() {
   const [orderId, setOrderId] = useState<string | null>(null)
   const [maxInkColors, setMaxInkColors] = useState<number>(4)
   const [detectedColors, setDetectedColors] = useState<{ [location: string]: number }>({})
+  const [showDesignPreview, setShowDesignPreview] = useState(false)
+  const [previewLocation, setPreviewLocation] = useState<PrintLocation | null>(null)
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
@@ -161,6 +165,15 @@ export default function ArtworkUpload() {
         throw new Error('File not found')
       }
       
+      // Set processing state immediately for UI feedback
+      setVectorizedFile(location, '', 'processing')
+      
+      setToast({
+        message: `Vectorizing ${getLocationLabel(location)}... This may take 5-15 seconds.`,
+        type: 'info',
+        show: true,
+      })
+      
       // Use temporary vectorization endpoint (doesn't require order)
       const formData = new FormData()
       formData.append('file', file)
@@ -204,6 +217,8 @@ export default function ArtworkUpload() {
         }
       } else {
         const error = await response.json()
+        // Reset to pending state on error
+        setVectorizedFile(location, '', 'pending')
         throw new Error(error.error || 'Vectorization failed')
       }
     } catch (error) {
@@ -258,8 +273,21 @@ export default function ArtworkUpload() {
       warnings.push(`Design exceeds maximum print area of ${maxDims.width}" × ${maxDims.height}". Please resize.`)
     }
 
-    if (transform.scale < 0.3) {
-      warnings.push('Design appears very small. Consider using a larger design for better print quality.')
+    // Check actual dimensions instead of scale factor
+    // Define minimum sizes for good print quality
+    const minSizes: Record<PrintLocation, number> = {
+      front: 5, // at least 5" on smallest dimension
+      back: 5,
+      left_chest: 2, // smaller designs are OK for chest
+      right_chest: 2,
+      full_back: 6,
+    }
+    
+    const minSize = minSizes[location]
+    const smallestDimension = Math.min(widthInches, heightInches)
+    
+    if (smallestDimension < minSize && smallestDimension > 0) {
+      warnings.push(`Design is ${widthInches.toFixed(1)}" × ${heightInches.toFixed(1)}". Consider sizing up to at least ${minSize}" on the smallest side for better print quality.`)
     }
 
     const normalizedRotation = Math.abs(transform.rotation % 360)
@@ -285,6 +313,102 @@ export default function ArtworkUpload() {
     return labels[location]
   }
 
+  // Aggregate validation issues
+  function getValidationIssues(): ValidationIssue[] {
+    const issues: ValidationIssue[] = []
+    
+    enabledLocations.forEach((location) => {
+      const file = artworkFiles[location]
+      const record = artworkFileRecords[location]
+      
+      // Missing file
+      if (!file) {
+        issues.push({
+          id: `missing-${location}`,
+          type: 'missing',
+          severity: 'blocker',
+          location,
+          message: 'No artwork uploaded yet',
+          action: {
+            label: 'Upload Now',
+            onClick: () => setActiveTab(location)
+          }
+        })
+        return
+      }
+      
+      // Needs vectorization
+      if (record && !record.is_vector && record.vectorization_status !== 'completed') {
+        const isProcessing = record.vectorization_status === 'processing'
+        issues.push({
+          id: `vectorization-${location}`,
+          type: 'vectorization',
+          severity: 'blocker',
+          location,
+          message: isProcessing 
+            ? 'Vectorizing artwork... This may take 5-15 seconds.'
+            : 'Raster file needs vectorization for screen printing',
+          isProcessing,
+          action: {
+            label: isProcessing ? 'Processing' : 'Vectorize Now',
+            onClick: () => {
+              if (!isProcessing) {
+                setActiveTab(location)
+                // Automatically trigger vectorization if possible
+                if (record?.id) {
+                  handleVectorize(record.id)
+                }
+              }
+            }
+          }
+        })
+      }
+      
+      // Color count issues
+      const colors = detectedColors[location] || 0
+      if (colors > maxInkColors) {
+        issues.push({
+          id: `colors-${location}`,
+          type: 'colors',
+          severity: 'warning',
+          location,
+          message: `Design has ${colors} colors (max ${maxInkColors} recommended). May increase costs.`,
+          action: {
+            label: 'Review Design',
+            onClick: () => {
+              setPreviewLocation(location)
+              setShowDesignPreview(true)
+              setActiveTab(location)
+            }
+          }
+        })
+      }
+      
+      // Quality warnings
+      const warnings = getValidationWarnings(location)
+      warnings.forEach((warning, idx) => {
+        issues.push({
+          id: `warning-${location}-${idx}`,
+          type: 'quality',
+          severity: 'warning',
+          location,
+          message: warning,
+          action: {
+            label: 'Adjust Design',
+            onClick: () => {
+              setActiveTab(location)
+              // Open preview modal for better inspection
+              setPreviewLocation(location)
+              setShowDesignPreview(true)
+            }
+          }
+        })
+      })
+    })
+    
+    return issues
+  }
+
   function canContinue(): boolean {
     // Can continue if they have text description OR all artwork is uploaded AND vectorized
     const hasTextDescription = textDescription.trim().length > 0
@@ -294,6 +418,22 @@ export default function ArtworkUpload() {
     const needsVectorization = hasUnvectorizedRasterFiles()
     
     return hasTextDescription || (hasAllArtwork && !needsVectorization)
+  }
+  
+  function getContinueButtonMessage(): string {
+    if (!enabledLocations.some(location => artworkFiles[location])) {
+      return 'Upload artwork to continue'
+    }
+    
+    if (hasUnvectorizedRasterFiles()) {
+      const count = enabledLocations.filter(loc => {
+        const record = artworkFileRecords[loc]
+        return record && !record.is_vector && record.vectorization_status !== 'completed'
+      }).length
+      return `Vectorize ${count} raster file${count > 1 ? 's' : ''} to continue`
+    }
+    
+    return 'Continue to Checkout →'
   }
 
   function handleContinue() {
@@ -370,6 +510,38 @@ export default function ArtworkUpload() {
             Upload high-resolution files for each print location and position your design
           </p>
           
+          {/* Progress Indicator for mobile/small screens */}
+          {uploadedCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6 inline-flex items-center gap-3 px-6 py-3 bg-white rounded-full shadow-soft border border-surface-200"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-32 h-2 bg-surface-200 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-primary-500 to-primary-600"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
+                <span className="text-sm font-bold text-charcoal-700">
+                  {uploadedCount}/{totalCount}
+                </span>
+              </div>
+              {progress === 100 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="text-emerald-600"
+                >
+                  ✓
+                </motion.span>
+              )}
+            </motion.div>
+          )}
+          
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
             <button
@@ -443,10 +615,10 @@ export default function ArtworkUpload() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="space-y-4"
+            className="space-y-6"
           >
             <div className="bento-card">
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {enabledLocations.map((location, index) => {
                   const colors = printConfig.locations[location]?.num_colors || 1
                   const file = artworkFiles[location]
@@ -472,6 +644,12 @@ export default function ArtworkUpload() {
                 })}
               </div>
 
+              {/* Validation Summary */}
+              <ValidationSummaryCard 
+                issues={getValidationIssues()}
+                getLocationLabel={getLocationLabel}
+              />
+
               {/* Text-Only Design Option */}
               <motion.div
                 initial={{ opacity: 0 }}
@@ -479,19 +657,19 @@ export default function ArtworkUpload() {
                 transition={{ delay: 0.4 }}
                 className="mt-6 p-6 bg-gradient-to-br from-surface-50 to-surface-100 rounded-bento-lg border-2 border-surface-300"
               >
-                <h3 className="font-black text-charcoal-700 mb-2 flex items-center gap-2 text-lg">
+                <h3 className="font-bold text-charcoal-700 mb-2 flex items-center gap-2 text-base">
                   <svg className="w-5 h-5 text-charcoal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   Don't have artwork?
                 </h3>
-                <p className="text-charcoal-500 text-sm mb-4 font-semibold">
+                <p className="text-charcoal-500 text-sm mb-4 font-medium leading-relaxed">
                   If you just need text printed on your shirts, tell us what you want below. Our team will create a simple text-based design and follow up with you.
                 </p>
                 
                 {/* Text Input */}
                 <div className="mb-4">
-                  <label className="block text-sm font-black text-charcoal-600 mb-2 uppercase tracking-wide">
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
                     Describe your text design
                   </label>
                   <textarea
@@ -499,7 +677,7 @@ export default function ArtworkUpload() {
                     onChange={(e) => setTextDescription(e.target.value)}
                     placeholder="Example: 'IOWA STATE CHAMPIONSHIP 2024' in bold letters on the front, and 'GO HAWKS!' on the back"
                     rows={4}
-                    className="w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none resize-none text-sm font-bold text-charcoal-700"
+                    className="w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none resize-none text-sm font-medium text-charcoal-700 placeholder:text-charcoal-400"
                   />
                   {textDescription && (
                     <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
@@ -513,8 +691,8 @@ export default function ArtworkUpload() {
 
                 {/* Optional File Upload */}
                 <div className="pt-3 border-t border-surface-300">
-                  <p className="text-xs text-charcoal-500 mb-2 font-bold">Optional: Upload reference images or documents</p>
-                  <label className="inline-flex items-center gap-2 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2.5 rounded-bento cursor-pointer text-sm font-black transition-all">
+                  <p className="text-xs text-charcoal-500 mb-2 font-semibold">Optional: Upload reference images or documents</p>
+                  <label className="inline-flex items-center gap-2 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2.5 rounded-bento cursor-pointer text-sm font-bold transition-all hover:shadow-sm">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
@@ -545,15 +723,35 @@ export default function ArtworkUpload() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="lg:sticky lg:top-24 lg:self-start"
+            className="lg:sticky lg:top-24 lg:self-start space-y-6"
           >
+            {/* Progress Checklist */}
+            <ArtworkProgressChecklist
+              enabledLocations={enabledLocations}
+              artworkFiles={artworkFiles}
+              artworkFileRecords={artworkFileRecords}
+              detectedColors={detectedColors}
+              maxInkColors={maxInkColors}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              getLocationLabel={getLocationLabel}
+            />
+            
             <div className="bento-card">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-black text-charcoal-700 tracking-tight">Design Preview</h2>
-                {uploadedCount > 0 && (
-                  <span className="badge-success">
-                    {uploadedCount}/{totalCount} Complete
-                  </span>
+                {uploadedCount > 0 && progress === 100 && (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", delay: 0.2 }}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold border border-emerald-300"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    All Uploaded
+                  </motion.span>
                 )}
               </div>
 
@@ -568,8 +766,8 @@ export default function ArtworkUpload() {
                         className={`
                           flex items-center gap-2 px-5 py-3 rounded-bento font-bold text-sm transition-all
                           ${activeTab === location
-                            ? 'bg-primary-500 text-white shadow-bento'
-                            : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200'
+                            ? 'bg-primary-500 text-white shadow-bento scale-105'
+                            : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200 hover:scale-102'
                           }
                         `}
                       >
@@ -666,15 +864,21 @@ export default function ArtworkUpload() {
               disabled={!canContinue()}
               whileHover={canContinue() ? { scale: 1.02 } : {}}
               whileTap={canContinue() ? { scale: 0.98 } : {}}
-              className="w-full sm:w-auto btn-primary"
+              className={`
+                w-full sm:w-auto px-8 py-4 rounded-bento font-black text-base transition-all
+                ${canContinue()
+                  ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-soft hover:shadow-bento'
+                  : 'bg-surface-300 text-charcoal-400 cursor-not-allowed'
+                }
+              `}
             >
-              Continue to Checkout →
+              {canContinue() ? 'Continue to Checkout →' : getContinueButtonMessage()}
             </motion.button>
             {hasAnyWarnings() && canContinue() && (
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-xs text-data-yellow font-bold flex items-center gap-1"
+                className="text-xs text-amber-600 font-bold flex items-center gap-1"
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -686,7 +890,7 @@ export default function ArtworkUpload() {
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-xs text-charcoal-500 font-semibold"
+                className="text-xs text-charcoal-500 font-semibold text-right"
               >
                 {hasUnvectorizedRasterFiles() 
                   ? 'Please vectorize all raster artwork before continuing'
@@ -700,6 +904,113 @@ export default function ArtworkUpload() {
 
       {/* Gallery Modal */}
       <ArtworkGallery isOpen={showGallery} onClose={() => setShowGallery(false)} />
+      
+      {/* Design Preview Modal */}
+      <AnimatePresence>
+        {showDesignPreview && previewLocation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            onClick={() => setShowDesignPreview(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="relative max-w-6xl w-full bg-white rounded-bento-lg shadow-bento overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-surface-200 bg-surface-50">
+                <div>
+                  <h2 className="text-2xl font-black text-charcoal-700">
+                    {getLocationLabel(previewLocation)} Design Preview
+                  </h2>
+                  <p className="text-sm text-charcoal-500 font-semibold mt-1">
+                    {artworkFileRecords[previewLocation]?.vectorization_status === 'completed' 
+                      ? 'Vectorized version (production-ready)'
+                      : 'Original uploaded file'
+                    }
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowDesignPreview(false)}
+                  className="p-2.5 bg-charcoal-700/90 hover:bg-charcoal-700 text-white rounded-bento transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Image Preview */}
+              <div className="p-8 bg-surface-50 max-h-[70vh] overflow-auto">
+                <div className="flex items-center justify-center">
+                  {artworkFileRecords[previewLocation]?.vectorization_status === 'completed' && 
+                   artworkFileRecords[previewLocation]?.vectorized_file_url ? (
+                    <img
+                      src={artworkFileRecords[previewLocation]?.vectorized_file_url || ''}
+                      alt={`${getLocationLabel(previewLocation)} vectorized design`}
+                      className="max-w-full max-h-[60vh] object-contain rounded-bento shadow-soft"
+                    />
+                  ) : artworkFiles[previewLocation] ? (
+                    <img
+                      src={URL.createObjectURL(artworkFiles[previewLocation]!)}
+                      alt={`${getLocationLabel(previewLocation)} original design`}
+                      className="max-w-full max-h-[60vh] object-contain rounded-bento shadow-soft"
+                    />
+                  ) : (
+                    <div className="text-charcoal-400 text-center py-12">
+                      <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="font-semibold">No artwork available</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Info Footer */}
+              <div className="p-6 border-t border-surface-200 bg-white">
+                <div className="flex flex-wrap items-center gap-4">
+                  {detectedColors[previewLocation] && detectedColors[previewLocation] > 0 && (
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-charcoal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                      </svg>
+                      <span className="text-sm font-semibold text-charcoal-700">
+                        {detectedColors[previewLocation]} colors detected
+                      </span>
+                      {detectedColors[previewLocation] > maxInkColors && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-amber-100 text-amber-700 rounded-full">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          Exceeds {maxInkColors} color max
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {artworkFileRecords[previewLocation] && (
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-charcoal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-charcoal-700">
+                        {artworkFileRecords[previewLocation]?.file_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
+import TooltipHelp from './TooltipHelp'
 
 interface QualityIndicatorProps {
   file: File
@@ -33,10 +34,11 @@ export default function QualityIndicator({ file, className = '' }: QualityIndica
       const height = img.height
       setDimensions({ width, height })
       
-      // Assume target print size is around 12"x14" at 300 DPI
-      // That's 3600x4200 pixels
-      const minGoodDimension = 2400 // 8" at 300 DPI
-      const minExcellentDimension = 3600 // 12" at 300 DPI
+      // Adjusted thresholds for screen printing (150-200 DPI is typical)
+      // Good threshold: suitable for designs up to 6" at 200 DPI, or 8" at 150 DPI
+      const minGoodDimension = 1200
+      // Excellent threshold: suitable for designs up to 10" at 200 DPI, or 13" at 150 DPI
+      const minExcellentDimension = 2000
       
       const smallerDimension = Math.min(width, height)
       
@@ -59,47 +61,67 @@ export default function QualityIndicator({ file, className = '' }: QualityIndica
   const config = {
     excellent: {
       color: 'success',
-      label: 'Excellent',
-      icon: '✓',
-      bgColor: 'bg-success-100',
-      textColor: 'text-success-800',
-      borderColor: 'border-success-300',
-      description: 'Perfect quality for printing'
+      label: 'Excellent Quality',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      ),
+      bgColor: 'bg-emerald-100',
+      textColor: 'text-emerald-800',
+      borderColor: 'border-emerald-300',
+      tooltip: dimensions 
+        ? `Perfect! Your image is ${dimensions.width}×${dimensions.height}px, which is excellent for screen printing. Suitable for large designs (10"+ at 200 DPI). Will produce crisp, detailed prints.`
+        : 'Vector files produce perfect quality at any size. Ideal for screen printing!'
     },
     good: {
       color: 'primary',
-      label: 'Good',
-      icon: '✓',
-      bgColor: 'bg-primary-100',
-      textColor: 'text-primary-800',
-      borderColor: 'border-primary-300',
-      description: 'Good quality, suitable for printing'
+      label: 'Good Quality',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      ),
+      bgColor: 'bg-blue-100',
+      textColor: 'text-blue-800',
+      borderColor: 'border-blue-300',
+      tooltip: dimensions
+        ? `Good! Your image is ${dimensions.width}×${dimensions.height}px, which works well for screen printing. Suitable for designs up to 6-8" at good quality. Perfect for most t-shirt prints.`
+        : 'Good quality for printing.'
     },
     poor: {
       color: 'warning',
       label: 'Low Quality',
-      icon: '!',
-      bgColor: 'bg-warning-100',
-      textColor: 'text-warning-800',
-      borderColor: 'border-warning-300',
-      description: 'May appear pixelated when printed'
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+      ),
+      bgColor: 'bg-amber-100',
+      textColor: 'text-amber-800',
+      borderColor: 'border-amber-300',
+      tooltip: dimensions
+        ? `Your image is ${dimensions.width}×${dimensions.height}px. This is low resolution for screen printing and may appear pixelated, especially for larger designs. For best results: upload a higher resolution image (1200px+ on smallest side) or use a vector file (SVG, AI, EPS).`
+        : 'Low resolution may result in pixelated prints. Consider uploading a higher quality image.'
     }
   }
 
   const current = config[quality]
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${current.bgColor} ${current.textColor} border ${current.borderColor} ${className}`}
-    >
-      <span className="font-bold">{current.icon}</span>
-      <span>{current.label}</span>
-      {dimensions && (
-        <span className="opacity-75">• {dimensions.width}×{dimensions.height}px</span>
-      )}
-    </motion.div>
+    <TooltipHelp content={current.tooltip} side="left">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border-2 cursor-help transition-all hover:scale-105 ${current.bgColor} ${current.textColor} ${current.borderColor} ${className}`}
+      >
+        {current.icon}
+        <span>{current.label}</span>
+        {dimensions && (
+          <span className="opacity-70 font-semibold">• {dimensions.width}×{dimensions.height}</span>
+        )}
+      </motion.div>
+    </TooltipHelp>
   )
 }
 
