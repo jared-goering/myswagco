@@ -221,8 +221,13 @@ export default function DesignEditor({
   }, [image, transform, isSelected, onTransformChange, handleUndo, handleRedo])
 
   // Load image when file changes and create stable URL
+  // Also handle persisted records (after page reload)
   useEffect(() => {
-    if (!artworkFile) {
+    // Check if we have either a File or a persisted record with URL
+    const hasPersistedRecord = !artworkFile && artworkFileRecord && 
+      (artworkFileRecord.file_url || artworkFileRecord.vectorized_file_url)
+    
+    if (!artworkFile && !hasPersistedRecord) {
       setImage(null)
       setOriginalImageUrl(null)
       lastImageDimensionsRef.current = null
@@ -233,16 +238,27 @@ export default function DesignEditor({
     // Mark as initial load
     isInitialLoadRef.current = true
 
-    // Create a stable blob URL for the original file
-    const blobUrl = URL.createObjectURL(artworkFile)
-    setOriginalImageUrl(blobUrl)
-
-    // Determine which image to load (might be vectorized)
-    const urlToLoad = artworkFileRecord?.vectorization_status === 'completed' && artworkFileRecord?.vectorized_file_url
-      ? artworkFileRecord.vectorized_file_url
-      : blobUrl
+    let blobUrl: string | null = null
+    let urlToLoad: string
+    
+    if (artworkFile) {
+      // Create a stable blob URL for the original file
+      blobUrl = URL.createObjectURL(artworkFile)
+      setOriginalImageUrl(blobUrl)
+      
+      // Determine which image to load (might be vectorized)
+      urlToLoad = artworkFileRecord?.vectorization_status === 'completed' && artworkFileRecord?.vectorized_file_url
+        ? artworkFileRecord.vectorized_file_url
+        : blobUrl
+    } else {
+      // Use persisted URLs (after page reload)
+      const persistedUrl = artworkFileRecord?.vectorized_file_url || artworkFileRecord?.file_url || ''
+      setOriginalImageUrl(artworkFileRecord?.file_url || persistedUrl)
+      urlToLoad = persistedUrl
+    }
 
     const img = new window.Image()
+    img.crossOrigin = 'anonymous' // Needed for data URLs and external URLs
     img.onload = () => {
       // Store dimensions for this image
       lastImageDimensionsRef.current = { width: img.width, height: img.height }
@@ -278,9 +294,13 @@ export default function DesignEditor({
     }
     img.src = urlToLoad
     
-    // Cleanup blob URL on unmount
-    return () => URL.revokeObjectURL(blobUrl)
-  }, [artworkFile, printLocation, artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url])
+    // Cleanup blob URL on unmount (only if we created one)
+    return () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl)
+      }
+    }
+  }, [artworkFile, printLocation, artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url, artworkFileRecord?.file_url])
 
   // Update transformer when image is selected
   useEffect(() => {

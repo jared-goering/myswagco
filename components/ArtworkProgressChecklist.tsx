@@ -40,7 +40,8 @@ export default function ArtworkProgressChecklist({
   const locationStatus = enabledLocations.map(location => {
     const file = artworkFiles[location]
     const record = artworkFileRecords[location]
-    const hasFile = !!file
+    // Consider artwork present if we have a File OR a persisted record with a URL
+    const hasFile = !!file || (!!record && (!!record.file_url || !!record.vectorized_file_url))
     const isVector = record?.is_vector || false
     const isVectorized = record?.vectorization_status === 'completed'
     const isProcessing = record?.vectorization_status === 'processing'

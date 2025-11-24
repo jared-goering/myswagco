@@ -6,7 +6,7 @@ import TooltipHelp from './TooltipHelp'
 import { ArtworkFile } from '@/types'
 
 interface QualityIndicatorProps {
-  file: File
+  file?: File | null
   artworkFileRecord?: ArtworkFile | null
   className?: string
 }
@@ -24,14 +24,77 @@ export default function QualityIndicator({ file, artworkFileRecord, className = 
     // If vectorized, always show excellent quality (vectors are resolution-independent)
     if (isVectorized) {
       setQuality('vectorized')
-      // Still get dimensions for display purposes
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        setDimensions({ width: img.width, height: img.height })
-        URL.revokeObjectURL(url)
+      
+      // Try to get dimensions from the image URL (either from file or persisted record)
+      const imageUrl = file 
+        ? URL.createObjectURL(file)
+        : artworkFileRecord?.vectorized_file_url || artworkFileRecord?.file_url
+      
+      if (imageUrl) {
+        const img = new Image()
+        const isObjectUrl = file && imageUrl.startsWith('blob:')
+        img.onload = () => {
+          setDimensions({ width: img.width, height: img.height })
+          if (isObjectUrl) {
+            URL.revokeObjectURL(imageUrl)
+          }
+        }
+        img.onerror = () => {
+          // If image fails to load (e.g., expired blob URL), just show quality without dimensions
+          if (isObjectUrl) {
+            URL.revokeObjectURL(imageUrl)
+          }
+        }
+        img.src = imageUrl
       }
-      img.src = url
+      return
+    }
+
+    // If no file and no URL available, we can't determine quality from file properties
+    // Use persisted record info if available
+    if (!file) {
+      if (artworkFileRecord) {
+        // Determine quality based on persisted file info
+        const fileName = artworkFileRecord.file_name || ''
+        const fileExtension = fileName.split('.').pop()?.toLowerCase()
+        const isVector = ['svg', 'ai', 'eps'].includes(fileExtension || '')
+        
+        if (isVector) {
+          setQuality('excellent')
+        } else {
+          // For persisted raster files without the original File object,
+          // try to load the image to get dimensions
+          const imageUrl = artworkFileRecord.file_url || artworkFileRecord.vectorized_file_url
+          if (imageUrl) {
+            const img = new Image()
+            img.onload = () => {
+              const width = img.width
+              const height = img.height
+              setDimensions({ width, height })
+              
+              const minGoodDimension = 1200
+              const minExcellentDimension = 2000
+              const smallerDimension = Math.min(width, height)
+              
+              if (smallerDimension >= minExcellentDimension) {
+                setQuality('excellent')
+              } else if (smallerDimension >= minGoodDimension) {
+                setQuality('good')
+              } else {
+                setQuality('poor')
+              }
+            }
+            img.onerror = () => {
+              // Fallback: can't determine quality without image dimensions
+              setQuality('good') // Assume good since they uploaded something
+            }
+            img.src = imageUrl
+          } else {
+            // No URL available, show a neutral state
+            setQuality('good')
+          }
+        }
+      }
       return
     }
 
@@ -73,7 +136,7 @@ export default function QualityIndicator({ file, artworkFileRecord, className = 
     }
     
     img.src = url
-  }, [file, isVectorized])
+  }, [file, isVectorized, artworkFileRecord])
 
   if (!quality) return null
 

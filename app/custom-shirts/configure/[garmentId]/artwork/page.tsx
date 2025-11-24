@@ -13,7 +13,6 @@ import DesignEditor from '@/components/DesignEditor'
 import FileUploadCard from '@/components/FileUploadCard'
 import ArtworkGallery from '@/components/ArtworkGallery'
 import Toast from '@/components/Toast'
-import ArtworkProgressChecklist from '@/components/ArtworkProgressChecklist'
 import ValidationSummaryCard, { ValidationIssue } from '@/components/ValidationSummaryCard'
 import AIDesignGenerator from '@/components/AIDesignGenerator'
 
@@ -22,12 +21,11 @@ export default function ArtworkUpload() {
   const params = useParams()
   const garmentId = params.garmentId as string
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
   const [hasShownCompletionToast, setHasShownCompletionToast] = useState(false)
-  const [textDescription, setTextDescription] = useState('')
   const [garment, setGarment] = useState<Garment | null>(null)
   const [activeColor, setActiveColor] = useState<string>(selectedColors[0] || '')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; show: boolean; confetti?: boolean }>({
@@ -41,6 +39,7 @@ export default function ArtworkUpload() {
   const [showDesignPreview, setShowDesignPreview] = useState(false)
   const [previewLocation, setPreviewLocation] = useState<PrintLocation | null>(null)
   const [showAIGenerator, setShowAIGenerator] = useState(false)
+  const [isAISectionExpanded, setIsAISectionExpanded] = useState(false)
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
@@ -90,9 +89,16 @@ export default function ArtworkUpload() {
     }
   }, [selectedColors])
 
+  // Helper to check if a location has artwork (File or persisted record)
+  const hasArtworkForLocation = (location: PrintLocation): boolean => {
+    const file = artworkFiles[location]
+    const record = artworkFileRecords[location]
+    return !!file || (!!record && (!!record.file_url || !!record.vectorized_file_url))
+  }
+
   // Check if all files uploaded (only show toast once)
   useEffect(() => {
-    const allUploaded = enabledLocations.every(location => artworkFiles[location])
+    const allUploaded = enabledLocations.every(location => hasArtworkForLocation(location))
     if (allUploaded && enabledLocations.length > 0 && !hasShownCompletionToast) {
       setHasShownCompletionToast(true)
       setToast({
@@ -106,7 +112,7 @@ export default function ArtworkUpload() {
     if (!allUploaded && hasShownCompletionToast) {
       setHasShownCompletionToast(false)
     }
-  }, [artworkFiles, enabledLocations, hasShownCompletionToast])
+  }, [artworkFiles, artworkFileRecords, enabledLocations, hasShownCompletionToast])
 
   async function handleFileSelect(location: PrintLocation, file: File | null) {
     setArtworkFile(location, file)
@@ -350,11 +356,11 @@ export default function ArtworkUpload() {
     const issues: ValidationIssue[] = []
     
     enabledLocations.forEach((location) => {
-      const file = artworkFiles[location]
       const record = artworkFileRecords[location]
+      const hasArtwork = hasArtworkForLocation(location)
       
       // Missing file
-      if (!file) {
+      if (!hasArtwork) {
         issues.push({
           id: `missing-${location}`,
           type: 'missing',
@@ -444,7 +450,7 @@ export default function ArtworkUpload() {
   function canContinue(): boolean {
     // Can continue if they have text description OR all artwork is uploaded AND vectorized
     const hasTextDescription = textDescription.trim().length > 0
-    const hasAllArtwork = enabledLocations.every(location => artworkFiles[location] !== null && artworkFiles[location] !== undefined)
+    const hasAllArtwork = enabledLocations.every(location => hasArtworkForLocation(location))
     
     // Check if any raster files need vectorization
     const needsVectorization = hasUnvectorizedRasterFiles()
@@ -453,7 +459,7 @@ export default function ArtworkUpload() {
   }
   
   function getContinueButtonMessage(): string {
-    if (!enabledLocations.some(location => artworkFiles[location])) {
+    if (!enabledLocations.some(location => hasArtworkForLocation(location))) {
       return 'Upload artwork to continue'
     }
     
@@ -475,7 +481,7 @@ export default function ArtworkUpload() {
   }
 
   // Progress calculation
-  const uploadedCount = enabledLocations.filter(loc => artworkFiles[loc]).length
+  const uploadedCount = enabledLocations.filter(loc => hasArtworkForLocation(loc)).length
   const totalCount = enabledLocations.length
   const progress = totalCount > 0 ? (uploadedCount / totalCount) * 100 : 0
 
@@ -541,38 +547,6 @@ export default function ArtworkUpload() {
           <p className="text-charcoal-500 text-lg max-w-2xl mx-auto font-semibold">
             Upload high-resolution files for each print location and position your design
           </p>
-          
-          {/* Progress Indicator for mobile/small screens */}
-          {uploadedCount > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-6 inline-flex items-center gap-3 px-6 py-3 bg-white rounded-full shadow-soft border border-surface-200"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-32 h-2 bg-surface-200 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-primary-500 to-primary-600"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
-                <span className="text-sm font-bold text-charcoal-700">
-                  {uploadedCount}/{totalCount}
-                </span>
-              </div>
-              {progress === 100 && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="text-emerald-600"
-                >
-                  ✓
-                </motion.span>
-              )}
-            </motion.div>
-          )}
           
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
@@ -682,100 +656,136 @@ export default function ArtworkUpload() {
                 getLocationLabel={getLocationLabel}
               />
 
-              {/* Don't have artwork? - AI Generator + Text Options */}
+              {/* Don't have artwork? - AI Generator + Text Options (Collapsible) */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className="mt-6 p-6 bg-gradient-to-br from-surface-50 to-surface-100 rounded-bento-lg border-2 border-surface-300"
+                className="mt-6 rounded-bento-lg border-2 border-surface-300 overflow-hidden"
               >
-                <h3 className="font-bold text-charcoal-700 mb-2 flex items-center gap-2 text-base">
-                  <svg className="w-5 h-5 text-charcoal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Don't have artwork?
-                </h3>
-                <p className="text-charcoal-500 text-sm mb-4 font-medium leading-relaxed">
-                  Create a design with AI or describe what you need and our team will help.
-                </p>
-
-                {/* AI Design Generator Button */}
+                {/* Collapsed Header / Toggle */}
                 <button
-                  onClick={() => setShowAIGenerator(true)}
-                  className="w-full mb-4 p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group"
+                  onClick={() => setIsAISectionExpanded(!isAISectionExpanded)}
+                  className={`w-full p-4 flex items-center justify-between transition-colors ${
+                    isAISectionExpanded 
+                      ? 'bg-gradient-to-br from-surface-50 to-surface-100' 
+                      : 'bg-white hover:bg-surface-50'
+                  }`}
                 >
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="w-10 h-10 rounded-bento bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-bento bg-gradient-to-r from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
                     </div>
                     <div className="text-left">
-                      <span className="block text-lg font-black">Generate with AI</span>
-                      <span className="block text-sm text-white/80 font-medium">Create screen print-ready graphics instantly</span>
+                      <span className="font-bold text-charcoal-700 text-sm">Need design help?</span>
+                      <span className="block text-xs text-charcoal-500 font-medium">Generate with AI or describe your design</span>
                     </div>
-                    <svg className="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
                   </div>
+                  <motion.svg 
+                    animate={{ rotate: isAISectionExpanded ? 180 : 0 }}
+                    className="w-5 h-5 text-charcoal-400" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </motion.svg>
                 </button>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-surface-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-3 bg-gradient-to-br from-surface-50 to-surface-100 text-charcoal-500 font-semibold">or describe your design</span>
-                  </div>
-                </div>
-                
-                {/* Text Input */}
-                <div className="mt-4 mb-4">
-                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
-                    Describe your text design
-                  </label>
-                  <textarea
-                    value={textDescription}
-                    onChange={(e) => setTextDescription(e.target.value)}
-                    placeholder="Example: 'IOWA STATE CHAMPIONSHIP 2024' in bold letters on the front, and 'GO HAWKS!' on the back"
-                    rows={4}
-                    className="w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none resize-none text-sm font-medium text-charcoal-700 placeholder:text-charcoal-400"
-                  />
-                  {textDescription && (
-                    <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                      <svg className="w-4 h-4 text-success-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      We'll include this with your order
-                    </p>
-                  )}
-                </div>
+                {/* Expanded Content */}
+                <AnimatePresence>
+                  {isAISectionExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-6 pt-2 bg-gradient-to-br from-surface-50 to-surface-100 border-t border-surface-200">
+                        {/* AI Design Generator Button */}
+                        <button
+                          onClick={() => setShowAIGenerator(true)}
+                          className="w-full mb-4 p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group"
+                        >
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="w-10 h-10 rounded-bento bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                            </div>
+                            <div className="text-left">
+                              <span className="block text-lg font-black">Generate with AI</span>
+                              <span className="block text-sm text-white/80 font-medium">Create screen print-ready graphics instantly</span>
+                            </div>
+                            <svg className="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </button>
 
-                {/* Optional File Upload */}
-                <div className="pt-3 border-t border-surface-300">
-                  <p className="text-xs text-charcoal-500 mb-2 font-semibold">Optional: Upload reference images or documents</p>
-                  <label className="inline-flex items-center gap-2 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2.5 rounded-bento cursor-pointer text-sm font-bold transition-all hover:shadow-sm">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload File
-                    <input
-                      type="file"
-                      accept=".txt,.doc,.docx,.pdf,.png,.jpg,.jpeg"
-                      onChange={(e) => {
-                        const selectedFile = e.target.files?.[0]
-                        if (selectedFile) {
-                          setToast({
-                            message: 'Reference file uploaded - we\'ll review it with your order',
-                            type: 'success',
-                            show: true,
-                          })
-                        }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-surface-300"></div>
+                          </div>
+                          <div className="relative flex justify-center text-sm">
+                            <span className="px-3 bg-gradient-to-br from-surface-50 to-surface-100 text-charcoal-500 font-semibold">or describe your design</span>
+                          </div>
+                        </div>
+                        
+                        {/* Text Input */}
+                        <div className="mt-4 mb-4">
+                          <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                            Describe your text design
+                          </label>
+                          <textarea
+                            value={textDescription}
+                            onChange={(e) => setTextDescription(e.target.value)}
+                            placeholder="Example: 'IOWA STATE CHAMPIONSHIP 2024' in bold letters on the front, and 'GO HAWKS!' on the back"
+                            rows={3}
+                            className="w-full px-4 py-3 border-2 border-surface-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none resize-none text-sm font-medium text-charcoal-700 placeholder:text-charcoal-400"
+                          />
+                          {textDescription && (
+                            <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                              <svg className="w-4 h-4 text-success-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              We'll include this with your order
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Optional File Upload */}
+                        <div className="pt-3 border-t border-surface-300">
+                          <p className="text-xs text-charcoal-500 mb-2 font-semibold">Optional: Upload reference images or documents</p>
+                          <label className="inline-flex items-center gap-2 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 px-4 py-2.5 rounded-bento cursor-pointer text-sm font-bold transition-all hover:shadow-sm">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            Upload File
+                            <input
+                              type="file"
+                              accept=".txt,.doc,.docx,.pdf,.png,.jpg,.jpeg"
+                              onChange={(e) => {
+                                const selectedFile = e.target.files?.[0]
+                                if (selectedFile) {
+                                  setToast({
+                                    message: 'Reference file uploaded - we\'ll review it with your order',
+                                    type: 'success',
+                                    show: true,
+                                  })
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </div>
           </motion.div>
@@ -787,37 +797,10 @@ export default function ArtworkUpload() {
             transition={{ delay: 0.2 }}
             className="lg:sticky lg:top-24 lg:self-start space-y-6"
           >
-            {/* Progress Checklist */}
-            <ArtworkProgressChecklist
-              enabledLocations={enabledLocations}
-              artworkFiles={artworkFiles}
-              artworkFileRecords={artworkFileRecords}
-              detectedColors={detectedColors}
-              maxInkColors={maxInkColors}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              getLocationLabel={getLocationLabel}
-            />
-            
             <div className="bento-card">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-black text-charcoal-700 tracking-tight">Design Preview</h2>
-                {uploadedCount > 0 && progress === 100 && (
-                  <motion.span
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", delay: 0.2 }}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold border border-emerald-300"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    All Uploaded
-                  </motion.span>
-                )}
-              </div>
+              <h2 className="text-xl font-black text-charcoal-700 tracking-tight mb-4">Design Preview</h2>
 
-              {/* Enhanced Tabs */}
+              {/* Location Tabs */}
               {enabledLocations.length > 0 && (
                 <Tabs.Root value={activeTab || enabledLocations[0]} onValueChange={(val) => setActiveTab(val as PrintLocation)}>
                   <Tabs.List className="flex flex-wrap gap-2 mb-6">

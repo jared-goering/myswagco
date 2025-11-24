@@ -30,25 +30,32 @@ export default function FileUploadCard({
   const [showFullPreview, setShowFullPreview] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Determine if we have artwork (either a File or a persisted record)
+  const hasArtwork = !!file || (!!artworkFileRecord && (!!artworkFileRecord.file_url || !!artworkFileRecord.vectorized_file_url))
+
   React.useEffect(() => {
-    if (!file) {
-      setPreview(null)
-      return
-    }
+    // Priority: File > vectorized URL > original file URL
+    if (file) {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      const isImage = ['png', 'jpg', 'jpeg', 'svg', 'gif'].includes(fileExtension || '')
 
-    // Generate preview for image files
-    const fileExtension = file.name.split('.').pop()?.toLowerCase()
-    const isImage = ['png', 'jpg', 'jpeg', 'svg', 'gif'].includes(fileExtension || '')
-
-    if (isImage) {
-      const url = URL.createObjectURL(file)
-      setPreview(url)
-      return () => URL.revokeObjectURL(url)
+      if (isImage) {
+        const url = URL.createObjectURL(file)
+        setPreview(url)
+        return () => URL.revokeObjectURL(url)
+      } else {
+        setPreview(null)
+      }
+    } else if (artworkFileRecord?.vectorized_file_url) {
+      // Use vectorized version if available (persisted state)
+      setPreview(artworkFileRecord.vectorized_file_url)
+    } else if (artworkFileRecord?.file_url) {
+      // Fall back to original file URL (persisted state)
+      setPreview(artworkFileRecord.file_url)
     } else {
-      // For non-image files, show file type icon
       setPreview(null)
     }
-  }, [file])
+  }, [file, artworkFileRecord])
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
@@ -100,8 +107,14 @@ export default function FileUploadCard({
     inputRef.current?.click()
   }
 
-  const fileExtension = file?.name.split('.').pop()?.toUpperCase()
-  const fileSize = file ? (file.size / 1024 / 1024).toFixed(2) : null
+  // Get file info from File object or persisted record
+  const fileName = file?.name || artworkFileRecord?.file_name || 'Uploaded artwork'
+  const fileExtension = fileName.split('.').pop()?.toUpperCase()
+  const fileSize = file 
+    ? (file.size / 1024 / 1024).toFixed(2) 
+    : artworkFileRecord?.file_size 
+      ? (artworkFileRecord.file_size / 1024 / 1024).toFixed(2)
+      : null
 
   return (
     <>
@@ -175,11 +188,11 @@ export default function FileUploadCard({
               {colors} color{colors > 1 ? 's' : ''}
             </p>
           </div>
-          {file && <QualityIndicator file={file} artworkFileRecord={artworkFileRecord} />}
+          {hasArtwork && <QualityIndicator file={file} artworkFileRecord={artworkFileRecord} />}
         </div>
 
         <AnimatePresence mode="wait">
-          {file ? (
+          {hasArtwork ? (
             <motion.div
               key="uploaded"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -213,12 +226,17 @@ export default function FileUploadCard({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-charcoal-700 truncate" title={file.name}>
-                          {file.name}
+                        <p className="font-bold text-charcoal-700 truncate" title={fileName}>
+                          {fileName}
                         </p>
                         <div className="flex items-center gap-3 mt-2 text-xs text-charcoal-500">
-                          <span className="font-semibold px-2 py-1 bg-white rounded-full border border-emerald-200">{fileExtension}</span>
-                          <span className="font-semibold">{fileSize} MB</span>
+                          {fileExtension && <span className="font-semibold px-2 py-1 bg-white rounded-full border border-emerald-200">{fileExtension}</span>}
+                          {fileSize && <span className="font-semibold">{fileSize} MB</span>}
+                          {!file && artworkFileRecord && (
+                            <span className="font-semibold px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+                              Restored
+                            </span>
+                          )}
                         </div>
                       </div>
                     <motion.div 
