@@ -156,7 +156,7 @@ async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentDat
     // Extract unique colors and their images
     const colorMap = new Map<string, string>()
     const sizeSet = new Set<string>()
-    let basePrice = null
+    let basePrice: number | null = null
     
     products.forEach((product: any) => {
       // Extract color name and image

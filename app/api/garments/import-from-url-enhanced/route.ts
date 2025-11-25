@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
-import puppeteer from 'puppeteer'
-import { execSync } from 'child_process'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+/**
+ * Enhanced Import Route with Puppeteer Browser Automation
+ * 
+ * NOTE: This endpoint uses Puppeteer which requires Chrome/Chromium to be installed.
+ * This DOES NOT work on Vercel serverless functions.
+ * 
+ * For Vercel deployment, use the /api/garments/import-from-url-smart endpoint instead.
+ * 
+ * This endpoint is retained for local development and self-hosted deployments
+ * where browser automation is available.
+ */
+
+// Check if we're running on Vercel (serverless)
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined
+
+// Only import puppeteer if not on Vercel (to prevent build errors)
+let puppeteer: typeof import('puppeteer') | null = null
+let Anthropic: typeof import('@anthropic-ai/sdk').default | null = null
+
+if (!isVercel) {
+  // Dynamic imports for local development only
+  try {
+    puppeteer = require('puppeteer')
+    Anthropic = require('@anthropic-ai/sdk').default
+  } catch {
+    console.log('Puppeteer not available - browser automation disabled')
+  }
+}
 
 const SUPPORTED_SUPPLIERS = ['ssactivewear.com', 'ascolour.com']
 
@@ -13,6 +35,9 @@ const SUPPORTED_SUPPLIERS = ['ssactivewear.com', 'ascolour.com']
  * Find Chrome executable on macOS for better ARM64 compatibility
  */
 function findChromeExecutable(): string | undefined {
+  if (isVercel) return undefined
+  
+  const { execSync } = require('child_process')
   const possiblePaths = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -53,8 +78,13 @@ interface ColorSwatchData {
 
 /**
  * Scrape AS Colour product page by clicking through color swatches
+ * Only called when puppeteer is available (local dev / self-hosted)
  */
 async function scrapeAsColourWithBrowser(url: string): Promise<ColorSwatchData[]> {
+  if (!puppeteer) {
+    throw new Error('Puppeteer is not available')
+  }
+  
   let browser = null
   try {
     console.log('Launching headless browser for AS Colour...')
@@ -100,7 +130,7 @@ async function scrapeAsColourWithBrowser(url: string): Promise<ColorSwatchData[]
     await page.waitForSelector('img', { timeout: 10000 })
     
     // Wait an extra moment for JavaScript to initialize
-    await page.waitForTimeout(2000)
+    await new Promise(resolve => setTimeout(resolve, 2000))
 
     // Extract color swatches and their data
     const colorData = await page.evaluate(() => {
@@ -194,7 +224,7 @@ async function scrapeAsColourWithBrowser(url: string): Promise<ColorSwatchData[]
         }
         
         // Wait for image to update - increased delay for slower loading
-        await page.waitForTimeout(1200)
+        await new Promise(resolve => setTimeout(resolve, 1200))
         
         // Get the main product image URL
         const imageUrl = await page.evaluate(() => {
@@ -253,6 +283,18 @@ async function scrapeAsColourWithBrowser(url: string): Promise<ColorSwatchData[]
 }
 
 export async function POST(request: NextRequest) {
+  // Check if running on Vercel - browser automation not available
+  if (isVercel || !puppeteer) {
+    return NextResponse.json(
+      { 
+        error: 'Browser automation is not available on Vercel serverless.',
+        details: 'Please use /api/garments/import-from-url-smart instead for intelligent web scraping that works on Vercel.',
+        alternative: '/api/garments/import-from-url-smart'
+      },
+      { status: 501 }
+    )
+  }
+
   try {
     const { url, useBrowserAutomation } = await request.json()
 
@@ -364,6 +406,10 @@ export async function POST(request: NextRequest) {
     console.log('HTML fetched, calling Claude...')
 
     // Call Claude API to extract structured data
+    if (!Anthropic) {
+      throw new Error('Anthropic SDK is not available')
+    }
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4000,

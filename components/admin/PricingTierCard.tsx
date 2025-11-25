@@ -115,23 +115,6 @@ export default function PricingTierCard({
                   </div>
                 )}
 
-                {/* Screen Print Markup Info */}
-                <div className="mt-3 pt-3 border-t border-surface-200">
-                  <p className="text-[10px] font-bold text-charcoal-400 uppercase tracking-wide mb-1">
-                    Screen Print
-                  </p>
-                  <div className="flex items-center gap-3 text-xs">
-                    <div>
-                      <span className="font-bold text-charcoal-500">Setup: </span>
-                      <span className="font-black text-charcoal-700">+{tier.screen_print_setup_markup_percentage}%</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-charcoal-500">Per Item: </span>
-                      <span className="font-black text-charcoal-700">+{tier.screen_print_per_item_markup_percentage}%</span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Hover Indicator */}
                 {!isSelected && (
                   <div className="absolute inset-0 rounded-bento-lg opacity-0 hover:opacity-100 transition-opacity pointer-events-none">

@@ -11,11 +11,31 @@
       "maxDuration": 15,
       "memory": 512
     },
-    "app/api/garments/import-from-url-enhanced/route.ts": {
+    "app/api/artwork/generate/route.ts": {
       "maxDuration": 60,
-      "memory": 2048
+      "memory": 1024
+    },
+    "app/api/artwork/vectorize/route.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "app/api/artwork/remove-background/route.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "app/api/payments/webhook/route.ts": {
+      "maxDuration": 30,
+      "memory": 256
     }
   },
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, must-revalidate" }
+      ]
+    }
+  ]
 }
 

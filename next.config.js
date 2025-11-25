@@ -31,6 +31,21 @@ const nextConfig = {
       },
     ],
   },
+  // Production optimizations
+  poweredByHeader: false,
+  reactStrictMode: true,
+  // Exclude puppeteer from serverless bundles (it won't work on Vercel anyway)
+  experimental: {
+    serverComponentsExternalPackages: ['puppeteer', 'puppeteer-core'],
+  },
+  // Webpack configuration for better production builds
+  webpack: (config, { isServer }) => {
+    // Ignore puppeteer-related warnings on server
+    if (isServer) {
+      config.externals = [...(config.externals || []), 'puppeteer', 'puppeteer-core']
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig
