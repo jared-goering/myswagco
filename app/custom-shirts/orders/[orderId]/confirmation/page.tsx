@@ -42,7 +42,7 @@ export default function OrderConfirmation() {
       <div className="min-h-screen bg-surface-200 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-3xl font-black text-charcoal-700 mb-4">Order Not Found</h1>
-          <Link href="/custom-shirts" className="text-primary-600 hover:text-primary-700 font-bold">
+          <Link href="/custom-shirts/configure" className="text-primary-600 hover:text-primary-700 font-bold">
             Return to Home
           </Link>
         </div>

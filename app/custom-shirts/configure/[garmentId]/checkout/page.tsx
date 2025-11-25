@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useOrderStore } from '@/lib/store/orderStore'
+import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Garment } from '@/types'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
@@ -55,7 +56,7 @@ export default function Checkout() {
       {/* Header */}
       <header className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4">
         <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-8 py-3 flex items-center gap-4">
-          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+          <Link href="/" className="hover:opacity-80 transition-opacity">
             <Image 
               src="/logo.png" 
               alt="My Swag Co" 
@@ -177,12 +178,35 @@ function CheckoutForm({ garment }: { garment: Garment }) {
   const params = useParams()
   const garmentId = params.garmentId as string
   const store = useOrderStore()
+  const { customer, isAuthenticated } = useCustomerAuth()
   
   const [step, setStep] = useState<'info' | 'payment'>('info')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [orderId, setOrderId] = useState<string | null>(null)
+  
+  // Pre-fill customer info from logged-in account
+  useEffect(() => {
+    if (isAuthenticated && customer) {
+      // Only pre-fill if the store fields are empty
+      if (!store.customerName && customer.name) {
+        store.setCustomerInfo({ customerName: customer.name })
+      }
+      if (!store.email && customer.email) {
+        store.setCustomerInfo({ email: customer.email })
+      }
+      if (!store.phone && customer.phone) {
+        store.setCustomerInfo({ phone: customer.phone })
+      }
+      if (!store.organizationName && customer.organization_name) {
+        store.setCustomerInfo({ organizationName: customer.organization_name })
+      }
+      if (customer.default_shipping_address && !store.shippingAddress.line1) {
+        store.setCustomerInfo({ shippingAddress: customer.default_shipping_address })
+      }
+    }
+  }, [isAuthenticated, customer])
 
   async function handleCustomerInfoSubmit(e: React.FormEvent) {
     e.preventDefault()

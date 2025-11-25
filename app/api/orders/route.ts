@@ -1,11 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { orderCreationSchema } from '@/lib/schemas'
 import { calculateQuote, calculateTotalQuantity, calculateTotalQuantityFromColors } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
+// Helper to get current user
+async function getCurrentUser() {
+  const cookieStore = cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.delete({ name, ...options })
+        },
+      },
+    }
+  )
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    
+    // Check if user is authenticated
+    const user = await getCurrentUser()
     
     // Validate request
     const validatedData = orderCreationSchema.parse(body)
@@ -38,10 +68,11 @@ export async function POST(request: NextRequest) {
       validatedData.print_config
     )
     
-    // Create order
+    // Create order (link to customer account if logged in)
     const { data: order, error } = await supabaseAdmin
       .from('orders')
       .insert({
+        customer_id: user?.id || null, // Link to customer if authenticated
         customer_name: validatedData.customer_name,
         email: validatedData.email,
         phone: validatedData.phone,

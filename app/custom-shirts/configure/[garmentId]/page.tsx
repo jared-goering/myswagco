@@ -166,7 +166,7 @@ export default function ConfigurationWizard() {
       {/* Header */}
       <header className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4">
         <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-8 py-3 flex items-center gap-4">
-          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+          <Link href="/" className="hover:opacity-80 transition-opacity">
             <Image 
               src="/logo.png" 
               alt="My Swag Co" 

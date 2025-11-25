@@ -74,6 +74,7 @@ export type OrderStatus =
 
 export interface Order {
   id: string
+  customer_id?: string // Link to customer account (optional for guest checkout)
   customer_name: string
   email: string
   phone: string
@@ -158,6 +159,37 @@ export interface AppConfig {
   deposit_percentage: number
   min_order_quantity: number
   max_ink_colors: number
+  updated_at: string
+}
+
+// Customer Authentication Types
+export interface Customer {
+  id: string
+  email: string
+  name?: string
+  phone?: string
+  organization_name?: string
+  default_shipping_address?: ShippingAddress
+  avatar_url?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedArtwork {
+  id: string
+  customer_id: string
+  name: string
+  image_url: string
+  thumbnail_url?: string
+  prompt?: string
+  is_ai_generated: boolean
+  metadata?: {
+    colors?: string[]
+    width?: number
+    height?: number
+    file_size?: number
+  }
+  created_at: string
   updated_at: string
 }
 
