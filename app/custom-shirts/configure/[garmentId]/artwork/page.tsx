@@ -40,6 +40,21 @@ export default function ArtworkUpload() {
   const [previewLocation, setPreviewLocation] = useState<PrintLocation | null>(null)
   const [showAIGenerator, setShowAIGenerator] = useState(false)
   const [isAISectionExpanded, setIsAISectionExpanded] = useState(false)
+  const [showVectorized, setShowVectorized] = useState<Record<PrintLocation, boolean>>({
+    front: true,
+    back: true,
+    left_chest: true,
+    right_chest: true,
+    full_back: true,
+  })
+
+  // Toggle between original and vectorized view for a location
+  const handleToggleVectorized = (location: PrintLocation) => {
+    setShowVectorized(prev => ({
+      ...prev,
+      [location]: !prev[location]
+    }))
+  }
 
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
@@ -644,6 +659,8 @@ export default function ArtworkUpload() {
                         artworkFileRecord={artworkFileRecords[location] || null}
                         onFileSelect={(file) => handleFileSelect(location, file)}
                         onFileRemove={() => handleFileRemove(location)}
+                        showVectorized={showVectorized[location]}
+                        onToggleVectorized={() => handleToggleVectorized(location)}
                       />
                     </motion.div>
                   )
@@ -853,6 +870,8 @@ export default function ArtworkUpload() {
                             onVectorize={handleVectorize}
                             maxInkColors={maxInkColors}
                             detectedColors={detectedColors[location] || 0}
+                            showVectorized={showVectorized[location]}
+                            onShowVectorizedChange={(show) => setShowVectorized(prev => ({ ...prev, [location]: show }))}
                           />
 
                           {/* Validation Warnings */}

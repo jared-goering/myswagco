@@ -14,6 +14,8 @@ interface FileUploadCardProps {
   artworkFileRecord?: ArtworkFile | null
   onFileSelect: (file: File | null) => void
   onFileRemove: () => void
+  showVectorized?: boolean
+  onToggleVectorized?: () => void
 }
 
 export default function FileUploadCard({
@@ -23,39 +25,74 @@ export default function FileUploadCard({
   file,
   artworkFileRecord,
   onFileSelect,
-  onFileRemove
+  onFileRemove,
+  showVectorized = true,
+  onToggleVectorized
 }: FileUploadCardProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
+  const [originalPreview, setOriginalPreview] = useState<string | null>(null)
   const [showFullPreview, setShowFullPreview] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  
+  // Check if vectorization is available for this file
+  const hasVectorized = artworkFileRecord?.vectorization_status === 'completed' && !!artworkFileRecord?.vectorized_file_url
+  const canToggle = hasVectorized && !!onToggleVectorized
 
   // Determine if we have artwork (either a File or a persisted record)
   const hasArtwork = !!file || (!!artworkFileRecord && (!!artworkFileRecord.file_url || !!artworkFileRecord.vectorized_file_url))
 
+  // Set up original preview URL
   React.useEffect(() => {
-    // Priority: File > vectorized URL > original file URL
     if (file) {
       const fileExtension = file.name.split('.').pop()?.toLowerCase()
       const isImage = ['png', 'jpg', 'jpeg', 'svg', 'gif'].includes(fileExtension || '')
 
       if (isImage) {
         const url = URL.createObjectURL(file)
-        setPreview(url)
+        setOriginalPreview(url)
         return () => URL.revokeObjectURL(url)
       } else {
-        setPreview(null)
+        setOriginalPreview(null)
       }
-    } else if (artworkFileRecord?.vectorized_file_url) {
-      // Use vectorized version if available (persisted state)
-      setPreview(artworkFileRecord.vectorized_file_url)
     } else if (artworkFileRecord?.file_url) {
-      // Fall back to original file URL (persisted state)
-      setPreview(artworkFileRecord.file_url)
+      // Check if it's a valid URL (not an expired blob URL)
+      // blob: URLs are valid during the current session, http/data: URLs persist across sessions
+      const isValidUrl = artworkFileRecord.file_url.startsWith('http') || 
+                         artworkFileRecord.file_url.startsWith('data:') ||
+                         artworkFileRecord.file_url.startsWith('blob:')
+      if (isValidUrl) {
+        setOriginalPreview(artworkFileRecord.file_url)
+      } else {
+        // Fallback to vectorized if URL is invalid
+        setOriginalPreview(artworkFileRecord.vectorized_file_url || null)
+      }
     } else {
-      setPreview(null)
+      setOriginalPreview(null)
     }
-  }, [file, artworkFileRecord])
+  }, [file, artworkFileRecord?.file_url, artworkFileRecord?.vectorized_file_url])
+
+  // Check if we have access to the original file (not just vectorized)
+  // blob: URLs work during current session, http/data: URLs work across sessions
+  const hasOriginalAccess = !!file || 
+    (artworkFileRecord?.file_url && 
+     (artworkFileRecord.file_url.startsWith('http') || 
+      artworkFileRecord.file_url.startsWith('data:') ||
+      artworkFileRecord.file_url.startsWith('blob:')))
+
+  // Update the displayed preview based on showVectorized toggle
+  React.useEffect(() => {
+    if (hasVectorized && showVectorized) {
+      // Show vectorized version
+      setPreview(artworkFileRecord?.vectorized_file_url || null)
+    } else if (hasOriginalAccess) {
+      // Show original version
+      setPreview(originalPreview)
+    } else {
+      // Fallback to vectorized if original not available
+      setPreview(artworkFileRecord?.vectorized_file_url || originalPreview)
+    }
+  }, [hasVectorized, showVectorized, artworkFileRecord?.vectorized_file_url, originalPreview, hasOriginalAccess])
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
@@ -203,24 +240,52 @@ export default function FileUploadCard({
             >
               <div className="flex gap-4">
                 {/* Preview Thumbnail */}
-                <div 
-                  className="flex-shrink-0 w-24 h-24 rounded-bento bg-white border-2 border-emerald-300 overflow-hidden cursor-pointer hover:border-emerald-500 hover:scale-105 transition-all"
-                  onClick={() => preview && setShowFullPreview(true)}
+                <TooltipHelp
+                  content={hasVectorized 
+                    ? 'Click to view and compare versions'
+                    : 'Click to view full size'
+                  }
+                  side="top"
                 >
-                  {preview ? (
-                    <img
-                      src={preview}
-                      alt="Preview"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-surface-100">
-                      <svg className="w-10 h-10 text-charcoal-300" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
-                      </svg>
+                  <div 
+                    className={`
+                      relative flex-shrink-0 w-24 h-24 rounded-bento bg-white border-2 overflow-hidden cursor-pointer hover:scale-105 transition-all
+                      ${hasVectorized 
+                        ? 'border-emerald-300 hover:border-emerald-500 ring-2 ring-emerald-100' 
+                        : 'border-emerald-300 hover:border-emerald-500'
+                      }
+                    `}
+                    onClick={() => setShowFullPreview(true)}
+                  >
+                    {(preview || artworkFileRecord?.vectorized_file_url) ? (
+                      <img
+                        src={preview || artworkFileRecord?.vectorized_file_url || ''}
+                        alt="Preview"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-surface-100">
+                        <svg className="w-10 h-10 text-charcoal-300" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                        </svg>
+                      </div>
+                    )}
+                    
+                    
+                    {/* Zoom icon overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all group/zoom">
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        whileHover={{ opacity: 1 }}
+                        className="opacity-0 group-hover/zoom:opacity-100 transition-opacity"
+                      >
+                        <svg className="w-6 h-6 text-white drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                      </motion.div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                </TooltipHelp>
 
                 {/* File Info */}
                   <div className="flex-1 min-w-0">
@@ -259,7 +324,7 @@ export default function FileUploadCard({
                     >
                       Replace
                     </button>
-                    {preview && (
+                    {(preview || artworkFileRecord?.vectorized_file_url) && (
                       <button
                         onClick={() => setShowFullPreview(true)}
                         className="text-xs font-bold text-charcoal-700 hover:text-charcoal-800 px-4 py-2 rounded-xl hover:bg-white transition-all hover:shadow-sm"
@@ -350,7 +415,7 @@ export default function FileUploadCard({
 
       {/* Full Preview Modal */}
       <AnimatePresence>
-        {showFullPreview && preview && (
+        {showFullPreview && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -363,7 +428,7 @@ export default function FileUploadCard({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 25 }}
-              className="relative max-w-4xl max-h-[90vh] bg-white rounded-bento-lg p-6 shadow-bento"
+              className="relative max-w-4xl max-h-[90vh] bg-white rounded-bento-lg shadow-bento overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -374,11 +439,89 @@ export default function FileUploadCard({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <img
-                src={preview}
-                alt="Full preview"
-                className="max-w-full max-h-[calc(90vh-3rem)] object-contain rounded-bento"
-              />
+              
+              {/* Tab header when vectorized version is available */}
+              {hasVectorized && (
+                <div className="flex border-b border-surface-200 bg-surface-50">
+                  <button
+                    onClick={() => {
+                      if (showVectorized && hasOriginalAccess) {
+                        onToggleVectorized?.()
+                      }
+                    }}
+                    disabled={!hasOriginalAccess}
+                    className={`flex-1 px-6 py-3 text-sm font-bold transition-all ${
+                      !showVectorized 
+                        ? 'text-charcoal-700 bg-white border-b-2 border-amber-500' 
+                        : hasOriginalAccess 
+                          ? 'text-charcoal-500 hover:text-charcoal-700 hover:bg-surface-100'
+                          : 'text-charcoal-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      Original
+                      {!hasOriginalAccess && (
+                        <span className="text-[10px] text-charcoal-400">(not available)</span>
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!showVectorized) {
+                        onToggleVectorized?.()
+                      }
+                    }}
+                    className={`flex-1 px-6 py-3 text-sm font-bold transition-all ${
+                      showVectorized 
+                        ? 'text-charcoal-700 bg-white border-b-2 border-emerald-500' 
+                        : 'text-charcoal-500 hover:text-charcoal-700 hover:bg-surface-100'
+                    }`}
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Vectorized
+                    </span>
+                  </button>
+                </div>
+              )}
+              
+              <div className="p-6">
+                {(preview || artworkFileRecord?.vectorized_file_url) ? (
+                  <img
+                    src={showVectorized 
+                      ? (artworkFileRecord?.vectorized_file_url || preview || '') 
+                      : (hasOriginalAccess ? (originalPreview || '') : (artworkFileRecord?.vectorized_file_url || ''))
+                    }
+                    alt={showVectorized ? "Vectorized preview" : "Original preview"}
+                    className="max-w-full max-h-[calc(90vh-8rem)] object-contain rounded-bento mx-auto"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-charcoal-400">
+                    <div className="text-center">
+                      <svg className="w-16 h-16 mx-auto mb-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                      </svg>
+                      <p className="font-semibold">Preview not available</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Footer info */}
+              {hasVectorized && (
+                <div className="px-6 pb-4 text-center">
+                  <p className="text-xs text-charcoal-500">
+                    {showVectorized 
+                      ? 'Viewing vectorized version (print-ready)' 
+                      : hasOriginalAccess 
+                        ? 'Viewing original uploaded file'
+                        : 'Original file not available - showing vectorized version'
+                    }
+                  </p>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

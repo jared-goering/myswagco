@@ -23,6 +23,8 @@ interface DesignEditorProps {
   onVectorize?: (artworkFileId: string) => Promise<void>
   maxInkColors?: number
   detectedColors?: number
+  showVectorized?: boolean
+  onShowVectorizedChange?: (show: boolean) => void
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -95,6 +97,263 @@ interface HistoryState {
   timestamp: number
 }
 
+interface ContentBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+// Detect actual content bounds by scanning for non-background pixels
+function detectContentBounds(img: HTMLImageElement): ContentBounds | null {
+  console.log('[CROP DEBUG] detectContentBounds called, image size:', img.width, 'x', img.height)
+  try {
+    const canvas = document.createElement('canvas')
+    // Use smaller size for performance on large images
+    const maxSize = 500
+    const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+    canvas.width = Math.floor(img.width * scale)
+    canvas.height = Math.floor(img.height * scale)
+    console.log('[CROP DEBUG] Canvas size:', canvas.width, 'x', canvas.height, 'scale:', scale)
+    
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      console.log('[CROP DEBUG] Failed to get canvas context')
+      return null
+    }
+    
+    // Fill with white first to have a consistent background for detection
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    
+    console.log('[CROP DEBUG] Attempting getImageData...')
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    console.log('[CROP DEBUG] Got imageData, length:', data.length)
+    
+    let minX = canvas.width
+    let minY = canvas.height
+    let maxX = 0
+    let maxY = 0
+    let contentPixels = 0
+    
+    // Scan for pixels that are NOT white/near-white AND NOT fully transparent
+    // This handles both transparent PNGs and white-background SVGs
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const idx = (y * canvas.width + x) * 4
+        const r = data[idx]
+        const g = data[idx + 1]
+        const b = data[idx + 2]
+        const alpha = data[idx + 3]
+        
+        // Skip fully transparent pixels
+        if (alpha < 10) continue
+        
+        // Skip white/near-white pixels (background)
+        // A pixel is considered "white" if all RGB values are > 250
+        const isWhite = r > 250 && g > 250 && b > 250
+        if (isWhite) continue
+        
+        // This pixel is visible content
+        contentPixels++
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      }
+    }
+    
+    console.log('[CROP DEBUG] Content pixels found:', contentPixels, 'bounds:', { minX, minY, maxX, maxY })
+    
+    if (maxX < minX || maxY < minY) {
+      console.log('[CROP DEBUG] No visible content, returning null')
+      return null
+    }
+    
+    // Add small padding (2% of size)
+    const padX = Math.floor(canvas.width * 0.02)
+    const padY = Math.floor(canvas.height * 0.02)
+    minX = Math.max(0, minX - padX)
+    minY = Math.max(0, minY - padY)
+    maxX = Math.min(canvas.width - 1, maxX + padX)
+    maxY = Math.min(canvas.height - 1, maxY + padY)
+    
+    // Scale back to original image coordinates
+    const result = {
+      x: Math.floor(minX / scale),
+      y: Math.floor(minY / scale),
+      width: Math.ceil((maxX - minX + 1) / scale),
+      height: Math.ceil((maxY - minY + 1) / scale),
+    }
+    console.log('[CROP DEBUG] Final bounds:', result, 'vs original:', img.width, 'x', img.height)
+    return result
+  } catch (e) {
+    console.error('[CROP DEBUG] Error:', e)
+    return null
+  }
+}
+
+// Parse SVG to get viewBox dimensions for proper rendering
+function getSvgViewBoxDimensions(svgDataUrl: string): { width: number; height: number } | null {
+  try {
+    // Decode base64 SVG
+    const base64 = svgDataUrl.split(',')[1]
+    if (!base64) return null
+    const svgText = atob(base64)
+    
+    // Parse viewBox
+    const viewBoxMatch = svgText.match(/viewBox=["']([^"']+)["']/)
+    if (viewBoxMatch) {
+      const parts = viewBoxMatch[1].split(/[\s,]+/)
+      if (parts.length >= 4) {
+        const width = parseFloat(parts[2])
+        const height = parseFloat(parts[3])
+        if (width > 0 && height > 0) {
+          console.log('[CROP DEBUG] Parsed SVG viewBox:', width, 'x', height)
+          return { width, height }
+        }
+      }
+    }
+    
+    // Try width/height attributes
+    const widthMatch = svgText.match(/width=["'](\d+)/)
+    const heightMatch = svgText.match(/height=["'](\d+)/)
+    if (widthMatch && heightMatch) {
+      return { width: parseInt(widthMatch[1]), height: parseInt(heightMatch[1]) }
+    }
+    
+    return null
+  } catch (e) {
+    console.error('[CROP DEBUG] Error parsing SVG:', e)
+    return null
+  }
+}
+
+// Render SVG at full resolution and return via callback
+function renderSvgAtFullSize(
+  svgDataUrl: string,
+  viewBoxDims: { width: number; height: number },
+  onLoad: (fullSizeImg: HTMLImageElement, scale: number) => void
+): void {
+  // Cap at reasonable max size for performance
+  const maxDim = 2000
+  const scale = Math.min(1, maxDim / Math.max(viewBoxDims.width, viewBoxDims.height))
+  const targetWidth = Math.round(viewBoxDims.width * scale)
+  const targetHeight = Math.round(viewBoxDims.height * scale)
+  
+  console.log('[CROP DEBUG] Rendering SVG at:', targetWidth, 'x', targetHeight, '(scale:', scale, ')')
+  
+  // Create a new SVG with explicit dimensions
+  const base64 = svgDataUrl.split(',')[1]
+  if (!base64) return
+  
+  let svgText: string
+  try {
+    svgText = atob(base64)
+  } catch (e) {
+    console.error('[CROP DEBUG] Error decoding base64:', e)
+    return
+  }
+  
+  // Add or replace width/height attributes
+  svgText = svgText.replace(/<svg/, `<svg width="${targetWidth}" height="${targetHeight}"`)
+  
+  // Use encodeURIComponent for non-ASCII safe encoding
+  const newDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
+  
+  const img = new window.Image()
+  img.onload = () => {
+    console.log('[CROP DEBUG] Full-size SVG loaded:', img.width, 'x', img.height)
+    onLoad(img, scale)
+  }
+  img.onerror = (e) => {
+    console.error('[CROP DEBUG] Error loading full-size SVG:', e)
+  }
+  img.src = newDataUrl
+}
+
+// Create a cropped version of an image and return via callback
+function createCroppedImage(
+  img: HTMLImageElement, 
+  bounds: ContentBounds, 
+  onLoad: (croppedImg: HTMLImageElement) => void,
+  sourceImgUrl?: string
+): void {
+  console.log('[CROP DEBUG] createCroppedImage called with bounds:', bounds, 'img size:', img.width, 'x', img.height)
+  
+  // Check if this is an SVG that needs full-resolution rendering
+  const isSvg = sourceImgUrl?.startsWith('data:image/svg')
+  if (isSvg && sourceImgUrl) {
+    const viewBoxDims = getSvgViewBoxDimensions(sourceImgUrl)
+    if (viewBoxDims && (viewBoxDims.width > img.width * 2 || viewBoxDims.height > img.height * 2)) {
+      console.log('[CROP DEBUG] SVG has larger viewBox, rendering at full size first')
+      
+      // Render SVG at full size, then crop
+      renderSvgAtFullSize(sourceImgUrl, viewBoxDims, (fullSizeImg, scale) => {
+        // Scale bounds to match full-size render
+        const scaleFactor = fullSizeImg.width / img.width
+        const scaledBounds = {
+          x: Math.floor(bounds.x * scaleFactor),
+          y: Math.floor(bounds.y * scaleFactor),
+          width: Math.ceil(bounds.width * scaleFactor),
+          height: Math.ceil(bounds.height * scaleFactor)
+        }
+        console.log('[CROP DEBUG] Scaled bounds for full-size:', scaledBounds)
+        
+        // Now crop from full-size image
+        cropFromImage(fullSizeImg, scaledBounds, onLoad)
+      })
+      return
+    }
+  }
+  
+  // Standard cropping for non-SVG or small SVG
+  cropFromImage(img, bounds, onLoad)
+}
+
+// Helper to actually perform the crop
+function cropFromImage(
+  img: HTMLImageElement,
+  bounds: ContentBounds,
+  onLoad: (croppedImg: HTMLImageElement) => void
+): void {
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bounds.width
+    canvas.height = bounds.height
+    console.log('[CROP DEBUG] Created canvas:', canvas.width, 'x', canvas.height)
+    
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      console.log('[CROP DEBUG] Failed to get context')
+      return
+    }
+    
+    // Draw only the cropped portion
+    ctx.drawImage(
+      img,
+      bounds.x, bounds.y, bounds.width, bounds.height, // source
+      0, 0, bounds.width, bounds.height // destination
+    )
+    console.log('[CROP DEBUG] Drew cropped portion from', bounds.x, bounds.y, 'size', bounds.width, 'x', bounds.height)
+    
+    // Create a new image from the canvas
+    const croppedImg = new window.Image()
+    // IMPORTANT: Set onload BEFORE setting src
+    croppedImg.onload = () => {
+      console.log('[CROP DEBUG] Cropped image loaded, size:', croppedImg.width, 'x', croppedImg.height)
+      onLoad(croppedImg)
+    }
+    const dataUrl = canvas.toDataURL('image/png')
+    console.log('[CROP DEBUG] Created data URL, length:', dataUrl.length)
+    croppedImg.src = dataUrl
+  } catch (e) {
+    console.error('[CROP DEBUG] Error creating cropped image:', e)
+  }
+}
+
 export default function DesignEditor({ 
   artworkFile,
   artworkFileRecord,
@@ -107,15 +366,21 @@ export default function DesignEditor({
   onColorChange,
   onVectorize,
   maxInkColors = 4,
-  detectedColors = 0
+  detectedColors = 0,
+  showVectorized: showVectorizedProp = true,
+  onShowVectorizedChange
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
   const [scaleX, setScaleX] = useState(1)
   const [scaleY, setScaleY] = useState(1)
   const [isVectorizing, setIsVectorizing] = useState(false)
-  const [showVectorized, setShowVectorized] = useState(false)
+  // Use controlled state if callback provided, otherwise internal state
+  const [showVectorizedInternal, setShowVectorizedInternal] = useState(true)
+  const showVectorized = onShowVectorizedChange ? showVectorizedProp : showVectorizedInternal
+  const setShowVectorized = onShowVectorizedChange || setShowVectorizedInternal
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null)
+  const [contentCrop, setContentCrop] = useState<ContentBounds | null>(null)
   const imageRef = useRef<Konva.Image>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -123,6 +388,19 @@ export default function DesignEditor({
   // Refs for tracking image loading state
   const isInitialLoadRef = useRef(true)
   const lastImageDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+  const hasDetectedBoundsRef = useRef(false)
+  const croppedVectorizedImageRef = useRef<HTMLImageElement | null>(null)
+  const originalImageRef = useRef<HTMLImageElement | null>(null)
+  const storedContentCropRef = useRef<ContentBounds | null>(null)
+  // Store separate transforms for original and vectorized views
+  const vectorizedTransformRef = useRef<{ x: number; y: number; scale: number; rotation: number } | null>(null)
+  const originalTransformRef = useRef<{ x: number; y: number; scale: number; rotation: number } | null>(null)
+  const prevShowVectorizedRef = useRef<boolean | null>(null)
+  const isTogglingViewRef = useRef(false)
+  // Track previous artwork to detect actual artwork changes vs print location switches
+  const prevArtworkIdRef = useRef<string | null>(null)
+  
+  // Note: When using cropped images, image.width/height are already the effective dimensions
   
   // History for undo/redo
   const [history, setHistory] = useState<HistoryState[]>([])
@@ -223,20 +501,46 @@ export default function DesignEditor({
   // Load image when file changes and create stable URL
   // Also handle persisted records (after page reload)
   useEffect(() => {
+    console.log('[CROP DEBUG] ===', printLocation, '- Initial load effect running ===')
+    console.log('[CROP DEBUG]', printLocation, '- artworkFile:', artworkFile?.name)
+    console.log('[CROP DEBUG]', printLocation, '- artworkFileRecord?.id:', artworkFileRecord?.id)
+    console.log('[CROP DEBUG]', printLocation, '- artworkFileRecord?.vectorization_status:', artworkFileRecord?.vectorization_status)
+    
     // Check if we have either a File or a persisted record with URL
     const hasPersistedRecord = !artworkFile && artworkFileRecord && 
       (artworkFileRecord.file_url || artworkFileRecord.vectorized_file_url)
     
     if (!artworkFile && !hasPersistedRecord) {
+      console.log('[CROP DEBUG]', printLocation, '- No artwork file or persisted record, returning early')
       setImage(null)
       setOriginalImageUrl(null)
+      setContentCrop(null)
       lastImageDimensionsRef.current = null
       isInitialLoadRef.current = true
+      hasDetectedBoundsRef.current = false
       return
     }
 
-    // Mark as initial load
-    isInitialLoadRef.current = true
+    // Generate an ID for the current artwork to detect actual changes
+    const artworkId = artworkFile?.name || artworkFileRecord?.id || artworkFileRecord?.file_url || null
+    const artworkChanged = artworkId !== prevArtworkIdRef.current
+    
+    if (artworkChanged) {
+      console.log('[CROP DEBUG]', printLocation, '- Artwork changed, resetting refs')
+      // Only reset these when artwork actually changes, not on print location switch
+      isInitialLoadRef.current = true
+      hasDetectedBoundsRef.current = false
+      croppedVectorizedImageRef.current = null
+      originalImageRef.current = null
+      storedContentCropRef.current = null
+      vectorizedTransformRef.current = null
+      originalTransformRef.current = null
+      setContentCrop(null)
+      prevArtworkIdRef.current = artworkId
+    } else {
+      console.log('[CROP DEBUG]', printLocation, '- Same artwork, preserving refs')
+      isInitialLoadRef.current = true
+    }
 
     let blobUrl: string | null = null
     let urlToLoad: string
@@ -257,24 +561,169 @@ export default function DesignEditor({
       urlToLoad = persistedUrl
     }
 
+    // Check if we're loading a vectorized image
+    console.log('[CROP DEBUG]', printLocation, '- Checking isLoadingVectorized conditions:')
+    console.log('[CROP DEBUG]', printLocation, '-   vectorization_status:', artworkFileRecord?.vectorization_status)
+    console.log('[CROP DEBUG]', printLocation, '-   vectorized_file_url exists:', !!artworkFileRecord?.vectorized_file_url)
+    console.log('[CROP DEBUG]', printLocation, '-   urlToLoad:', urlToLoad?.substring(0, 100))
+    console.log('[CROP DEBUG]', printLocation, '-   URLs match:', urlToLoad === artworkFileRecord?.vectorized_file_url)
+    
+    const isLoadingVectorized = artworkFileRecord?.vectorization_status === 'completed' && 
+      artworkFileRecord?.vectorized_file_url && 
+      (urlToLoad === artworkFileRecord.vectorized_file_url)
+
     const img = new window.Image()
     img.crossOrigin = 'anonymous' // Needed for data URLs and external URLs
     img.onload = () => {
+      console.log('[CROP DEBUG]', printLocation, '- Image loaded, size:', img.width, 'x', img.height)
+      console.log('[CROP DEBUG]', printLocation, '- isLoadingVectorized:', isLoadingVectorized)
+      console.log('[CROP DEBUG]', printLocation, '- hasDetectedBoundsRef.current:', hasDetectedBoundsRef.current)
+      
       // Store dimensions for this image
       lastImageDimensionsRef.current = { width: img.width, height: img.height }
       
-      setImage(img)
+      // Detect content bounds for vectorized images and create cropped version
+      let finalImage: HTMLImageElement = img
+      let detectedCrop: ContentBounds | null = null
+      
+      if (isLoadingVectorized && !hasDetectedBoundsRef.current) {
+        console.log('[CROP DEBUG]', printLocation, '- Calling detectContentBounds...')
+        const bounds = detectContentBounds(img)
+        console.log('[CROP DEBUG]', printLocation, '- bounds result:', bounds)
+        if (bounds) {
+          // Only apply crop if it significantly reduces the size (at least 10% smaller)
+          const originalArea = img.width * img.height
+          const croppedArea = bounds.width * bounds.height
+          console.log('[CROP DEBUG]', printLocation, '- originalArea:', originalArea, 'croppedArea:', croppedArea, 'ratio:', croppedArea / originalArea)
+          if (croppedArea < originalArea * 0.9) {
+            console.log('[CROP DEBUG]', printLocation, '- Cropping! Creating cropped image...')
+            detectedCrop = bounds
+            hasDetectedBoundsRef.current = true
+            
+            // Create a pre-cropped image using callback pattern
+            // Pass the URL so SVGs can be rendered at full resolution
+            // Also preload the original image for toggling
+            const origUrl = blobUrl || artworkFileRecord?.file_url
+            if (origUrl) {
+              const origImg = new window.Image()
+              origImg.crossOrigin = 'anonymous'
+              origImg.onload = () => {
+                console.log('[CROP DEBUG]', printLocation, '- Preloaded original image:', origImg.width, 'x', origImg.height)
+                originalImageRef.current = origImg
+              }
+              origImg.src = origUrl
+            }
+            
+            createCroppedImage(img, bounds, (croppedImg) => {
+              console.log('[CROP DEBUG]', printLocation, '- Cropped image created, size:', croppedImg.width, 'x', croppedImg.height)
+              console.log('[CROP DEBUG]', printLocation, '- Calling setImage with cropped image...')
+              // Store cropped for toggling
+              croppedVectorizedImageRef.current = croppedImg
+              storedContentCropRef.current = detectedCrop
+              setContentCrop(detectedCrop)
+              setImage(croppedImg)
+              console.log('[CROP DEBUG]', printLocation, '- setImage called successfully')
+              
+              // Use ACTUAL cropped image dimensions for transform calculation
+              // (not bounds, which are in small-space coordinates)
+              const effectiveW = croppedImg.width
+              const effectiveH = croppedImg.height
+              console.log('[CROP DEBUG]', printLocation, '- Using effectiveW:', effectiveW, 'effectiveH:', effectiveH)
+              
+              if (!transform) {
+                // No transform yet - calculate initial position
+                const scale = Math.min(
+                  printArea.width / effectiveW,
+                  printArea.height / effectiveH,
+                  1
+                ) * 0.8
+                
+                const scaledWidth = effectiveW * scale
+                const scaledHeight = effectiveH * scale
+                
+                const newTransform = {
+                  x: printArea.x + (printArea.width - scaledWidth) / 2,
+                  y: printArea.y + (printArea.height - scaledHeight) / 2,
+                  scale,
+                  rotation: 0,
+                }
+                console.log('[CROP DEBUG]', printLocation, '- New transform scale:', scale)
+                // Store initial vectorized transform
+                vectorizedTransformRef.current = newTransform
+                prevShowVectorizedRef.current = true
+                onTransformChange(newTransform)
+                saveToHistory(newTransform)
+              } else {
+                // Transform exists - check if we need to recalculate for NEW cropping
+                // or if we're just switching back to a location we already processed
+                const wasAlreadyCropped = croppedVectorizedImageRef.current !== null
+                
+                if (!wasAlreadyCropped) {
+                  // First time cropping - recenter with new dimensions
+                  const prevWidth = img.width * transform.scale
+                  const prevHeight = img.height * transform.scale
+                  const centerX = transform.x + prevWidth / 2
+                  const centerY = transform.y + prevHeight / 2
+                  
+                  // Recalculate scale to maintain similar visual size
+                  const newScale = Math.min(
+                    printArea.width / effectiveW,
+                    printArea.height / effectiveH,
+                    1
+                  ) * 0.8
+                  
+                  const newWidth = effectiveW * newScale
+                  const newHeight = effectiveH * newScale
+                  
+                  const newTransform = {
+                    x: centerX - newWidth / 2,
+                    y: centerY - newHeight / 2,
+                    scale: newScale,
+                    rotation: transform.rotation,
+                  }
+                  console.log('[CROP DEBUG]', printLocation, '- New transform scale:', newScale)
+                  // Store initial vectorized transform
+                  vectorizedTransformRef.current = newTransform
+                  prevShowVectorizedRef.current = true
+                  onTransformChange(newTransform)
+                } else {
+                  // Already cropped before - just restore the stored transform and image
+                  console.log('[CROP DEBUG]', printLocation, '- Already cropped, preserving existing transform')
+                  vectorizedTransformRef.current = { ...transform }
+                  prevShowVectorizedRef.current = true
+                }
+              }
+              
+              requestAnimationFrame(() => {
+                isInitialLoadRef.current = false
+              })
+            }, urlToLoad)
+            return // Exit early, cropped image callback will handle the rest
+          }
+        }
+      }
+      
+      // No cropping needed or cropping failed - use original image
+      console.log('[CROP DEBUG]', printLocation, '- Setting ORIGINAL image (no cropping):', finalImage.width, 'x', finalImage.height)
+      // Store original for toggling
+      originalImageRef.current = img
+      setContentCrop(null)
+      setImage(finalImage)
+      
+      // Use image dimensions for transform calculation
+      const effectiveW = img.width
+      const effectiveH = img.height
       
       // Set default transform if not already set (first time upload)
       if (!transform) {
         const scale = Math.min(
-          printArea.width / img.width,
-          printArea.height / img.height,
+          printArea.width / effectiveW,
+          printArea.height / effectiveH,
           1
         ) * 0.8 // Start at 80% of max size
         
-        const scaledWidth = img.width * scale
-        const scaledHeight = img.height * scale
+        const scaledWidth = effectiveW * scale
+        const scaledHeight = effectiveH * scale
         
         const newTransform = {
           x: printArea.x + (printArea.width - scaledWidth) / 2,
@@ -300,7 +749,7 @@ export default function DesignEditor({
         URL.revokeObjectURL(blobUrl)
       }
     }
-  }, [artworkFile, printLocation, artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url, artworkFileRecord?.file_url])
+  }, [artworkFile, artworkFileRecord, printLocation])
 
   // Update transformer when image is selected
   useEffect(() => {
@@ -318,7 +767,7 @@ export default function DesignEditor({
     const nodeScaleX = node.scaleX()
     const nodeScaleY = node.scaleY()
     
-    // Calculate new scale based on original image dimensions
+    // Calculate new scale based on image dimensions
     const currentWidth = image.width * transform.scale
     const newWidth = currentWidth * Math.abs(nodeScaleX)
     const newScale = newWidth / image.width
@@ -447,6 +896,31 @@ export default function DesignEditor({
     ? artworkFileRecord.vectorized_file_url
     : originalImageUrl
 
+  // Track which view we're syncing transforms for (using ref to avoid stale closure issues)
+  const currentViewIsVectorizedRef = useRef(false)
+  
+  // Update the current view ref when view changes
+  useEffect(() => {
+    const isVectorized = showVectorized && artworkFileRecord?.vectorization_status === 'completed'
+    currentViewIsVectorizedRef.current = isVectorized
+  }, [showVectorized, artworkFileRecord?.vectorization_status])
+  
+  // Sync transform changes to the appropriate ref (so toggling restores correct size)
+  // Only depends on transform - uses ref to determine which view we're on
+  useEffect(() => {
+    if (!transform || isInitialLoadRef.current) return
+    
+    // Skip during toggle transitions - the toggle effect handles saving/restoring
+    if (isTogglingViewRef.current) return
+    
+    // Use ref to avoid running when showVectorized changes (which would save to wrong ref)
+    if (currentViewIsVectorizedRef.current) {
+      vectorizedTransformRef.current = { ...transform }
+    } else {
+      originalTransformRef.current = { ...transform }
+    }
+  }, [transform])
+
   // Update image when vectorized version becomes available
   useEffect(() => {
     if (artworkFileRecord?.vectorization_status === 'completed' && artworkFileRecord.vectorized_file_url) {
@@ -454,48 +928,126 @@ export default function DesignEditor({
     }
   }, [artworkFileRecord?.vectorization_status, artworkFileRecord?.vectorized_file_url])
 
-  // Reload image when toggling between original and vectorized
+  // Toggle between original and vectorized using stored images
   // This effect ONLY handles switching between original/vectorized, NOT initial load
   useEffect(() => {
-    const imageUrl = displayImageUrl
-    if (!imageUrl) return
-
     // Skip if this is handled by the artworkFile effect (initial load)
     if (isInitialLoadRef.current) {
+      console.log('[CROP DEBUG] Toggle effect: skipping (isInitialLoadRef is true)')
       return
     }
 
     // Only run if we already have an image (i.e., toggling views)
-    if (!image) return
+    if (!image || !transform) {
+      console.log('[CROP DEBUG] Toggle effect: skipping (no image or transform)')
+      return
+    }
 
-    const img = new window.Image()
-    img.onload = () => {
-      const prevDims = lastImageDimensionsRef.current
-      
-      // Check if dimensions actually changed
-      if (prevDims && (prevDims.width !== img.width || prevDims.height !== img.height)) {
-        // Calculate the visual size we want to maintain (in pixels)
-        const currentVisualWidth = prevDims.width * (transform?.scale || 1)
-        const currentVisualHeight = prevDims.height * (transform?.scale || 1)
+    const isVectorized = showVectorized && artworkFileRecord?.vectorization_status === 'completed'
+    const wasVectorized = prevShowVectorizedRef.current
+    
+    // Only act if we're actually toggling (not initial render)
+    if (wasVectorized === null || wasVectorized === isVectorized) {
+      prevShowVectorizedRef.current = isVectorized
+      return
+    }
+    
+    console.log('[CROP DEBUG] Toggle effect: switching from', wasVectorized ? 'vectorized' : 'original', 'to', isVectorized ? 'vectorized' : 'original')
+    
+    // Set flag to prevent sync effect from running during toggle
+    isTogglingViewRef.current = true
+    
+    // Save current transform before switching
+    if (wasVectorized) {
+      vectorizedTransformRef.current = { ...transform }
+      console.log('[CROP DEBUG] Saved vectorized transform:', vectorizedTransformRef.current)
+    } else {
+      originalTransformRef.current = { ...transform }
+      console.log('[CROP DEBUG] Saved original transform:', originalTransformRef.current)
+    }
+    
+    prevShowVectorizedRef.current = isVectorized
+
+    if (isVectorized) {
+      // Show cropped vectorized image if available
+      if (croppedVectorizedImageRef.current) {
+        console.log('[CROP DEBUG] Toggle effect: restoring CROPPED vectorized image')
+        // Restore the content crop for proper dimension display
+        if (storedContentCropRef.current) {
+          setContentCrop(storedContentCropRef.current)
+        }
+        setImage(croppedVectorizedImageRef.current)
+        lastImageDimensionsRef.current = { 
+          width: croppedVectorizedImageRef.current.width, 
+          height: croppedVectorizedImageRef.current.height 
+        }
         
-        // Calculate new scale to maintain the same visual size
-        const newScale = currentVisualWidth / img.width
-        
-        // Sanity check - scale should be reasonable
-        if (newScale > 0 && newScale < 100 && transform) {
-          onTransformChange({
-            ...transform,
-            scale: newScale,
+        // Restore vectorized transform or calculate a new one
+        if (vectorizedTransformRef.current) {
+          console.log('[CROP DEBUG] Restoring vectorized transform:', vectorizedTransformRef.current)
+          onTransformChange(vectorizedTransformRef.current)
+          // Reset toggle flag after transform is applied
+          requestAnimationFrame(() => {
+            isTogglingViewRef.current = false
           })
+        } else {
+          isTogglingViewRef.current = false
         }
       }
+    } else {
+      // Show original uncropped image
+      const showOriginal = (origImg: HTMLImageElement) => {
+        setContentCrop(null)
+        setImage(origImg)
+        lastImageDimensionsRef.current = { width: origImg.width, height: origImg.height }
+        
+        // Restore original transform or calculate a new one that fits properly
+        if (originalTransformRef.current) {
+          console.log('[CROP DEBUG] Restoring original transform:', originalTransformRef.current)
+          onTransformChange(originalTransformRef.current)
+        } else {
+          // Calculate a proper transform for the original image
+          const scale = Math.min(
+            printArea.width / origImg.width,
+            printArea.height / origImg.height,
+            1
+          ) * 0.8
+          
+          const scaledWidth = origImg.width * scale
+          const scaledHeight = origImg.height * scale
+          
+          const newTransform = {
+            x: printArea.x + (printArea.width - scaledWidth) / 2,
+            y: printArea.y + (printArea.height - scaledHeight) / 2,
+            scale,
+            rotation: transform.rotation,
+          }
+          console.log('[CROP DEBUG] Calculated new original transform:', newTransform)
+          originalTransformRef.current = newTransform
+          onTransformChange(newTransform)
+        }
+        // Reset toggle flag after transform is applied
+        requestAnimationFrame(() => {
+          isTogglingViewRef.current = false
+        })
+      }
       
-      // Update dimensions ref and image
-      lastImageDimensionsRef.current = { width: img.width, height: img.height }
-      setImage(img)
+      if (originalImageRef.current) {
+        console.log('[CROP DEBUG] Toggle effect: restoring ORIGINAL image')
+        showOriginal(originalImageRef.current)
+      } else if (originalImageUrl) {
+        // Load original image if not cached
+        console.log('[CROP DEBUG] Toggle effect: loading original from URL')
+        const img = new window.Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          originalImageRef.current = img
+          showOriginal(img)
+        }
+        img.src = originalImageUrl
+      }
     }
-    img.src = imageUrl
-  }, [displayImageUrl, image, transform, onTransformChange])
+  }, [showVectorized, artworkFileRecord?.vectorization_status, image, originalImageUrl, transform, onTransformChange, printArea])
 
   if (!image || !transform) {
     return (
@@ -733,20 +1285,6 @@ export default function DesignEditor({
             </div>
           </TooltipHelp>
           
-          {/* Toggle between original and vectorized */}
-          {artworkFileRecord.vectorization_status === 'completed' && artworkFileRecord.vectorized_file_url && (
-            <TooltipHelp content="Compare the original raster file with the vectorized version">
-              <button
-                onClick={() => setShowVectorized(!showVectorized)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-surface-100 hover:bg-surface-200 text-charcoal-700 border-2 border-surface-300 transition-all hover:scale-105"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                {showVectorized ? 'Show Original' : 'Show Vectorized'}
-              </button>
-            </TooltipHelp>
-          )}
           
           {/* Color count warning */}
           {detectedColors > maxInkColors && (
