@@ -57,7 +57,7 @@ export default function Home() {
             <a href="#faq" className="text-charcoal-600 hover:text-primary-500 font-semibold transition-colors">FAQ</a>
           </nav>
           <Link
-            href="/custom-shirts"
+            href="/custom-shirts/configure"
             className="hidden sm:inline-flex items-center justify-center bg-primary-500 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-primary-600 transition-all"
           >
             Start Order
@@ -113,7 +113,7 @@ export default function Home() {
             {/* CTA Buttons */}
             <motion.div variants={fadeInUp} className="flex flex-wrap items-center gap-4">
               <Link
-                href="/custom-shirts"
+                href="/custom-shirts/configure"
                 className="inline-flex items-center justify-center bg-white text-[#ff5722] px-8 py-4 rounded-full font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200"
               >
                 Start Your Order
@@ -299,7 +299,7 @@ export default function Home() {
               </ul>
 
               <Link
-                href="/custom-shirts"
+                href="/custom-shirts/configure"
                 className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 <span>Try AI Design Generator</span>
@@ -852,7 +852,7 @@ export default function Home() {
               <br />Get your exact quote in seconds with our live pricing tool.
             </p>
             <Link
-              href="/custom-shirts"
+              href="/custom-shirts/configure"
               className="inline-flex items-center justify-center bg-white text-primary-500 px-8 py-4 rounded-full font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all"
             >
               Get Your Free Quote
@@ -940,7 +940,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/custom-shirts"
+                href="/custom-shirts/configure"
                 className="inline-flex items-center justify-center bg-primary-500 text-white px-10 py-5 rounded-bento-lg font-black text-lg shadow-lg hover:bg-primary-600 hover:shadow-xl hover:scale-[1.02] transition-all"
               >
               Start Your Order
