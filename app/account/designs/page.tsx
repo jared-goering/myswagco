@@ -35,10 +35,18 @@ export default function DesignsPage() {
 
   async function fetchDesigns() {
     try {
-      const response = await fetch('/api/saved-artwork')
+      console.log('[DesignsPage] Fetching designs, isAuthenticated:', isAuthenticated, 'user:', user?.email)
+      const response = await fetch('/api/saved-artwork', {
+        credentials: 'include', // Ensure cookies are sent
+      })
+      console.log('[DesignsPage] Response status:', response.status)
       if (response.ok) {
         const data = await response.json()
+        console.log('[DesignsPage] Fetched designs count:', data.length)
         setDesigns(data)
+      } else {
+        const error = await response.json()
+        console.error('[DesignsPage] Error response:', error)
       }
     } catch (error) {
       console.error('Error fetching designs:', error)

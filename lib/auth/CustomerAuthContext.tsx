@@ -1,30 +1,23 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
-import { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
+import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 import { Customer } from '@/types'
 
 interface CustomerAuthContextType {
-  // Auth state
   user: User | null
   customer: Customer | null
   session: Session | null
   isLoading: boolean
   isAuthenticated: boolean
-  
-  // Auth actions
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
   signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error: Error | null }>
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: Error | null }>
-  
-  // Customer profile actions
   updateCustomerProfile: (updates: Partial<Customer>) => Promise<{ error: Error | null }>
   refreshCustomer: () => Promise<void>
-  
-  // Modal control
   showAuthModal: boolean
   authModalContext: AuthModalContext | null
   openAuthModal: (context?: AuthModalContext) => void
@@ -49,7 +42,6 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalContext, setAuthModalContext] = useState<AuthModalContext | null>(null)
 
-  // Fetch customer profile from database
   const fetchCustomerProfile = useCallback(async (userId: string): Promise<Customer | null> => {
     try {
       const { data, error } = await supabase
@@ -58,22 +50,16 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
         .eq('id', userId)
         .single()
       
-      if (error) {
-        // Don't log 404 errors - customer table might not exist yet
-        if (error.code !== 'PGRST116') {
-          console.error('Error fetching customer profile:', error)
-        }
-        return null
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching customer profile:', error)
       }
-      
-      return data as Customer
+      return data as Customer | null
     } catch (err) {
       console.error('Error in fetchCustomerProfile:', err)
       return null
     }
   }, [])
 
-  // Store refs to modal state to avoid re-running auth listener
   const showAuthModalRef = useRef(showAuthModal)
   const authModalContextRef = useRef(authModalContext)
   
@@ -82,172 +68,80 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     authModalContextRef.current = authModalContext
   }, [showAuthModal, authModalContext])
 
-  // Initialize auth state
+  // Basic Supabase auth setup - exactly per docs
   useEffect(() => {
-    let mounted = true
-    console.log('CustomerAuthProvider: initializing')
-    
     // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession()
-        console.log('CustomerAuthProvider: getSession result', { 
-          hasSession: !!currentSession, 
-          email: currentSession?.user?.email,
-          error: error?.message 
-        })
-        
-        if (!mounted) return
-        
-        setSession(currentSession)
-        setUser(currentSession?.user ?? null)
-        
-        if (currentSession?.user) {
-          const customerData = await fetchCustomerProfile(currentSession.user.id)
-          if (mounted) {
-            setCustomer(customerData)
-          }
-        }
-      } catch (error) {
-        console.error('CustomerAuthProvider: getSession error', error)
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
-        }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setUser(session?.user ?? null)
+      setIsLoading(false)
+      
+      if (session?.user) {
+        fetchCustomerProfile(session.user.id).then(setCustomer)
       }
-    }
-    
-    getInitialSession()
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, newSession: Session | null) => {
-        console.log('Auth state changed:', event, newSession?.user?.email)
-        
-        if (!mounted) return
-        
-        setSession(newSession)
-        setUser(newSession?.user ?? null)
-        
-        if (newSession?.user) {
-          const customerData = await fetchCustomerProfile(newSession.user.id)
-          if (mounted) {
-            setCustomer(customerData)
-          }
-          
-          // Close modal and call success callback if present
-          if (showAuthModalRef.current && authModalContextRef.current?.onSuccess) {
-            authModalContextRef.current.onSuccess()
-          }
-          setShowAuthModal(false)
-          setAuthModalContext(null)
-        } else {
-          setCustomer(null)
-        }
-        
-        setIsLoading(false)
-      }
-    )
+    })
 
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      setUser(session?.user ?? null)
+      setIsLoading(false)
+      
+      if (session?.user) {
+        fetchCustomerProfile(session.user.id).then(setCustomer)
+        
+        if (showAuthModalRef.current && authModalContextRef.current?.onSuccess) {
+          authModalContextRef.current.onSuccess()
+        }
+        setShowAuthModal(false)
+        setAuthModalContext(null)
+      } else {
+        setCustomer(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [fetchCustomerProfile])
 
-  // Sign in with email/password
   const signInWithEmail = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      
-      return { error: error ? new Error(error.message) : null }
-    } catch (err) {
-      return { error: err as Error }
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return { error: error ? new Error(error.message) : null }
   }
 
-  // Sign up with email/password
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-          },
-        },
-      })
-      
-      return { error: error ? new Error(error.message) : null }
-    } catch (err) {
-      return { error: err as Error }
-    }
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    })
+    return { error: error ? new Error(error.message) : null }
   }
 
-  // Sign in with Google OAuth
   const signInWithGoogle = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      
-      return { error: error ? new Error(error.message) : null }
-    } catch (err) {
-      return { error: err as Error }
-    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    })
+    return { error: error ? new Error(error.message) : null }
   }
 
-  // Sign out
   const signOut = async () => {
     await supabase.auth.signOut()
-    setUser(null)
-    setCustomer(null)
-    setSession(null)
   }
 
-  // Reset password
   const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
-      })
-      
-      return { error: error ? new Error(error.message) : null }
-    } catch (err) {
-      return { error: err as Error }
-    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+    return { error: error ? new Error(error.message) : null }
   }
 
-  // Update customer profile
   const updateCustomerProfile = async (updates: Partial<Customer>) => {
-    if (!user) {
-      return { error: new Error('Not authenticated') }
-    }
-
-    try {
-      const { error } = await supabase
-        .from('customers')
-        .update(updates)
-        .eq('id', user.id)
-      
-      if (!error) {
-        setCustomer(prev => prev ? { ...prev, ...updates } : null)
-      }
-      
-      return { error: error ? new Error(error.message) : null }
-    } catch (err) {
-      return { error: err as Error }
-    }
+    if (!user) return { error: new Error('Not authenticated') }
+    const { error } = await supabase.from('customers').update(updates).eq('id', user.id)
+    if (!error) setCustomer(prev => prev ? { ...prev, ...updates } : null)
+    return { error: error ? new Error(error.message) : null }
   }
 
-  // Refresh customer profile
   const refreshCustomer = async () => {
     if (user) {
       const customerData = await fetchCustomerProfile(user.id)
@@ -255,7 +149,6 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Modal controls
   const openAuthModal = (context?: AuthModalContext) => {
     setAuthModalContext(context || null)
     setShowAuthModal(true)
@@ -266,27 +159,25 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     setAuthModalContext(null)
   }
 
-  const value: CustomerAuthContextType = {
-    user,
-    customer,
-    session,
-    isLoading,
-    isAuthenticated: !!user,
-    signInWithEmail,
-    signUpWithEmail,
-    signInWithGoogle,
-    signOut,
-    resetPassword,
-    updateCustomerProfile,
-    refreshCustomer,
-    showAuthModal,
-    authModalContext,
-    openAuthModal,
-    closeAuthModal,
-  }
-
   return (
-    <CustomerAuthContext.Provider value={value}>
+    <CustomerAuthContext.Provider value={{
+      user,
+      customer,
+      session,
+      isLoading,
+      isAuthenticated: !!user,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithGoogle,
+      signOut,
+      resetPassword,
+      updateCustomerProfile,
+      refreshCustomer,
+      showAuthModal,
+      authModalContext,
+      openAuthModal,
+      closeAuthModal,
+    }}>
       {children}
     </CustomerAuthContext.Provider>
   )
@@ -294,15 +185,12 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
 export function useCustomerAuth() {
   const context = useContext(CustomerAuthContext)
-  
   if (context === undefined) {
     throw new Error('useCustomerAuth must be used within a CustomerAuthProvider')
   }
-  
   return context
 }
 
-// Utility hook to require authentication
 export function useRequireAuth(context?: AuthModalContext) {
   const { isAuthenticated, isLoading, openAuthModal } = useCustomerAuth()
   
@@ -311,18 +199,9 @@ export function useRequireAuth(context?: AuthModalContext) {
       callback?.()
       return true
     }
-    
-    openAuthModal({
-      ...context,
-      onSuccess: callback,
-    })
+    openAuthModal({ ...context, onSuccess: callback })
     return false
   }, [isAuthenticated, openAuthModal, context])
   
-  return {
-    isAuthenticated,
-    isLoading,
-    requireAuth,
-  }
+  return { isAuthenticated, isLoading, requireAuth }
 }
-

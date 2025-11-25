@@ -32,9 +32,17 @@ export async function GET(request: NextRequest) {
     // Get the authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
+    console.log('[saved-artwork GET] Auth check:', { 
+      hasUser: !!user, 
+      email: user?.email,
+      authError: authError?.message,
+      // Log cookie names present (not values for security)
+      cookieNames: request.cookies.getAll().map(c => c.name)
+    })
+    
     if (authError || !user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized', details: authError?.message },
         { status: 401 }
       )
     }

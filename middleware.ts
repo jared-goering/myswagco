@@ -60,6 +60,16 @@ export async function middleware(request: NextRequest) {
   // Refresh the session - this keeps the session cookie fresh
   const { data: { session } } = await supabase.auth.getSession()
   
+  // Debug logging for auth issues
+  const pathname = request.nextUrl.pathname
+  if (pathname.startsWith('/account') || pathname.startsWith('/api/saved-artwork')) {
+    console.log('[Middleware]', pathname, {
+      hasSession: !!session,
+      userEmail: session?.user?.email,
+      cookieNames: request.cookies.getAll().map(c => c.name)
+    })
+  }
+  
   // Check if the path is an admin route (requires auth)
   if (request.nextUrl.pathname.startsWith('/admin')) {
     // Skip auth check for login page

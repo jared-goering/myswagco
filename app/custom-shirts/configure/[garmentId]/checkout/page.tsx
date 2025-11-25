@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,9 +15,23 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 export default function Checkout() {
   const params = useParams()
   const garmentId = params.garmentId as string
+  const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading: authLoading } = useCustomerAuth()
   const [garment, setGarment] = useState<Garment | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const store = useOrderStore()
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     fetchGarment()
@@ -70,6 +84,93 @@ export default function Checkout() {
             <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">4</span>
             <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Checkout</span>
           </nav>
+          
+          {/* Account Button */}
+          <div className="border-l border-charcoal-200 pl-4 ml-2">
+            {authLoading ? (
+              <div className="w-8 h-8 rounded-full bg-surface-200 animate-pulse" />
+            ) : isAuthenticated ? (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="flex items-center gap-2 p-1 rounded-full hover:bg-white/50 transition-colors"
+                >
+                  {customer?.avatar_url ? (
+                    <img 
+                      src={customer.avatar_url} 
+                      alt={customer?.name || 'Avatar'} 
+                      className="w-8 h-8 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                      {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {showDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-surface-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-surface-100">
+                      <p className="text-sm font-bold text-charcoal-700 truncate">
+                        {customer?.name || 'Welcome!'}
+                      </p>
+                      <p className="text-xs text-charcoal-400 truncate">{customer?.email || user?.email || 'Signed in'}</p>
+                    </div>
+                    
+                    <Link
+                      href="/account"
+                      onClick={() => setShowDropdown(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-charcoal-600 hover:bg-surface-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Account
+                    </Link>
+                    
+                    <Link
+                      href="/account/orders"
+                      onClick={() => setShowDropdown(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-charcoal-600 hover:bg-surface-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Order History
+                    </Link>
+                    
+                    <div className="border-t border-surface-100 mt-2 pt-2">
+                      <button
+                        onClick={() => {
+                          signOut()
+                          setShowDropdown(false)
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => openAuthModal()}
+                className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/50 transition-colors"
+                title="Sign In"
+              >
+                <div className="w-8 h-8 rounded-full bg-surface-200 flex items-center justify-center text-charcoal-500">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -178,7 +279,7 @@ function CheckoutForm({ garment }: { garment: Garment }) {
   const params = useParams()
   const garmentId = params.garmentId as string
   const store = useOrderStore()
-  const { customer, isAuthenticated } = useCustomerAuth()
+  const { customer, user, isAuthenticated } = useCustomerAuth()
   
   const [step, setStep] = useState<'info' | 'payment'>('info')
   const [submitting, setSubmitting] = useState(false)
@@ -203,7 +304,12 @@ function CheckoutForm({ garment }: { garment: Garment }) {
         store.setCustomerInfo({ organizationName: customer.organization_name })
       }
       if (customer.default_shipping_address && !store.shippingAddress.line1) {
-        store.setCustomerInfo({ shippingAddress: customer.default_shipping_address })
+        store.setCustomerInfo({ 
+          shippingAddress: {
+            ...customer.default_shipping_address,
+            line2: customer.default_shipping_address.line2 || '' // Ensure line2 is always a string
+          }
+        })
       }
     }
   }, [isAuthenticated, customer])
@@ -248,6 +354,13 @@ function CheckoutForm({ garment }: { garment: Garment }) {
           formData.append('order_id', order.id)
           formData.append('location', location)
           
+          // Include user info for auto-saving to their account
+          if (user) {
+            formData.append('user_id', user.id)
+            if (user.email) formData.append('user_email', user.email)
+            if (user.user_metadata?.full_name) formData.append('user_name', user.user_metadata.full_name)
+          }
+          
           // Include transform data (position, scale, rotation) if available
           const transform = store.artworkTransforms[location]
           if (transform) {
@@ -275,6 +388,12 @@ function CheckoutForm({ garment }: { garment: Garment }) {
             vectorFormData.append('file', svgBlob, `${file.name.replace(/\.[^/.]+$/, '')}_vectorized.svg`)
             vectorFormData.append('order_id', order.id)
             vectorFormData.append('location', location)
+            
+            // Include user info for vectorized file too
+            if (user) {
+              vectorFormData.append('user_id', user.id)
+              if (user.email) vectorFormData.append('user_email', user.email)
+            }
             
             await fetch('/api/artwork/upload', {
               method: 'POST',
