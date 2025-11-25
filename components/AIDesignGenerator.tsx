@@ -152,8 +152,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
     })
   }, [])
   
-  // Use a saved design
-  const useSavedDesign = useCallback((design: SavedDesign) => {
+  // Apply a saved design
+  const applySavedDesign = useCallback((design: SavedDesign) => {
     setGeneratedImage(design.image)
     setBackgroundRemoved(false)
     setIsEditMode(false)
@@ -552,7 +552,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
     }
   }
 
-  const useExamplePrompt = (example: string) => {
+  const applyExamplePrompt = (example: string) => {
     setPrompt(example)
     setExpandedPromptIndex(null)
   }
@@ -734,7 +734,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                         {EXAMPLE_PROMPTS.map((example, idx) => (
                           <button
                             key={idx}
-                            onClick={() => useExamplePrompt(example)}
+                            onClick={() => applyExamplePrompt(example)}
                             onMouseEnter={() => setExpandedPromptIndex(idx)}
                             onMouseLeave={() => setExpandedPromptIndex(null)}
                             disabled={isGenerating}
@@ -888,7 +888,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                             {savedDesigns.map((design) => (
                               <div key={design.id} className="relative group">
                                 <button
-                                  onClick={() => useSavedDesign(design)}
+                                  onClick={() => applySavedDesign(design)}
                                   className="w-full aspect-square rounded-lg border-2 border-surface-200 hover:border-violet-400 overflow-hidden transition-all hover:scale-105 bg-white"
                                   style={{
                                     background: 'repeating-conic-gradient(#f0f0f0 0% 25%, transparent 0% 50%) 50% / 10px 10px'
