@@ -11,6 +11,7 @@ import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Garment, MultiGarmentQuoteResponse } from '@/types'
 import { motion } from 'framer-motion'
 import SignInPromptCard from '@/components/SignInPromptCard'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -526,13 +527,10 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
           <div>
             <h4 className="text-xl font-black text-charcoal-700 mb-4">Shipping Address</h4>
             <div className="space-y-4">
-              <input
-                type="text"
-                required
-                placeholder="Street Address"
-                value={store.shippingAddress.line1}
-                onChange={(e) => store.setCustomerInfo({ shippingAddress: { ...store.shippingAddress, line1: e.target.value } })}
-                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+              <AddressAutocomplete
+                value={store.shippingAddress}
+                onChange={(address) => store.setCustomerInfo({ shippingAddress: address })}
+                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 pr-28 font-bold text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
               />
               <input
                 type="text"

@@ -2,10 +2,13 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import * as Accordion from '@radix-ui/react-accordion'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
+import { useOrderStore } from '@/lib/store/orderStore'
+import { OrderDraft } from '@/types'
 
 // Animation variants
 const fadeInUp = {
@@ -29,10 +32,18 @@ const scaleIn = {
 }
 
 export default function Home() {
+  const router = useRouter()
   const [activeExample, setActiveExample] = useState(0)
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading } = useCustomerAuth()
+  const { loadDraft } = useOrderStore()
+  
+  // Order drafts state
+  const [drafts, setDrafts] = useState<OrderDraft[]>([])
+  const [loadingDrafts, setLoadingDrafts] = useState(false)
+  const [showDraftModal, setShowDraftModal] = useState(false)
+  const [loadingDraftId, setLoadingDraftId] = useState<string | null>(null)
 
   // Handle OAuth redirect - if we receive a code parameter, redirect to auth callback
   useEffect(() => {
@@ -50,6 +61,75 @@ export default function Home() {
       window.location.href = `/auth/callback?code=${code}&next=${encodeURIComponent(redirectPath)}`
     }
   }, [])
+
+  // Fetch order drafts when authenticated
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      fetchDrafts()
+    }
+  }, [isAuthenticated, isLoading])
+
+  async function fetchDrafts() {
+    setLoadingDrafts(true)
+    try {
+      const response = await fetch('/api/order-drafts')
+      if (response.ok) {
+        const data = await response.json()
+        setDrafts(data)
+      }
+    } catch (error) {
+      console.error('Error fetching drafts:', error)
+    } finally {
+      setLoadingDrafts(false)
+    }
+  }
+
+  function getRedirectPath(draft: OrderDraft): string {
+    // Determine where to redirect based on draft state
+    if (draft.garment_id && draft.selected_colors.length > 0 && Object.keys(draft.color_size_quantities).length > 0) {
+      // Has garment, colors, and quantities - go to artwork
+      return `/custom-shirts/configure/${draft.garment_id}/artwork`
+    } else if (draft.garment_id && draft.selected_colors.length > 0) {
+      // Has garment and colors - go to colors/quantities page
+      return `/custom-shirts/configure/colors`
+    } else if (draft.garment_id) {
+      // Has garment only - go to garment config
+      return `/custom-shirts/configure/${draft.garment_id}`
+    } else if (draft.selected_garments && Object.keys(draft.selected_garments).length > 0) {
+      // Multi-garment selection - go to artwork
+      return `/custom-shirts/configure/artwork`
+    }
+    // Default: start from beginning
+    return '/custom-shirts/configure'
+  }
+
+  async function handleResumeDraft(draft: OrderDraft) {
+    setLoadingDraftId(draft.id)
+    try {
+      // Load draft into order store
+      loadDraft(draft)
+      
+      // Close modal if open
+      setShowDraftModal(false)
+      
+      // Redirect to appropriate step
+      const path = getRedirectPath(draft)
+      router.push(path)
+    } catch (error) {
+      console.error('Error loading draft:', error)
+      setLoadingDraftId(null)
+    }
+  }
+
+  function handleResumeClick() {
+    if (drafts.length === 1) {
+      // Single draft - load directly
+      handleResumeDraft(drafts[0])
+    } else {
+      // Multiple drafts - show modal
+      setShowDraftModal(true)
+    }
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -252,6 +332,20 @@ export default function Home() {
               >
                 Start Your Order
               </Link>
+              
+              {/* Resume Order Button - only show if authenticated with drafts */}
+              {isAuthenticated && drafts.length > 0 && !loadingDrafts && (
+                <button
+                  onClick={handleResumeClick}
+                  className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur-sm border-2 border-white/40 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/20 hover:border-white/60 transition-all duration-200"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Resume Order {drafts.length > 1 && `(${drafts.length})`}
+                </button>
+              )}
+              
               <div className="inline-flex items-center justify-center px-6 py-3.5 border-2 border-white/40 text-white rounded-full font-medium text-base">
                 Minimum 24 pieces
               </div>
@@ -1158,6 +1252,155 @@ export default function Home() {
         </div>
         </div>
       </footer>
+
+      {/* Draft Selection Modal */}
+      <AnimatePresence>
+        {showDraftModal && drafts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm"
+            onClick={() => setShowDraftModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Decorative gradient header */}
+              <div className="h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-fuchsia-500" />
+              
+              {/* Close button */}
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-surface-100 transition-colors z-10"
+              >
+                <svg className="w-5 h-5 text-charcoal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Modal Header */}
+              <div className="p-6 border-b border-surface-200">
+                <h2 className="text-2xl font-black text-charcoal-700 tracking-tight">
+                  Resume Your Order
+                </h2>
+                <p className="text-charcoal-500 mt-1">
+                  Select a saved draft to continue where you left off
+                </p>
+              </div>
+
+              {/* Drafts List */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-3">
+                  {drafts.map((draft) => {
+                    const isLoading = loadingDraftId === draft.id
+                    const totalQuantity = Object.values(draft.color_size_quantities).reduce((total, sizeQty) => {
+                      return total + Object.values(sizeQty).reduce((sum, qty) => sum + (qty || 0), 0)
+                    }, 0)
+                    
+                    return (
+                      <button
+                        key={draft.id}
+                        onClick={() => handleResumeDraft(draft)}
+                        disabled={isLoading}
+                        className="w-full text-left p-4 rounded-xl border-2 border-surface-200 hover:border-primary-300 hover:bg-primary-50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-start gap-4">
+                          {/* Thumbnail */}
+                          {draft.garment?.thumbnail_url ? (
+                            <div className="w-20 h-20 flex-shrink-0 bg-surface-100 rounded-lg overflow-hidden">
+                              <img 
+                                src={draft.garment.thumbnail_url} 
+                                alt={draft.garment.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 flex-shrink-0 bg-gradient-to-br from-violet-100 to-purple-100 rounded-lg flex items-center justify-center">
+                              <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                              </svg>
+                            </div>
+                          )}
+
+                          {/* Draft Info */}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-charcoal-700 mb-1 group-hover:text-primary-600 transition-colors">
+                              {draft.name || draft.garment?.name || 'Order Draft'}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-charcoal-500">
+                              {draft.garment && (
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                  </svg>
+                                  {draft.garment.brand} {draft.garment.name}
+                                </span>
+                              )}
+                              {draft.selected_colors.length > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                  </svg>
+                                  {draft.selected_colors.join(', ')}
+                                </span>
+                              )}
+                              {totalQuantity > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                  </svg>
+                                  {totalQuantity} items
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-charcoal-400 mt-2">
+                              Last updated {new Date(draft.updated_at).toLocaleDateString()}
+                            </p>
+                          </div>
+
+                          {/* Loading or Arrow */}
+                          <div className="flex-shrink-0 self-center">
+                            {isLoading ? (
+                              <svg className="w-6 h-6 text-primary-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-6 h-6 text-charcoal-300 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-surface-200 bg-surface-50">
+                <p className="text-sm text-charcoal-500 text-center">
+                  Want to start fresh?{' '}
+                  <Link 
+                    href="/custom-shirts/configure"
+                    onClick={() => setShowDraftModal(false)}
+                    className="font-bold text-primary-600 hover:text-primary-700 transition-colors"
+                  >
+                    Create a new order
+                  </Link>
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   )
 }

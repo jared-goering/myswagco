@@ -73,6 +73,9 @@ STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
 # Email (Optional - for production)
 RESEND_API_KEY=re_your-key
 
+# Google Places API (Optional - for smart address autocomplete)
+NEXT_PUBLIC_GOOGLE_PLACES_API_KEY=your-google-places-api-key
+
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -99,7 +102,24 @@ In your Supabase dashboard:
 2. Click "Add user"
 3. Enter email and password for your admin account
 
-### 6. Run Development Server
+### 6. Set Up Google Places API (Optional - Smart Address Fill)
+
+The checkout page includes a smart address autocomplete feature that auto-fills shipping address fields. To enable it:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable the **Places API** (Search: "Places API" → Enable)
+4. Go to **APIs & Services** → **Credentials**
+5. Create an **API Key**
+6. **Important**: Restrict the key for security:
+   - Application restrictions: HTTP referrers
+   - Add your domains: `localhost:*`, `your-production-domain.com/*`
+   - API restrictions: Places API only
+7. Copy the API key to your `.env.local` as `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY`
+
+> **Note**: The checkout form works without this key - users can manually type addresses. The smart fill feature is an enhancement for better UX.
+
+### 7. Run Development Server
 
 ```bash
 npm run dev
