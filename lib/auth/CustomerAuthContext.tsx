@@ -30,6 +30,7 @@ export interface AuthModalContext {
   feature?: 'ai_generator' | 'save_artwork' | 'view_orders' | 'checkout'
   onSuccess?: () => void
   redirectTo?: string
+  initialMode?: 'login' | 'signup' | 'forgot'
 }
 
 const CustomerAuthContext = createContext<CustomerAuthContextType | undefined>(undefined)
@@ -130,8 +131,19 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signInWithGoogle = async () => {
+    // Get current page path to redirect back after OAuth
+    const currentPath = window.location.pathname + window.location.search
+    
+    // Store in sessionStorage as backup in case redirect URL isn't configured in Supabase
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('auth_redirect_path', currentPath)
+    }
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(currentPath)}`,
+      },
     })
     return { error: error ? new Error(error.message) : null }
   }

@@ -9,6 +9,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { useOrderStore } from '@/lib/store/orderStore'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Garment } from '@/types'
+import SignInPromptCard from '@/components/SignInPromptCard'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -25,6 +26,13 @@ export default function Checkout() {
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitialized = useRef(false)
   const store = useOrderStore()
+
+  // Ensure garmentId is set in store (for draft saving)
+  useEffect(() => {
+    if (garmentId && garmentId !== store.garmentId) {
+      store.setGarmentId(garmentId)
+    }
+  }, [garmentId, store.garmentId, store])
 
   // Debounced save draft function
   const debouncedSaveDraft = useCallback(async () => {
@@ -242,6 +250,12 @@ export default function Checkout() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2">
+            {/* Sign In Prompt for non-authenticated users */}
+            {!isAuthenticated && (
+              <SignInPromptCard 
+                onOpenAuthModal={(initialMode) => openAuthModal({ feature: 'checkout', initialMode })}
+              />
+            )}
             <CheckoutForm garment={garment} />
           </div>
 

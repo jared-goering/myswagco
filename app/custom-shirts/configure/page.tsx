@@ -306,9 +306,18 @@ export default function GarmentSelection() {
               priority
             />
           </Link>
-          <nav className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">1</span>
-            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Choose Styles</span>
+          <nav className="flex items-center gap-3">
+            {/* Step indicators */}
+            <div className="flex items-center gap-1.5">
+              <span className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center text-sm font-black">1</span>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <span className="w-6 h-6 bg-surface-300 text-charcoal-400 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <span className="w-6 h-6 bg-surface-300 text-charcoal-400 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <span className="w-6 h-6 bg-surface-300 text-charcoal-400 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+            </div>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap ml-1">Choose Styles</span>
             
             {/* Selected count badge */}
             <AnimatePresence>
@@ -317,7 +326,7 @@ export default function GarmentSelection() {
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0, opacity: 0 }}
-                  className="ml-2 flex items-center gap-1.5 px-3 py-1 bg-charcoal-700 text-white rounded-full"
+                  className="ml-1 flex items-center gap-1.5 px-3 py-1 bg-charcoal-700 text-white rounded-full"
                 >
                   <span className="text-xs font-black">{selectedCount} selected</span>
                 </motion.div>

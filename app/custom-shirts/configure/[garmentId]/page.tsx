@@ -211,8 +211,16 @@ export default function ConfigurationWizard() {
     }
   }
 
-  function handleContinueToArtwork() {
+  async function handleContinueToArtwork() {
     if (isStepValid(1) && isStepValid(2) && isStepValid(3)) {
+      // Save draft immediately before navigating (don't wait for debounce)
+      if (isAuthenticated) {
+        // Clear any pending debounced save
+        if (saveStatusTimeoutRef.current) {
+          clearTimeout(saveStatusTimeoutRef.current)
+        }
+        await saveDraft()
+      }
       router.push(`/custom-shirts/configure/${garmentId}/artwork`)
     }
   }

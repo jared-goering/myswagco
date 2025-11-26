@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
       name: draftName,
       garment_id: draftData.garment_id || null,
       selected_colors: draftData.selected_colors || [],
+      selected_garments: draftData.selected_garments || {}, // Multi-garment selection
       color_size_quantities: draftData.color_size_quantities || {},
       print_config: draftData.print_config || { locations: {} },
       artwork_file_records: draftData.artwork_file_records || {},
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
     let draft
     
     if (draft_id) {
-      // Update existing draft
+      // Try to update existing draft
       const { data, error } = await supabaseAdmin
         .from('order_drafts')
         .update(dbDraftData)
@@ -178,21 +179,37 @@ export async function POST(request: NextRequest) {
         .single()
       
       if (error) {
-        console.error('Error updating draft:', error)
-        return NextResponse.json(
-          { error: 'Failed to update draft' },
-          { status: 500 }
-        )
+        // If the draft doesn't exist (PGRST116 = no rows found), create a new one instead
+        if (error.code === 'PGRST116') {
+          console.log(`Draft ${draft_id} not found for user ${user.id}, creating new draft`)
+          const { data: newData, error: createError } = await supabaseAdmin
+            .from('order_drafts')
+            .insert(dbDraftData)
+            .select(`
+              *,
+              garment:garments(id, name, brand, thumbnail_url, available_colors, color_images)
+            `)
+            .single()
+          
+          if (createError) {
+            console.error('Error creating draft after failed update:', createError)
+            return NextResponse.json(
+              { error: 'Failed to create draft' },
+              { status: 500 }
+            )
+          }
+          
+          draft = newData
+        } else {
+          console.error('Error updating draft:', error)
+          return NextResponse.json(
+            { error: 'Failed to update draft' },
+            { status: 500 }
+          )
+        }
+      } else {
+        draft = data
       }
-      
-      if (!data) {
-        return NextResponse.json(
-          { error: 'Draft not found' },
-          { status: 404 }
-        )
-      }
-      
-      draft = data
     } else {
       // Create new draft
       const { data, error } = await supabaseAdmin

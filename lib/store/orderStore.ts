@@ -391,8 +391,10 @@ export const useOrderStore = create<OrderState>()(
           
           const draft: OrderDraft = await response.json()
           
-          // Update draftId if this was a new draft
-          if (!state.draftId && draft.id) {
+          // Always update draftId to match what the server returns
+          // This handles both new drafts and cases where a stale draftId
+          // caused the server to create a new draft
+          if (draft.id && draft.id !== state.draftId) {
             set({ draftId: draft.id })
           }
           

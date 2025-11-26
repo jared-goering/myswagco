@@ -40,6 +40,7 @@ export default function AccountPage() {
       const response = await fetch('/api/order-drafts')
       if (response.ok) {
         const data = await response.json()
+        console.log('[fetchDrafts] Drafts from API:', data)
         setDrafts(data)
       }
     } catch (error) {
@@ -66,11 +67,26 @@ export default function AccountPage() {
   }
 
   function handleContinueDraft(draft: OrderDraft) {
+    console.log('[handleContinueDraft] Draft data:', {
+      id: draft.id,
+      garment_id: draft.garment_id,
+      selected_garments: draft.selected_garments,
+      selected_colors: draft.selected_colors,
+      color_size_quantities: draft.color_size_quantities,
+      print_config: draft.print_config,
+      artwork_file_records: draft.artwork_file_records,
+    })
+    
     loadDraft(draft)
     
+    // Check if this is a multi-garment draft
+    const hasMultiGarmentSelection = draft.selected_garments && 
+      Object.keys(draft.selected_garments).length > 0
+    
     // Determine where the user left off based on draft state
-    if (!draft.garment_id) {
+    if (!draft.garment_id && !hasMultiGarmentSelection) {
       // No garment selected - go to garment selection
+      console.log('[handleContinueDraft] No garment selection, redirecting to configure')
       router.push('/custom-shirts/configure')
       return
     }
@@ -85,6 +101,43 @@ export default function AccountPage() {
       Object.values(draft.artwork_file_records).some(record => record !== null)
     const hasTextDescription = draft.text_description && draft.text_description.trim().length > 0
     
+    // For multi-garment orders, use the non-garment-specific routes
+    if (hasMultiGarmentSelection) {
+      if (hasCheckoutInfo && (hasArtwork || hasTextDescription)) {
+        console.log('[handleContinueDraft] Multi-garment: resuming at checkout')
+        router.push('/custom-shirts/configure/checkout')
+        return
+      }
+      
+      if (hasArtwork || hasTextDescription) {
+        console.log('[handleContinueDraft] Multi-garment: resuming at artwork')
+        router.push('/custom-shirts/configure/artwork')
+        return
+      }
+      
+      // Check if any garment has colors and quantities configured
+      const hasGarmentConfig = Object.values(draft.selected_garments!).some(selection => 
+        selection.selectedColors && selection.selectedColors.length > 0 &&
+        Object.values(selection.colorSizeQuantities).some(sizeQty =>
+          Object.values(sizeQty).some(qty => (qty as number) > 0)
+        )
+      )
+      const hasPrintLocations = draft.print_config?.locations && 
+        Object.values(draft.print_config.locations).some(loc => loc?.enabled)
+      
+      if (hasGarmentConfig && hasPrintLocations) {
+        console.log('[handleContinueDraft] Multi-garment: configuration complete, going to artwork')
+        router.push('/custom-shirts/configure/artwork')
+        return
+      }
+      
+      // Has garments selected but not fully configured - go to colors page
+      console.log('[handleContinueDraft] Multi-garment: resuming at colors')
+      router.push('/custom-shirts/configure/colors')
+      return
+    }
+    
+    // Legacy single-garment flow
     if (hasCheckoutInfo && (hasArtwork || hasTextDescription)) {
       // User was on checkout page
       router.push(`/custom-shirts/configure/${draft.garment_id}/checkout`)
@@ -136,6 +189,20 @@ export default function AccountPage() {
 
   function getTotalQuantity(draft: OrderDraft): number {
     let total = 0
+    
+    // Check multi-garment selection first
+    if (draft.selected_garments && Object.keys(draft.selected_garments).length > 0) {
+      Object.values(draft.selected_garments).forEach(garmentSelection => {
+        Object.values(garmentSelection.colorSizeQuantities).forEach(sizeQty => {
+          Object.values(sizeQty).forEach(qty => {
+            total += (qty as number) || 0
+          })
+        })
+      })
+      return total
+    }
+    
+    // Fall back to legacy single-garment quantities
     if (draft.color_size_quantities) {
       Object.values(draft.color_size_quantities).forEach(sizeQty => {
         Object.values(sizeQty).forEach(qty => {
@@ -144,6 +211,27 @@ export default function AccountPage() {
       })
     }
     return total
+  }
+  
+  function getTotalColors(draft: OrderDraft): number {
+    // Check multi-garment selection first
+    if (draft.selected_garments && Object.keys(draft.selected_garments).length > 0) {
+      const allColors = new Set<string>()
+      Object.values(draft.selected_garments).forEach(garmentSelection => {
+        garmentSelection.selectedColors?.forEach(color => allColors.add(color))
+      })
+      return allColors.size
+    }
+    
+    // Fall back to legacy
+    return draft.selected_colors?.length || 0
+  }
+  
+  function getGarmentCount(draft: OrderDraft): number {
+    if (draft.selected_garments && Object.keys(draft.selected_garments).length > 0) {
+      return Object.keys(draft.selected_garments).length
+    }
+    return draft.garment_id ? 1 : 0
   }
 
   if (isLoading) {
@@ -229,7 +317,8 @@ export default function AccountPage() {
               {drafts.map((draft) => {
                 const garment = draft.garment
                 const totalQty = getTotalQuantity(draft)
-                const colorCount = draft.selected_colors?.length || 0
+                const colorCount = getTotalColors(draft)
+                const garmentCount = getGarmentCount(draft)
                 
                 return (
                   <div
@@ -275,6 +364,14 @@ export default function AccountPage() {
                         )}
                         
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          {garmentCount > 1 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 rounded-full text-primary-700 font-medium">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                              {garmentCount} style{garmentCount > 1 ? 's' : ''}
+                            </span>
+                          )}
                           {colorCount > 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-100 rounded-full text-charcoal-600 font-medium">
                               <span className="w-2 h-2 rounded-full bg-gradient-to-br from-pink-400 to-violet-400"></span>

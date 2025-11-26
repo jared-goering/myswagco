@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     // Redirect after a brief moment to ensure storage is written
     setTimeout(function() {
       window.location.href = '${next}';
-    }, 100);
+    }, 200);
   </script>
 </head>
 <body>

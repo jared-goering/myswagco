@@ -23,7 +23,7 @@ export default function ArtworkUpload() {
   const garmentId = params.garmentId as string
   const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading: authLoading } = useCustomerAuth()
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription, saveDraft, draftId } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription, saveDraft, draftId, setGarmentId, garmentId: storeGarmentId } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
@@ -107,6 +107,13 @@ export default function ArtworkUpload() {
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
     .map(([location]) => location as PrintLocation)
+
+  // Ensure garmentId is set in store (for draft saving)
+  useEffect(() => {
+    if (garmentId && garmentId !== storeGarmentId) {
+      setGarmentId(garmentId)
+    }
+  }, [garmentId, storeGarmentId, setGarmentId])
 
   // Fetch garment data and app config on mount
   useEffect(() => {
@@ -689,8 +696,16 @@ export default function ArtworkUpload() {
     return 'Continue to Checkout →'
   }
 
-  function handleContinue() {
+  async function handleContinue() {
     if (canContinue()) {
+      // Save draft immediately before navigating (don't wait for debounce)
+      if (isAuthenticated) {
+        // Clear any pending debounced save
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+        await saveDraft()
+      }
       router.push(`/custom-shirts/configure/${garmentId}/checkout`)
     }
   }

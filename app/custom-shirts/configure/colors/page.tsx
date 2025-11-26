@@ -80,6 +80,7 @@ export default function ColorsQuantitiesPage() {
   const [garments, setGarments] = useState<Garment[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedGarment, setExpandedGarment] = useState<string | null>(null)
+  const [collapsedColorSections, setCollapsedColorSections] = useState<Set<string>>(new Set())
   const [showDropdown, setShowDropdown] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [justSelectedColor, setJustSelectedColor] = useState<string | null>(null)
@@ -96,12 +97,14 @@ export default function ColorsQuantitiesPage() {
     }
   }, [selectedIds.length, loading, router])
 
-  // Set first garment as expanded by default
+  // Set first garment as expanded by default (only on initial load)
+  const hasSetInitialExpand = useRef(false)
   useEffect(() => {
-    if (selectedIds.length > 0 && !expandedGarment) {
+    if (selectedIds.length > 0 && !hasSetInitialExpand.current) {
       setExpandedGarment(selectedIds[0])
+      hasSetInitialExpand.current = true
     }
-  }, [selectedIds, expandedGarment])
+  }, [selectedIds])
 
   // Debounced save draft function
   const debouncedSaveDraft = useDebouncedCallback(
@@ -251,8 +254,12 @@ export default function ColorsQuantitiesPage() {
     return garments.filter(g => selectedIds.includes(g.id))
   }, [garments, selectedIds])
 
-  function handleContinue() {
+  async function handleContinue() {
     if (canContinue) {
+      // Save draft immediately before navigating (don't wait for debounce)
+      if (isAuthenticated) {
+        await saveDraft()
+      }
       router.push('/custom-shirts/configure/artwork')
     }
   }
@@ -539,8 +546,47 @@ export default function ColorsQuantitiesPage() {
                           <div className="pt-6 mt-4 border-t border-surface-200">
                             {/* Color Selection */}
                             <div className="mb-6 overflow-visible">
-                              <h4 className="text-lg font-black text-charcoal-700 mb-4">Select colors</h4>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 overflow-visible p-1">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-lg font-black text-charcoal-700">Select colors</h4>
+                                <button
+                                  onClick={() => {
+                                    const newCollapsed = new Set(collapsedColorSections)
+                                    if (newCollapsed.has(garment.id)) {
+                                      newCollapsed.delete(garment.id)
+                                    } else {
+                                      newCollapsed.add(garment.id)
+                                    }
+                                    setCollapsedColorSections(newCollapsed)
+                                  }}
+                                  className="text-sm font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1.5 transition-colors"
+                                >
+                                  {collapsedColorSections.has(garment.id) ? (
+                                    <>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                      Show colors
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                      </svg>
+                                      Hide colors
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <AnimatePresence>
+                                {!collapsedColorSections.has(garment.id) && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 overflow-visible p-1">
                                 {garment.available_colors.map((color, colorIndex) => {
                                   const isSelected = garmentColors.includes(color)
                                   const imageUrl = garment.color_images?.[color] || garment.thumbnail_url
@@ -613,7 +659,10 @@ export default function ColorsQuantitiesPage() {
                                     </motion.button>
                                   )
                                 })}
-                              </div>
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </div>
 
                             {/* Size/Quantity Inputs per Color */}

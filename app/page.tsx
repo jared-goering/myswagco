@@ -34,6 +34,23 @@ export default function Home() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading } = useCustomerAuth()
 
+  // Handle OAuth redirect - if we receive a code parameter, redirect to auth callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    
+    if (code) {
+      // OAuth code landed on home page - redirect to callback handler
+      console.log('[Home] OAuth code detected, redirecting to callback handler')
+      
+      // Get the original path from sessionStorage
+      const redirectPath = sessionStorage.getItem('auth_redirect_path') || '/'
+      sessionStorage.removeItem('auth_redirect_path')
+      
+      window.location.href = `/auth/callback?code=${code}&next=${encodeURIComponent(redirectPath)}`
+    }
+  }, [])
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

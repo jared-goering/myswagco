@@ -70,7 +70,7 @@ export default function CustomerAuthModal() {
   // Reset form when modal opens/closes
   useEffect(() => {
     if (showAuthModal) {
-      setMode('login')
+      setMode(authModalContext?.initialMode || 'login')
       setEmail('')
       setPassword('')
       setName('')
@@ -79,7 +79,7 @@ export default function CustomerAuthModal() {
       // Focus email input
       setTimeout(() => emailInputRef.current?.focus(), 100)
     }
-  }, [showAuthModal])
+  }, [showAuthModal, authModalContext])
 
   // Handle escape key
   useEffect(() => {

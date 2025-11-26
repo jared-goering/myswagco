@@ -23,6 +23,12 @@ interface DesignEditorProps {
   onVectorize?: (artworkFileId: string) => Promise<void>
   maxInkColors?: number
   detectedColors?: number
+  // Location picker props
+  enabledLocations?: PrintLocation[]
+  activeLocation?: PrintLocation
+  onLocationChange?: (location: PrintLocation) => void
+  hasArtworkForLocation?: (location: PrintLocation) => boolean
+  getLocationLabel?: (location: PrintLocation) => string
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -107,7 +113,12 @@ export default function DesignEditor({
   onColorChange,
   onVectorize,
   maxInkColors = 4,
-  detectedColors = 0
+  detectedColors = 0,
+  enabledLocations = [],
+  activeLocation,
+  onLocationChange,
+  hasArtworkForLocation,
+  getLocationLabel
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
@@ -499,46 +510,134 @@ export default function DesignEditor({
 
   if (!image || !transform) {
     return (
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
-        <Stage width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
-          <Layer>
-            {/* Shirt SVG background */}
-            {shirtImage && (
-              <KonvaImage
-                image={shirtImage}
-                x={SHIRT_PADDING}
-                y={SHIRT_PADDING}
-                width={SHIRT_WIDTH}
-                height={SHIRT_HEIGHT}
-                listening={false}
-                opacity={0.6}
+      <div className="space-y-4">
+        {/* Compact Preview Controls - Color Selector (even when no artwork) */}
+        {selectedColors.length > 1 && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-charcoal-500 font-semibold text-sm">Color:</span>
+            <div className="flex gap-1">
+              {selectedColors.map((color) => {
+                const isActive = color === activeColor
+                const colorImageUrl = garment?.color_images?.[color]
+                
+                return (
+                  <button
+                    key={color}
+                    onClick={() => onColorChange(color)}
+                    className={`
+                      flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all
+                      ${isActive
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200 border border-surface-300'
+                      }
+                    `}
+                  >
+                    {colorImageUrl && (
+                      <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0">
+                        <img src={colorImageUrl} alt={color} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <span>{color}</span>
+                    {isActive && <span className="ml-0.5">✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Location Toggle - Premium Segmented Control (empty state) */}
+        {enabledLocations.length > 1 && onLocationChange && getLocationLabel && (
+          <div className="mb-4">
+            <div className="relative inline-flex bg-surface-100 rounded-xl p-1 shadow-inner">
+              <motion.div
+                className="absolute top-1 bottom-1 bg-white rounded-lg shadow-md"
+                initial={false}
+                animate={{
+                  x: enabledLocations.indexOf(activeLocation || enabledLocations[0]) * 120,
+                  width: 120,
+                }}
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
               />
-            )}
-            
-            <PrintAreaGuides printArea={printArea} showGrid={false} animated={false} />
-          </Layer>
-        </Stage>
-        
-        {/* Upload message overlay */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center p-8 bg-white/95 backdrop-blur-sm rounded-lg border-2 border-gray-200 shadow-xl"
-          >
-            <motion.svg 
-              className="w-20 h-20 text-gray-300 mx-auto mb-4"
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              {enabledLocations.map((loc) => {
+                const isActive = activeLocation === loc
+                const hasArtwork = hasArtworkForLocation?.(loc)
+                const isFront = loc === 'front' || loc === 'left_chest' || loc === 'right_chest'
+                
+                return (
+                  <button
+                    key={loc}
+                    onClick={() => onLocationChange(loc)}
+                    className={`
+                      relative z-10 flex items-center justify-center gap-2 w-[120px] py-2.5 rounded-lg text-sm font-bold transition-colors duration-200
+                      ${isActive ? 'text-charcoal-800' : 'text-charcoal-500 hover:text-charcoal-700'}
+                    `}
+                  >
+                    <svg className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {isFront ? (
+                        <>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 4l3 2h6l3-2 3 3-2 3v10a1 1 0 01-1 1H6a1 1 0 01-1-1V10L3 7l3-3z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 6a3 3 0 006 0" />
+                        </>
+                      ) : (
+                        <>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 4l3 2h6l3-2 3 3-2 3v10a1 1 0 01-1 1H6a1 1 0 01-1-1V10L3 7l3-3z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6h4v2h-4z" />
+                        </>
+                      )}
+                    </svg>
+                    <span>{getLocationLabel(loc)}</span>
+                    {hasArtwork && (
+                      <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-emerald-400'}`} />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
+          <Stage width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
+            <Layer>
+              {/* Shirt SVG background */}
+              {shirtImage && (
+                <KonvaImage
+                  image={shirtImage}
+                  x={SHIRT_PADDING}
+                  y={SHIRT_PADDING}
+                  width={SHIRT_WIDTH}
+                  height={SHIRT_HEIGHT}
+                  listening={false}
+                  opacity={0.6}
+                />
+              )}
+              
+              <PrintAreaGuides printArea={printArea} showGrid={false} animated={false} />
+            </Layer>
+          </Stage>
+          
+          {/* Upload message overlay */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center p-8 bg-white/95 backdrop-blur-sm rounded-lg border-2 border-gray-200 shadow-xl"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </motion.svg>
-            <p className="text-gray-700 font-semibold text-lg mb-2">Upload artwork to preview</p>
-            <p className="text-gray-500 text-sm">Your design will appear here for positioning</p>
-          </motion.div>
+              <motion.svg 
+                className="w-20 h-20 text-gray-300 mx-auto mb-4"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+                animate={{ y: [0, -8, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </motion.svg>
+              <p className="text-gray-700 font-semibold text-lg mb-2">Upload artwork to preview</p>
+              <p className="text-gray-500 text-sm">Your design will appear here for positioning</p>
+            </motion.div>
+          </div>
         </div>
       </div>
     )
@@ -549,7 +648,123 @@ export default function DesignEditor({
 
   return (
     <div className="space-y-4">
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
+      {/* Color Selector - Compact */}
+      {selectedColors.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-charcoal-500 font-semibold text-sm">Color:</span>
+          <div className="flex gap-1">
+            {selectedColors.map((color) => {
+              const isActive = color === activeColor
+              const colorImageUrl = garment?.color_images?.[color]
+              
+              return (
+                <button
+                  key={color}
+                  onClick={() => onColorChange(color)}
+                  className={`
+                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all
+                    ${isActive
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200 border border-surface-300'
+                    }
+                  `}
+                >
+                  {colorImageUrl && (
+                    <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0">
+                      <img src={colorImageUrl} alt={color} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <span>{color}</span>
+                  {isActive && <span className="ml-0.5">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Location Toggle - Premium Segmented Control */}
+      {enabledLocations.length > 1 && onLocationChange && getLocationLabel && (
+        <div className="mb-4">
+          <div className="relative inline-flex bg-surface-100 rounded-xl p-1 shadow-inner">
+            {/* Sliding Background Indicator */}
+            <motion.div
+              className="absolute top-1 bottom-1 bg-white rounded-lg shadow-md"
+              initial={false}
+              animate={{
+                x: enabledLocations.indexOf(activeLocation || enabledLocations[0]) * (typeof window !== 'undefined' ? 120 : 120),
+                width: 120,
+              }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+            />
+            
+            {enabledLocations.map((loc) => {
+              const isActive = activeLocation === loc
+              const hasArtwork = hasArtworkForLocation?.(loc)
+              const isFront = loc === 'front' || loc === 'left_chest' || loc === 'right_chest'
+              
+              return (
+                <button
+                  key={loc}
+                  onClick={() => onLocationChange(loc)}
+                  className={`
+                    relative z-10 flex items-center justify-center gap-2 w-[120px] py-2.5 rounded-lg text-sm font-bold transition-colors duration-200
+                    ${isActive
+                      ? 'text-charcoal-800'
+                      : 'text-charcoal-500 hover:text-charcoal-700'
+                    }
+                  `}
+                >
+                  {/* Location Icon - T-shirt front/back */}
+                  <svg 
+                    className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    {isFront ? (
+                      /* T-shirt front with neckline */
+                      <>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 4l3 2h6l3-2 3 3-2 3v10a1 1 0 01-1 1H6a1 1 0 01-1-1V10L3 7l3-3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 6a3 3 0 006 0" />
+                      </>
+                    ) : (
+                      /* T-shirt back with tag */
+                      <>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 4l3 2h6l3-2 3 3-2 3v10a1 1 0 01-1 1H6a1 1 0 01-1-1V10L3 7l3-3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6h4v2h-4z" />
+                      </>
+                    )}
+                  </svg>
+                  
+                  <span>{getLocationLabel(loc)}</span>
+                  
+                  {/* Artwork Status Indicator */}
+                  {hasArtwork && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className={`
+                        w-2 h-2 rounded-full
+                        ${isActive ? 'bg-emerald-500' : 'bg-emerald-400'}
+                      `}
+                    />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Canvas Section with Enhanced Styling */}
+      <motion.div 
+        key={activeColor}
+        initial={{ opacity: 0.7 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="relative bg-gradient-to-br from-surface-50 to-surface-100 rounded-bento-lg border-2 border-surface-200 overflow-hidden shadow-soft hover:shadow-bento transition-shadow duration-300"
+      >
         <Stage 
           ref={stageRef}
           width={CANVAS_WIDTH} 
@@ -626,59 +841,118 @@ export default function DesignEditor({
           </Layer>
         </Stage>
 
-        {/* Dimension display */}
+        {/* Dimension display - Enhanced */}
         <AnimatePresence>
           {dims && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
               className={`
-                absolute bottom-4 left-4 z-10 px-4 py-3 rounded-lg text-sm font-medium shadow-lg backdrop-blur-md
+                absolute bottom-4 left-4 z-10 rounded-bento-lg shadow-bento backdrop-blur-md border-2 overflow-hidden
                 ${isOversize 
-                  ? 'bg-error-100/90 border-2 border-error-300 text-error-900' 
-                  : 'bg-white/90 border-2 border-gray-200 text-gray-900'
+                  ? 'bg-error-50/95 border-error-400' 
+                  : 'bg-white/95 border-surface-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                {isOversize && (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                )}
-                <div>
-                  <div className="font-semibold">Design Size:</div>
-                  <div className="text-lg">{dims.width.toFixed(1)}" × {dims.height.toFixed(1)}"</div>
-                  <div className="text-xs opacity-75 mt-0.5">Max: {maxDimensions.width}" × {maxDimensions.height}"</div>
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  {isOversize ? (
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-error-500 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      </svg>
+                    </div>
+                  )}
+                  <div>
+                    <div className={`text-xs font-bold uppercase tracking-wide mb-1 ${isOversize ? 'text-error-700' : 'text-charcoal-500'}`}>
+                      Design Size
+                    </div>
+                    <div className={`text-xl font-black ${isOversize ? 'text-error-900' : 'text-charcoal-800'}`}>
+                      {dims.width.toFixed(1)}" × {dims.height.toFixed(1)}"
+                    </div>
+                    <div className={`text-xs font-medium mt-0.5 ${isOversize ? 'text-error-600' : 'text-charcoal-400'}`}>
+                      Max: {maxDimensions.width}" × {maxDimensions.height}"
+                    </div>
+                  </div>
                 </div>
               </div>
+              {isOversize && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  className="px-4 py-2 bg-error-500 text-white text-xs font-bold"
+                >
+                  ⚠️ Design exceeds maximum print area
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Keyboard shortcuts hint */}
+        {/* Keyboard shortcuts hint - Enhanced */}
         {isSelected && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="absolute top-4 right-4 px-3 py-2 bg-gray-900/80 backdrop-blur-md text-white text-xs rounded-lg shadow-lg"
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="absolute top-4 right-4 bg-charcoal-800/95 backdrop-blur-md text-white rounded-bento-lg shadow-bento border border-charcoal-600 overflow-hidden"
           >
-            <div className="font-semibold mb-1">Keyboard Shortcuts</div>
-            <div className="space-y-0.5 opacity-90">
-              <div>Arrow keys: Nudge (+ Shift for 10px)</div>
-              <div>⌘Z: Undo • ⌘⇧Z: Redo</div>
+            <div className="px-4 py-2.5 bg-charcoal-700/50 border-b border-charcoal-600">
+              <div className="font-black text-xs uppercase tracking-wide flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
+                  <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
+                </svg>
+                Keyboard Shortcuts
+              </div>
+            </div>
+            <div className="px-4 py-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-charcoal-300 font-medium">Nudge design</span>
+                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
+                  ← → ↑ ↓
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-charcoal-300 font-medium">Nudge 10px</span>
+                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
+                  Shift + Arrows
+                </kbd>
+              </div>
+              <div className="border-t border-charcoal-700 my-2"></div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-charcoal-300 font-medium">Undo</span>
+                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
+                  ⌘Z
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-charcoal-300 font-medium">Redo</span>
+                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
+                  ⌘⇧Z
+                </kbd>
+              </div>
             </div>
           </motion.div>
         )}
-      </div>
+      </motion.div>
 
-      {/* File Type Badge */}
+      {/* File Type Badge & Status - Enhanced with better spacing */}
       {artworkFileRecord && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center gap-2 mb-2 flex-wrap"
+          className="flex items-center justify-center gap-3 flex-wrap"
         >
           <TooltipHelp
             content={
@@ -690,14 +964,14 @@ export default function DesignEditor({
             }
           >
             <div className={`
-              inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold cursor-help transition-all
+              inline-flex items-center gap-2 px-4 py-2 rounded-bento text-xs font-bold cursor-help transition-all shadow-soft hover:shadow-bento hover:scale-105
               ${artworkFileRecord.is_vector
-                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300'
+                ? 'bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-800 border-2 border-emerald-300'
                 : artworkFileRecord.vectorization_status === 'completed'
-                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300'
+                ? 'bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-800 border-2 border-emerald-300'
                 : artworkFileRecord.vectorization_status === 'processing'
-                ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                : 'bg-amber-100 text-amber-700 border-2 border-amber-300 animate-pulse'
+                ? 'bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-2 border-blue-300 animate-pulse'
+                : 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800 border-2 border-amber-300'
               }
             `}>
               {artworkFileRecord.is_vector ? (
@@ -733,74 +1007,91 @@ export default function DesignEditor({
             </div>
           </TooltipHelp>
           
-          {/* Toggle between original and vectorized */}
+          {/* Toggle between original and vectorized - Enhanced */}
           {artworkFileRecord.vectorization_status === 'completed' && artworkFileRecord.vectorized_file_url && (
             <TooltipHelp content="Compare the original raster file with the vectorized version">
-              <button
+              <motion.button
                 onClick={() => setShowVectorized(!showVectorized)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-surface-100 hover:bg-surface-200 text-charcoal-700 border-2 border-surface-300 transition-all hover:scale-105"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-bento text-xs font-bold bg-white hover:bg-surface-50 text-charcoal-700 border-2 border-surface-300 hover:border-primary-300 transition-all shadow-soft hover:shadow-bento"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
                 {showVectorized ? 'Show Original' : 'Show Vectorized'}
-              </button>
+              </motion.button>
             </TooltipHelp>
           )}
           
-          {/* Color count warning */}
+          {/* Color count warning - Enhanced */}
           {detectedColors > maxInkColors && (
             <TooltipHelp content={`Your design uses ${detectedColors} colors, which exceeds the recommended ${maxInkColors} color maximum. Each additional color may increase printing costs.`}>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border-2 border-amber-300 cursor-help">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-bento text-xs font-bold bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800 border-2 border-amber-300 cursor-help shadow-soft hover:shadow-bento hover:scale-105 transition-all"
+              >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 {detectedColors} colors (max: {maxInkColors})
-              </div>
+              </motion.div>
             </TooltipHelp>
           )}
         </motion.div>
       )}
 
-      {/* Vectorize Button - Prominent CTA */}
+      {/* Vectorize Button - Enhanced Prominent CTA */}
       {artworkFileRecord && !artworkFileRecord.is_vector && artworkFileRecord.vectorization_status !== 'completed' && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="mb-4"
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="relative"
         >
-          <div className="bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-300 rounded-bento-lg p-6 shadow-bento">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-gradient-to-br from-primary-50 via-primary-100 to-primary-50 border-2 border-primary-300 rounded-bento-lg p-6 shadow-bento overflow-hidden">
+            {/* Decorative gradient orbs */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary-200 rounded-full blur-3xl opacity-30 -mr-16 -mt-16"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-violet-200 rounded-full blur-3xl opacity-20 -ml-16 -mb-16"></div>
+            
+            <div className="relative flex items-start gap-4">
+              <motion.div 
+                className="flex-shrink-0"
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-bento shadow-soft flex items-center justify-center">
+                  <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                   </svg>
                 </div>
-              </div>
+              </motion.div>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-black text-charcoal-700">Convert to Vector Format</h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-lg font-black text-charcoal-800">Convert to Vector Format</h3>
                   <TooltipHelp 
                     content="Screen printing requires vector files for the best results. Vectors are resolution-independent and produce crisp, clean prints at any size without pixelation."
                     side="right"
                   >
-                    <svg className="w-4 h-4 text-primary-600 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-4 h-4 text-primary-600 cursor-help hover:text-primary-700 transition-colors" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                   </TooltipHelp>
                 </div>
-                <p className="text-sm text-charcoal-600 font-semibold mb-4">
+                <p className="text-sm text-charcoal-600 font-medium mb-5 leading-relaxed">
                   Your PNG file will be automatically converted to vector format (SVG). This process typically takes 5-15 seconds and ensures crisp, clean prints at any size.
                 </p>
-                <button
+                <motion.button
                   onClick={handleVectorize}
                   disabled={isVectorizing}
+                  whileHover={!isVectorizing ? { scale: 1.03 } : {}}
+                  whileTap={!isVectorizing ? { scale: 0.97 } : {}}
                   className={`
-                    px-6 py-3 rounded-bento font-black text-base flex items-center gap-2 transition-all
+                    px-7 py-3.5 rounded-bento font-black text-base flex items-center gap-3 transition-all
                     ${isVectorizing
                       ? 'bg-primary-300 text-primary-700 cursor-wait'
-                      : 'bg-primary-500 text-white hover:bg-primary-600 shadow-soft hover:shadow-bento'
+                      : 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-bento hover:shadow-xl'
                     }
                   `}
                 >
@@ -818,17 +1109,36 @@ export default function DesignEditor({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                       </svg>
                       <span>Vectorize for Print</span>
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </>
                   )}
-                </button>
+                </motion.button>
               </div>
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex justify-center">
+      {/* Subtle Divider */}
+      <div className="relative h-px my-2">
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-surface-200 to-transparent"></div>
+      </div>
+
+      {/* Toolbar Section with Enhanced Presentation */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex flex-col items-center gap-3"
+      >
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-charcoal-500">
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+          </svg>
+          Design Tools
+        </div>
         <DesignToolbar
           onCenter={handleCenter}
           onFit={handleFit}
@@ -841,70 +1151,7 @@ export default function DesignEditor({
           canUndo={historyStep > 0}
           canRedo={historyStep < history.length - 1}
         />
-      </div>
-
-      {/* Color Switcher - Only show when multiple colors are selected */}
-      {selectedColors.length > 1 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-4"
-        >
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-4 shadow-soft">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-black text-charcoal-700 uppercase tracking-wide">Preview Color</h4>
-              <span className="text-xs text-charcoal-500 font-semibold">
-                {selectedColors.length} colors selected
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {selectedColors.map((color) => {
-                const isActive = color === activeColor
-                const colorImageUrl = garment?.color_images?.[color]
-                
-                return (
-                  <motion.button
-                    key={color}
-                    onClick={() => onColorChange(color)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className={`
-                      relative flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all
-                      ${isActive
-                        ? 'bg-primary-500 text-white shadow-bento ring-2 ring-primary-200'
-                        : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200 border-2 border-surface-300'
-                      }
-                    `}
-                  >
-                    {colorImageUrl && (
-                      <div className="w-6 h-6 rounded-md overflow-hidden border border-white/20 flex-shrink-0">
-                        <img
-                          src={colorImageUrl}
-                          alt={color}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    <span>{color}</span>
-                    {isActive && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="ml-1"
-                      >
-                        ✓
-                      </motion.span>
-                    )}
-                  </motion.button>
-                )
-              })}
-            </div>
-            <p className="text-xs text-charcoal-500 mt-3 font-semibold">
-              Switch between colors to preview your design on each garment color
-            </p>
-          </div>
-        </motion.div>
-      )}
+      </motion.div>
     </div>
   )
 }

@@ -109,6 +109,52 @@ export async function POST(request: NextRequest) {
         performed_by: 'system'
       })
     
+    // If user is authenticated, update their customer profile with checkout info for faster future checkouts
+    if (user?.id) {
+      try {
+        // Build update object with only the fields that have values
+        const customerUpdates: Record<string, any> = {}
+        
+        if (validatedData.customer_name) {
+          customerUpdates.name = validatedData.customer_name
+        }
+        
+        if (validatedData.phone) {
+          customerUpdates.phone = validatedData.phone
+        }
+        
+        if (validatedData.organization_name) {
+          customerUpdates.organization_name = validatedData.organization_name
+        }
+        
+        // Update shipping address if provided
+        if (validatedData.shipping_address && validatedData.shipping_address.line1) {
+          customerUpdates.default_shipping_address = validatedData.shipping_address
+        }
+        
+        // Only update if we have something to update
+        if (Object.keys(customerUpdates).length > 0) {
+          const { error: updateError } = await supabaseAdmin
+            .from('customers')
+            .update({
+              ...customerUpdates,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id)
+          
+          if (updateError) {
+            // Log but don't fail the order - this is a nice-to-have
+            console.error('Error updating customer profile:', updateError)
+          } else {
+            console.log(`Updated customer profile for user ${user.id} with checkout info`)
+          }
+        }
+      } catch (updateErr) {
+        // Log but don't fail the order
+        console.error('Error in customer profile update:', updateErr)
+      }
+    }
+    
     return NextResponse.json(order)
   } catch (error: any) {
     console.error('Error creating order:', error)

@@ -532,8 +532,16 @@ export default function MultiGarmentArtworkPage() {
     return hasTextDescription || (hasAllArtwork && !needsVectorization)
   }
 
-  function handleContinue() {
+  async function handleContinue() {
     if (canContinue()) {
+      // Save draft immediately before navigating (don't wait for debounce)
+      if (isAuthenticated) {
+        // Clear any pending debounced save
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+        await saveDraft()
+      }
       router.push('/custom-shirts/configure/checkout')
     }
   }
@@ -578,24 +586,41 @@ export default function MultiGarmentArtworkPage() {
               priority
             />
           </Link>
-          <nav className="flex items-center gap-4">
-            <div className="relative">
-              <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
-              {isAuthenticated && saveStatus !== 'idle' && (
-                <span className={`absolute -top-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-all duration-300 ${
-                  saveStatus === 'saving' ? 'bg-white shadow-sm' : 'bg-emerald-500'
-                }`}>
-                  {saveStatus === 'saving' ? (
-                    <span className="w-2 h-2 border-[1.5px] border-primary-500 border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </span>
-              )}
+          <nav className="flex items-center gap-3">
+            {/* Step indicators */}
+            <div className="flex items-center gap-1.5">
+              <Link href="/custom-shirts/configure" className="w-6 h-6 bg-success-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-success-600 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </Link>
+              <div className="w-4 h-0.5 bg-success-300 rounded-full" />
+              <Link href="/custom-shirts/configure/colors" className="w-6 h-6 bg-success-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-success-600 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </Link>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <div className="relative">
+                <span className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center text-sm font-black">3</span>
+                {isAuthenticated && saveStatus !== 'idle' && (
+                  <span className={`absolute -top-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+                    saveStatus === 'saving' ? 'bg-white shadow-sm' : 'bg-emerald-500'
+                  }`}>
+                    {saveStatus === 'saving' ? (
+                      <span className="w-2 h-2 border-[1.5px] border-primary-500 border-t-transparent rounded-full animate-spin"></span>
+                    ) : (
+                      <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </span>
+                )}
+              </div>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <span className="w-6 h-6 bg-surface-300 text-charcoal-400 rounded-full flex items-center justify-center text-xs font-bold">4</span>
             </div>
-            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Upload Artwork</span>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap ml-1">Upload Artwork</span>
             <div className="flex items-center gap-3 ml-2 pl-4 border-l border-surface-300">
               <div className="w-20 h-2 bg-surface-300 rounded-full overflow-hidden">
                 <motion.div
@@ -785,77 +810,56 @@ export default function MultiGarmentArtworkPage() {
           {/* Right Column: Live Design Preview with Style Switcher */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="lg:sticky lg:top-24 lg:self-start space-y-6">
             <div className="bento-card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-black text-charcoal-700 tracking-tight">Design Preview</h2>
-                <div className="text-sm font-bold text-charcoal-500">
-                  Style {activeGarmentIndex + 1} of {selectedGarmentData.length}
-                </div>
+                {selectedGarmentData.length > 1 && (
+                  <span className="px-2.5 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-bold">
+                    Style {activeGarmentIndex + 1} of {selectedGarmentData.length}
+                  </span>
+                )}
               </div>
 
-              {/* Style Switcher */}
+              {/* Compact Style Switcher */}
               {selectedGarmentData.length > 1 && (
-                <div className="mb-6">
-                  <p className="text-sm font-bold text-charcoal-600 mb-3">Preview on different styles:</p>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {selectedGarmentData.map((garment, index) => (
-                      <button
-                        key={garment.id}
-                        onClick={() => setActiveGarmentIndex(index)}
-                        className={`flex-shrink-0 relative rounded-xl overflow-hidden border-3 transition-all ${
-                          activeGarmentIndex === index
-                            ? 'border-primary-500 ring-2 ring-primary-200 shadow-lg'
-                            : 'border-surface-300 hover:border-primary-300'
-                        }`}
-                      >
-                        <div className="w-16 h-16 bg-surface-100 relative">
-                          {garment.thumbnail_url ? (
-                            <NextImage src={garment.thumbnail_url} alt={garment.name} fill className="object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-charcoal-300">
-                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <div className="mb-4 flex items-center gap-2 text-sm">
+                  <span className="text-charcoal-500 font-semibold">Style:</span>
+                  <div className="flex gap-1">
+                    {selectedGarmentData.map((garment, index) => {
+                      const isActive = activeGarmentIndex === index
+                      const previewImage = garment.color_images && Object.keys(garment.color_images).length > 0
+                        ? garment.color_images[Object.keys(garment.color_images)[0]]
+                        : garment.thumbnail_url
+                      
+                      return (
+                        <button
+                          key={garment.id}
+                          onClick={() => setActiveGarmentIndex(index)}
+                          className={`
+                            flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all
+                            ${isActive
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200 border border-surface-300'
+                            }
+                          `}
+                        >
+                          {previewImage && (
+                            <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0">
+                              <img src={previewImage} alt={garment.name} className="w-full h-full object-cover" />
                             </div>
                           )}
-                        </div>
-                        {activeGarmentIndex === index && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                          <span className="truncate max-w-[80px]">{garment.name}</span>
+                          {isActive && <span className="ml-0.5">✓</span>}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {currentGarment && (
-                    <p className="mt-2 text-sm font-semibold text-charcoal-600">
-                      Previewing: <span className="text-primary-600">{currentGarment.name}</span>
-                    </p>
-                  )}
                 </div>
               )}
 
-              {/* Location Tabs */}
+              {/* Location Tabs and Content */}
               {enabledLocations.length > 0 && (
                 <Tabs.Root value={activeTab || enabledLocations[0]} onValueChange={(val) => setActiveTab(val as PrintLocation)}>
-                  <Tabs.List className="flex flex-wrap gap-2 mb-6">
-                    {enabledLocations.map((location) => (
-                      <Tabs.Trigger
-                        key={location}
-                        value={location}
-                        className={`flex items-center gap-2 px-5 py-3 rounded-bento font-bold text-sm transition-all ${
-                          activeTab === location
-                            ? 'bg-primary-500 text-white shadow-bento scale-105'
-                            : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200 hover:scale-102'
-                        }`}
-                      >
-                        {getLocationLabel(location)}
-                        {hasArtworkForLocation(location) && (
-                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className={activeTab === location ? 'text-white' : 'text-success-600'}>
-                            ✓
-                          </motion.span>
-                        )}
-                      </Tabs.Trigger>
-                    ))}
-                  </Tabs.List>
-
+                  {/* Location Content - DesignEditor with color picker and location picker */}
                   {enabledLocations.map((location) => (
                     <Tabs.Content key={location} value={location} className="outline-none">
                       <AnimatePresence mode="wait">
@@ -879,6 +883,11 @@ export default function MultiGarmentArtworkPage() {
                             onVectorize={handleVectorize}
                             maxInkColors={maxInkColors}
                             detectedColors={detectedColors[location] || 0}
+                            enabledLocations={enabledLocations}
+                            activeLocation={activeTab || undefined}
+                            onLocationChange={(loc) => setActiveTab(loc)}
+                            hasArtworkForLocation={hasArtworkForLocation}
+                            getLocationLabel={getLocationLabel}
                           />
                         </motion.div>
                       </AnimatePresence>

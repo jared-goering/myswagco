@@ -10,6 +10,7 @@ import { useOrderStore } from '@/lib/store/orderStore'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Garment, MultiGarmentQuoteResponse } from '@/types'
 import { motion } from 'framer-motion'
+import SignInPromptCard from '@/components/SignInPromptCard'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -133,9 +134,30 @@ export default function MultiGarmentCheckout() {
               priority
             />
           </Link>
-          <nav className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">4</span>
-            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Checkout</span>
+          <nav className="flex items-center gap-3">
+            {/* Step indicators */}
+            <div className="flex items-center gap-1.5">
+              <Link href="/custom-shirts/configure" className="w-6 h-6 bg-success-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-success-600 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </Link>
+              <div className="w-4 h-0.5 bg-success-300 rounded-full" />
+              <Link href="/custom-shirts/configure/colors" className="w-6 h-6 bg-success-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-success-600 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </Link>
+              <div className="w-4 h-0.5 bg-success-300 rounded-full" />
+              <Link href="/custom-shirts/configure/artwork" className="w-6 h-6 bg-success-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-success-600 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </Link>
+              <div className="w-4 h-0.5 bg-surface-300 rounded-full" />
+              <span className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center text-sm font-black">4</span>
+            </div>
+            <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap ml-1">Checkout</span>
           </nav>
           
           {/* Account Button */}
@@ -196,6 +218,12 @@ export default function MultiGarmentCheckout() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2">
+            {/* Sign In Prompt for non-authenticated users */}
+            {!isAuthenticated && (
+              <SignInPromptCard 
+                onOpenAuthModal={(initialMode) => openAuthModal({ feature: 'checkout', initialMode })}
+              />
+            )}
             <CheckoutForm garments={selectedGarmentData} quote={multiGarmentQuote} />
           </div>
 
