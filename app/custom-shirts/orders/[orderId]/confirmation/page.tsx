@@ -1,19 +1,37 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Order, Garment } from '@/types'
+import { useOrderStore } from '@/lib/store/orderStore'
 
 export default function OrderConfirmation() {
   const params = useParams()
   const orderId = params.orderId as string
   const [order, setOrder] = useState<Order & { garments: Garment } | null>(null)
   const [loading, setLoading] = useState(true)
+  const { deleteDraft, reset, draftId } = useOrderStore()
+  const hasCleanedUp = useRef(false)
 
   useEffect(() => {
     fetchOrder()
   }, [orderId])
+
+  // Clean up draft and reset store when order is confirmed
+  useEffect(() => {
+    if (order && !hasCleanedUp.current) {
+      hasCleanedUp.current = true
+      
+      // Delete the draft from database
+      if (draftId) {
+        deleteDraft().catch(err => console.error('Error deleting draft:', err))
+      }
+      
+      // Reset the local order store
+      reset()
+    }
+  }, [order, draftId, deleteDraft, reset])
 
   async function fetchOrder() {
     try {

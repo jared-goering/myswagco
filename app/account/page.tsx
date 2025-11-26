@@ -1,14 +1,21 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
+import { useOrderStore } from '@/lib/store/orderStore'
+import { OrderDraft } from '@/types'
 
 export default function AccountPage() {
   const router = useRouter()
   const { isAuthenticated, isLoading, customer, user, signOut, openAuthModal } = useCustomerAuth()
+  const { loadDraft } = useOrderStore()
+  
+  const [drafts, setDrafts] = useState<OrderDraft[]>([])
+  const [draftsLoading, setDraftsLoading] = useState(true)
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -20,6 +27,124 @@ export default function AccountPage() {
       router.push('/')
     }
   }, [isAuthenticated, isLoading, openAuthModal, router])
+
+  // Fetch drafts when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDrafts()
+    }
+  }, [isAuthenticated])
+
+  async function fetchDrafts() {
+    try {
+      const response = await fetch('/api/order-drafts')
+      if (response.ok) {
+        const data = await response.json()
+        setDrafts(data)
+      }
+    } catch (error) {
+      console.error('Error fetching drafts:', error)
+    } finally {
+      setDraftsLoading(false)
+    }
+  }
+
+  async function handleDeleteDraft(draftId: string) {
+    setDeletingDraftId(draftId)
+    try {
+      const response = await fetch(`/api/order-drafts/${draftId}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        setDrafts(drafts.filter(d => d.id !== draftId))
+      }
+    } catch (error) {
+      console.error('Error deleting draft:', error)
+    } finally {
+      setDeletingDraftId(null)
+    }
+  }
+
+  function handleContinueDraft(draft: OrderDraft) {
+    loadDraft(draft)
+    
+    // Determine where the user left off based on draft state
+    if (!draft.garment_id) {
+      // No garment selected - go to garment selection
+      router.push('/custom-shirts/configure')
+      return
+    }
+    
+    // Check if user has started filling checkout info (name, email, or shipping address)
+    const hasCheckoutInfo = (draft.customer_name && draft.customer_name.trim().length > 0) ||
+      (draft.email && draft.email.trim().length > 0) ||
+      (draft.shipping_address && draft.shipping_address.line1)
+    
+    // Check if user has artwork or text description
+    const hasArtwork = draft.artwork_file_records && 
+      Object.values(draft.artwork_file_records).some(record => record !== null)
+    const hasTextDescription = draft.text_description && draft.text_description.trim().length > 0
+    
+    if (hasCheckoutInfo && (hasArtwork || hasTextDescription)) {
+      // User was on checkout page
+      router.push(`/custom-shirts/configure/${draft.garment_id}/checkout`)
+      return
+    }
+    
+    if (hasArtwork || hasTextDescription) {
+      // User was on artwork page
+      router.push(`/custom-shirts/configure/${draft.garment_id}/artwork`)
+      return
+    }
+    
+    // Check if user has completed configuration (colors, quantities, print locations)
+    const hasColors = draft.selected_colors && draft.selected_colors.length > 0
+    const hasQuantities = draft.color_size_quantities && 
+      Object.values(draft.color_size_quantities).some(sizeQty => 
+        Object.values(sizeQty).some(qty => (qty as number) > 0)
+      )
+    const hasPrintLocations = draft.print_config?.locations && 
+      Object.values(draft.print_config.locations).some(loc => loc?.enabled)
+    
+    if (hasColors && hasQuantities && hasPrintLocations) {
+      // User completed configuration - go to artwork page
+      router.push(`/custom-shirts/configure/${draft.garment_id}/artwork`)
+      return
+    }
+    
+    // Otherwise go to the configure page
+    router.push(`/custom-shirts/configure/${draft.garment_id}`)
+  }
+
+  function formatDate(dateString: string) {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffHours < 1) {
+      return 'Just now'
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+  }
+
+  function getTotalQuantity(draft: OrderDraft): number {
+    let total = 0
+    if (draft.color_size_quantities) {
+      Object.values(draft.color_size_quantities).forEach(sizeQty => {
+        Object.values(sizeQty).forEach(qty => {
+          total += (qty as number) || 0
+        })
+      })
+    }
+    return total
+  }
 
   if (isLoading) {
     return (
@@ -84,6 +209,121 @@ export default function AccountPage() {
           <h1 className="text-4xl font-black text-charcoal-700 tracking-tight">My Account</h1>
           <p className="text-charcoal-500 mt-2">Manage your designs, orders, and settings</p>
         </div>
+
+        {/* Continue Your Order Section */}
+        {!draftsLoading && drafts.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-charcoal-700">Continue Your Order</h2>
+                <p className="text-sm text-charcoal-500">Pick up where you left off</p>
+              </div>
+            </div>
+            
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {drafts.map((draft) => {
+                const garment = draft.garment
+                const totalQty = getTotalQuantity(draft)
+                const colorCount = draft.selected_colors?.length || 0
+                
+                return (
+                  <div
+                    key={draft.id}
+                    className="bento-card group relative overflow-hidden"
+                  >
+                    {/* Draft badge */}
+                    <div className="absolute top-3 right-3 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
+                      Draft
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      {/* Garment thumbnail */}
+                      <div className="w-20 h-20 rounded-xl bg-surface-100 flex-shrink-0 overflow-hidden">
+                        {garment?.thumbnail_url ? (
+                          <img 
+                            src={garment.thumbnail_url} 
+                            alt={garment.name || 'Garment'} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : garment?.color_images && draft.selected_colors?.[0] && garment.color_images[draft.selected_colors[0]] ? (
+                          <img 
+                            src={garment.color_images[draft.selected_colors[0]]} 
+                            alt={garment.name || 'Garment'} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-charcoal-300">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Draft info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-black text-charcoal-700 truncate">
+                          {draft.name || garment?.name || 'Untitled Order'}
+                        </h3>
+                        {garment && (
+                          <p className="text-sm text-charcoal-400 font-medium">{garment.brand}</p>
+                        )}
+                        
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          {colorCount > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-100 rounded-full text-charcoal-600 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-gradient-to-br from-pink-400 to-violet-400"></span>
+                              {colorCount} color{colorCount > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {totalQty > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-100 rounded-full text-charcoal-600 font-medium">
+                              {totalQty} item{totalQty > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Last updated */}
+                    <p className="text-xs text-charcoal-400 mt-3">
+                      Last edited {formatDate(draft.updated_at)}
+                    </p>
+                    
+                    {/* Actions */}
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => handleContinueDraft(draft)}
+                        className="flex-1 bg-primary-500 hover:bg-primary-600 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm"
+                      >
+                        Continue
+                      </button>
+                      <button
+                        onClick={() => handleDeleteDraft(draft.id)}
+                        disabled={deletingDraftId === draft.id}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-surface-200 hover:border-rose-300 hover:bg-rose-50 text-charcoal-400 hover:text-rose-600 transition-all disabled:opacity-50"
+                        title="Delete draft"
+                      >
+                        {deletingDraftId === draft.id ? (
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Quick Stats Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -206,4 +446,3 @@ export default function AccountPage() {
     </div>
   )
 }
-

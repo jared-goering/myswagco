@@ -68,17 +68,29 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     authModalContextRef.current = authModalContext
   }, [showAuthModal, authModalContext])
 
-  // Basic Supabase auth setup - exactly per docs
+  // Basic Supabase auth setup - use getUser() to validate session with server
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setIsLoading(false)
-      
-      if (session?.user) {
-        fetchCustomerProfile(session.user.id).then(setCustomer)
+    // Validate session with the server (not just cached data)
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (error || !user) {
+        // Session is invalid or expired - clear state
+        setSession(null)
+        setUser(null)
+        setCustomer(null)
+        setIsLoading(false)
+        return
       }
+      
+      // User is valid - get the session too
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session)
+        setUser(user)
+        setIsLoading(false)
+        
+        if (user) {
+          fetchCustomerProfile(user.id).then(setCustomer)
+        }
+      })
     })
 
     // Listen for changes

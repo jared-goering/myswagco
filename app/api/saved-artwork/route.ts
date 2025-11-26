@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/server'
 
 // Helper to create Supabase client with auth
 function createAuthClient() {
@@ -97,15 +98,37 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Upload the image to Supabase Storage
-    const imageBuffer = Buffer.from(image_data.split(',')[1], 'base64')
-    const fileName = `${user.id}/${Date.now()}-${name.replace(/[^a-zA-Z0-9]/g, '_')}.png`
+    // Detect content type from base64 data URL
+    let contentType = 'image/png'
+    let fileExtension = 'png'
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('saved-artwork')
+    if (image_data.startsWith('data:')) {
+      const mimeMatch = image_data.match(/^data:([^;]+);/)
+      if (mimeMatch) {
+        contentType = mimeMatch[1]
+        // Map MIME type to extension
+        const extensionMap: Record<string, string> = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/svg+xml': 'svg',
+          'image/webp': 'webp',
+          'image/gif': 'gif',
+        }
+        fileExtension = extensionMap[contentType] || 'png'
+      }
+    }
+    
+    // Upload the image to Supabase Storage (using 'artwork' bucket with 'saved/' prefix)
+    const imageBuffer = Buffer.from(image_data.split(',')[1], 'base64')
+    const fileName = `saved/${user.id}/${Date.now()}-${name.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExtension}`
+    
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('artwork')
       .upload(fileName, imageBuffer, {
-        contentType: 'image/png',
+        contentType: contentType,
         cacheControl: '3600',
+        upsert: false
       })
     
     if (uploadError) {
@@ -117,15 +140,42 @@ export async function POST(request: NextRequest) {
     }
     
     // Get the public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('saved-artwork')
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from('artwork')
       .getPublicUrl(fileName)
     
     // Create thumbnail (same as main image for now)
     const thumbnailUrl = publicUrl
     
-    // Save to database
-    const { data: artwork, error: dbError } = await supabase
+    // Ensure customer record exists (using admin client to bypass RLS)
+    const { data: existingCustomer } = await supabaseAdmin
+      .from('customers')
+      .select('id')
+      .eq('id', user.id)
+      .single()
+    
+    if (!existingCustomer) {
+      console.log(`[saved-artwork POST] Creating customer record for user ${user.id}`)
+      const { error: customerError } = await supabaseAdmin
+        .from('customers')
+        .insert({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+          avatar_url: user.user_metadata?.avatar_url || null
+        })
+      
+      if (customerError) {
+        console.error('Error creating customer record:', customerError)
+        return NextResponse.json(
+          { error: 'Failed to create customer record' },
+          { status: 500 }
+        )
+      }
+    }
+    
+    // Save to database (using admin client to ensure insert works)
+    const { data: artwork, error: dbError } = await supabaseAdmin
       .from('saved_artwork')
       .insert({
         customer_id: user.id,

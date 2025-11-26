@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -13,6 +13,23 @@ const PRINT_LOCATIONS: { value: PrintLocation; label: string }[] = [
   { value: 'front', label: 'Front' },
   { value: 'back', label: 'Back' },
 ]
+
+// Debounce helper
+function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
+  callback: T,
+  delay: number
+): T {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args)
+    }, delay)
+  }, [callback, delay]) as T
+}
 
 export default function ConfigurationWizard() {
   const router = useRouter()
@@ -34,14 +51,39 @@ export default function ConfigurationWizard() {
     needByDate,
     setCustomerInfo,
     setQuote,
-    quote
+    quote,
+    saveDraft,
+    draftId
   } = useOrderStore()
 
   const [garment, setGarment] = useState<Garment | null>(null)
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState(1)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const hasInitialized = useRef(false)
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounced save draft function
+  const debouncedSaveDraft = useDebouncedCallback(
+    useCallback(async () => {
+      if (isAuthenticated && garmentId) {
+        setSaveStatus('saving')
+        await saveDraft()
+        setSaveStatus('saved')
+        
+        // Auto-hide the saved indicator after 2 seconds
+        if (saveStatusTimeoutRef.current) {
+          clearTimeout(saveStatusTimeoutRef.current)
+        }
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setSaveStatus('idle')
+        }, 2000)
+      }
+    }, [isAuthenticated, garmentId, saveDraft]),
+    2000 // Save 2 seconds after last change
+  )
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -65,6 +107,20 @@ export default function ConfigurationWizard() {
       fetchQuote()
     }
   }, [colorSizeQuantities, printConfig, garment])
+
+  // Auto-save draft when authenticated user makes changes
+  useEffect(() => {
+    // Skip initial render to avoid saving on page load
+    if (!hasInitialized.current) {
+      hasInitialized.current = true
+      return
+    }
+    
+    // Only save if user is authenticated and has made meaningful selections
+    if (isAuthenticated && garmentId && (selectedColors.length > 0 || Object.keys(colorSizeQuantities).length > 0)) {
+      debouncedSaveDraft()
+    }
+  }, [selectedColors, colorSizeQuantities, printConfig, organizationName, needByDate, isAuthenticated, garmentId, debouncedSaveDraft])
 
   async function fetchGarment() {
     try {
@@ -192,7 +248,23 @@ export default function ConfigurationWizard() {
             />
           </Link>
           <nav className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">2</span>
+            <div className="relative">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">2</span>
+              {/* Subtle save indicator overlaid on step number */}
+              {isAuthenticated && saveStatus !== 'idle' && (
+                <span className={`absolute -top-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+                  saveStatus === 'saving' ? 'bg-white shadow-sm' : 'bg-emerald-500'
+                }`}>
+                  {saveStatus === 'saving' ? (
+                    <span className="w-2 h-2 border-[1.5px] border-primary-500 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </span>
+              )}
+            </div>
             <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Configure Order</span>
           </nav>
           

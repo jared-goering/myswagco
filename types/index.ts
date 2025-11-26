@@ -188,8 +188,71 @@ export interface SavedArtwork {
     width?: number
     height?: number
     file_size?: number
+    is_vector?: boolean
+    original_filename?: string
   }
   created_at: string
   updated_at: string
+}
+
+// Order Draft Types (for resumable orders)
+export interface OrderDraft {
+  id: string
+  customer_id: string
+  name?: string // User-friendly name like "Blue T-Shirt Draft"
+  
+  // Garment selection
+  garment_id?: string
+  selected_colors: string[]
+  
+  // Size and quantities
+  color_size_quantities: ColorSizeQuantities
+  
+  // Print configuration
+  print_config: PrintConfig
+  
+  // Artwork references and transforms
+  artwork_file_records: { [location: string]: ArtworkFile | null }
+  artwork_transforms: { [location: string]: ArtworkTransform }
+  vectorized_svg_data: { [location: string]: string | null }
+  
+  // Customer info (partial)
+  customer_name?: string
+  email?: string
+  phone?: string
+  organization_name?: string
+  need_by_date?: string
+  shipping_address?: ShippingAddress
+  
+  // Quote snapshot
+  quote?: QuoteResponse
+  
+  // Text description for artwork
+  text_description?: string
+  
+  // Timestamps
+  created_at: string
+  updated_at: string
+  
+  // Joined data (from API)
+  garment?: Garment
+}
+
+export interface OrderDraftInput {
+  garment_id?: string | null
+  selected_colors: string[]
+  color_size_quantities: ColorSizeQuantities
+  print_config: PrintConfig
+  artwork_file_records: { [location: string]: ArtworkFile | null }
+  artwork_transforms: { [location: string]: ArtworkTransform }
+  vectorized_svg_data: { [location: string]: string | null }
+  customer_name?: string
+  email?: string
+  phone?: string
+  organization_name?: string
+  need_by_date?: string
+  shipping_address?: ShippingAddress
+  quote?: QuoteResponse | null
+  text_description?: string
 }
 

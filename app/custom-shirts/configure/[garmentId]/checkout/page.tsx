@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -19,8 +19,52 @@ export default function Checkout() {
   const [garment, setGarment] = useState<Garment | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasInitialized = useRef(false)
   const store = useOrderStore()
+
+  // Debounced save draft function
+  const debouncedSaveDraft = useCallback(async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (isAuthenticated && garmentId) {
+        setSaveStatus('saving')
+        await store.saveDraft()
+        setSaveStatus('saved')
+        
+        // Auto-hide after 2 seconds
+        if (saveStatusTimeoutRef.current) {
+          clearTimeout(saveStatusTimeoutRef.current)
+        }
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setSaveStatus('idle')
+        }, 2000)
+      }
+    }, 2000)
+  }, [isAuthenticated, garmentId, store])
+
+  // Auto-save draft when authenticated user makes changes to customer info
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true
+      return
+    }
+    
+    if (isAuthenticated && garmentId) {
+      debouncedSaveDraft()
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [store.customerName, store.email, store.phone, store.shippingAddress, store.organizationName, store.needByDate, isAuthenticated, garmentId, debouncedSaveDraft])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -81,7 +125,23 @@ export default function Checkout() {
             />
           </Link>
           <nav className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">4</span>
+            <div className="relative">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">4</span>
+              {/* Subtle save indicator overlaid on step number */}
+              {isAuthenticated && saveStatus !== 'idle' && (
+                <span className={`absolute -top-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+                  saveStatus === 'saving' ? 'bg-white shadow-sm' : 'bg-emerald-500'
+                }`}>
+                  {saveStatus === 'saving' ? (
+                    <span className="w-2 h-2 border-[1.5px] border-primary-500 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </span>
+              )}
+            </div>
             <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Checkout</span>
           </nav>
           
