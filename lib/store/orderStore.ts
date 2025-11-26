@@ -1,19 +1,20 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput } from '@/types'
+import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput, SelectedGarments, GarmentSelection, MultiGarmentQuoteResponse } from '@/types'
 
 interface OrderState {
   // Draft tracking
   draftId: string | null
   
-  // Garment selection
+  // Multi-garment selection (new)
+  selectedGarments: SelectedGarments
+  
+  // Legacy single-garment fields (kept for backwards compatibility)
   garmentId: string | null
   selectedColors: string[]
-  
-  // Size and quantities (multi-color support)
   colorSizeQuantities: ColorSizeQuantities
   
-  // Print configuration
+  // Print configuration (shared across all garments)
   printConfig: PrintConfig
   
   // Customer info
@@ -43,17 +44,33 @@ interface OrderState {
   // Artwork transforms (position, scale, rotation - persisted)
   artworkTransforms: { [location: string]: ArtworkTransform }
   
-  // Quote
+  // Quote (multi-garment)
   quote: QuoteResponse | null
+  multiGarmentQuote: MultiGarmentQuoteResponse | null
   
   // Text description for artwork (persisted)
   textDescription: string
   
-  // Actions
+  // Multi-garment actions
+  addGarment: (garmentId: string) => void
+  removeGarment: (garmentId: string) => void
+  getSelectedGarmentIds: () => string[]
+  hasGarment: (garmentId: string) => boolean
+  
+  // Per-garment color/quantity actions
+  addGarmentColor: (garmentId: string, color: string) => void
+  removeGarmentColor: (garmentId: string, color: string) => void
+  setGarmentSizeQuantity: (garmentId: string, color: string, size: string, quantity: number) => void
+  getGarmentColors: (garmentId: string) => string[]
+  getGarmentQuantity: (garmentId: string) => number
+  
+  // Legacy single-garment actions (kept for compatibility)
   setGarmentId: (id: string) => void
   addColor: (color: string) => void
   removeColor: (color: string) => void
   setColorSizeQuantity: (color: string, size: string, quantity: number) => void
+  
+  // Shared actions
   getTotalQuantity: () => number
   setPrintConfig: (config: PrintConfig) => void
   setCustomerInfo: (info: Partial<OrderState>) => void
@@ -63,6 +80,7 @@ interface OrderState {
   setVectorizedFile: (location: string, vectorizedUrl: string, status: VectorizationStatus) => void
   hasUnvectorizedRasterFiles: () => boolean
   setQuote: (quote: QuoteResponse | null) => void
+  setMultiGarmentQuote: (quote: MultiGarmentQuoteResponse | null) => void
   setTextDescription: (text: string) => void
   reset: () => void
   
@@ -77,6 +95,7 @@ interface OrderState {
 
 const initialState = {
   draftId: null as string | null,
+  selectedGarments: {} as SelectedGarments,
   garmentId: null as string | null,
   selectedColors: [] as string[],
   colorSizeQuantities: {} as ColorSizeQuantities,
@@ -101,6 +120,7 @@ const initialState = {
   vectorizedSvgData: {} as { [location: string]: string | null },
   artworkTransforms: {} as { [location: string]: ArtworkTransform },
   quote: null as QuoteResponse | null,
+  multiGarmentQuote: null as MultiGarmentQuoteResponse | null,
   textDescription: ''
 }
 
@@ -109,6 +129,113 @@ export const useOrderStore = create<OrderState>()(
     (set, get) => ({
       ...initialState,
       
+      // Multi-garment actions
+      addGarment: (garmentId) => set((state) => ({
+        selectedGarments: {
+          ...state.selectedGarments,
+          [garmentId]: {
+            selectedColors: [],
+            colorSizeQuantities: {}
+          }
+        }
+      })),
+      
+      removeGarment: (garmentId) => set((state) => {
+        const newSelectedGarments = { ...state.selectedGarments }
+        delete newSelectedGarments[garmentId]
+        return { selectedGarments: newSelectedGarments }
+      }),
+      
+      getSelectedGarmentIds: () => {
+        const state = get()
+        return Object.keys(state.selectedGarments)
+      },
+      
+      hasGarment: (garmentId) => {
+        const state = get()
+        return garmentId in state.selectedGarments
+      },
+      
+      // Per-garment color/quantity actions
+      addGarmentColor: (garmentId, color) => set((state) => {
+        const garment = state.selectedGarments[garmentId]
+        if (!garment) return state
+        
+        return {
+          selectedGarments: {
+            ...state.selectedGarments,
+            [garmentId]: {
+              ...garment,
+              selectedColors: [...garment.selectedColors, color],
+              colorSizeQuantities: {
+                ...garment.colorSizeQuantities,
+                [color]: {}
+              }
+            }
+          }
+        }
+      }),
+      
+      removeGarmentColor: (garmentId, color) => set((state) => {
+        const garment = state.selectedGarments[garmentId]
+        if (!garment) return state
+        
+        const newColorSizeQuantities = { ...garment.colorSizeQuantities }
+        delete newColorSizeQuantities[color]
+        
+        return {
+          selectedGarments: {
+            ...state.selectedGarments,
+            [garmentId]: {
+              ...garment,
+              selectedColors: garment.selectedColors.filter(c => c !== color),
+              colorSizeQuantities: newColorSizeQuantities
+            }
+          }
+        }
+      }),
+      
+      setGarmentSizeQuantity: (garmentId, color, size, quantity) => set((state) => {
+        const garment = state.selectedGarments[garmentId]
+        if (!garment) return state
+        
+        return {
+          selectedGarments: {
+            ...state.selectedGarments,
+            [garmentId]: {
+              ...garment,
+              colorSizeQuantities: {
+                ...garment.colorSizeQuantities,
+                [color]: {
+                  ...garment.colorSizeQuantities[color],
+                  [size]: quantity
+                }
+              }
+            }
+          }
+        }
+      }),
+      
+      getGarmentColors: (garmentId) => {
+        const state = get()
+        return state.selectedGarments[garmentId]?.selectedColors || []
+      },
+      
+      getGarmentQuantity: (garmentId) => {
+        const state = get()
+        const garment = state.selectedGarments[garmentId]
+        if (!garment) return 0
+        
+        let total = 0
+        Object.values(garment.colorSizeQuantities).forEach(sizeQty => {
+          Object.values(sizeQty).forEach(qty => {
+            total += qty || 0
+          })
+        })
+        return total
+      },
+      
+      // Legacy single-garment actions (for backwards compatibility)
       setGarmentId: (id) => set({ garmentId: id }),
       
       addColor: (color) => set((state) => ({
@@ -139,14 +266,27 @@ export const useOrderStore = create<OrderState>()(
         }
       })),
       
+      // Get total quantity across all garments
       getTotalQuantity: () => {
         const state = get()
         let total = 0
+        
+        // Sum from multi-garment selections
+        Object.values(state.selectedGarments).forEach(garment => {
+          Object.values(garment.colorSizeQuantities).forEach(sizeQty => {
+            Object.values(sizeQty).forEach(qty => {
+              total += qty || 0
+            })
+          })
+        })
+        
+        // Also include legacy single-garment quantities if present
         Object.values(state.colorSizeQuantities).forEach(sizeQty => {
           Object.values(sizeQty).forEach(qty => {
             total += qty || 0
           })
         })
+        
         return total
       },
       
@@ -192,6 +332,7 @@ export const useOrderStore = create<OrderState>()(
         )
       },
       setQuote: (quote) => set({ quote }),
+      setMultiGarmentQuote: (quote) => set({ multiGarmentQuote: quote }),
       setTextDescription: (text) => set({ textDescription: text }),
       reset: () => set(initialState),
       
@@ -203,6 +344,7 @@ export const useOrderStore = create<OrderState>()(
         return {
           garment_id: state.garmentId,
           selected_colors: state.selectedColors,
+          selected_garments: Object.keys(state.selectedGarments).length > 0 ? state.selectedGarments : undefined,
           color_size_quantities: state.colorSizeQuantities,
           print_config: state.printConfig,
           artwork_file_records: state.artworkFileRecords,
@@ -223,7 +365,10 @@ export const useOrderStore = create<OrderState>()(
         const state = get()
         
         // Don't save if there's no meaningful data
-        if (!state.garmentId && state.selectedColors.length === 0) {
+        const hasGarments = Object.keys(state.selectedGarments).length > 0
+        const hasLegacyData = state.garmentId || state.selectedColors.length > 0
+        
+        if (!hasGarments && !hasLegacyData) {
           return null
         }
         
@@ -263,6 +408,7 @@ export const useOrderStore = create<OrderState>()(
           draftId: draft.id,
           garmentId: draft.garment_id || null,
           selectedColors: draft.selected_colors || [],
+          selectedGarments: draft.selected_garments || {},
           colorSizeQuantities: draft.color_size_quantities || {},
           printConfig: draft.print_config || { locations: {} },
           artworkFileRecords: draft.artwork_file_records || {},
@@ -273,7 +419,10 @@ export const useOrderStore = create<OrderState>()(
           phone: draft.phone || '',
           organizationName: draft.organization_name || '',
           needByDate: draft.need_by_date || '',
-          shippingAddress: draft.shipping_address || {
+          shippingAddress: draft.shipping_address ? {
+            ...draft.shipping_address,
+            line2: draft.shipping_address.line2 || ''
+          } : {
             line1: '',
             line2: '',
             city: '',
@@ -320,6 +469,7 @@ export const useOrderStore = create<OrderState>()(
       // Only persist serializable data - exclude File objects
       partialize: (state) => ({
         draftId: state.draftId,
+        selectedGarments: state.selectedGarments,
         garmentId: state.garmentId,
         selectedColors: state.selectedColors,
         colorSizeQuantities: state.colorSizeQuantities,
@@ -334,6 +484,7 @@ export const useOrderStore = create<OrderState>()(
         vectorizedSvgData: state.vectorizedSvgData,
         artworkTransforms: state.artworkTransforms,
         quote: state.quote,
+        multiGarmentQuote: state.multiGarmentQuote,
         textDescription: state.textDescription,
         // Note: artworkFiles is NOT persisted as File objects can't be serialized
       }),

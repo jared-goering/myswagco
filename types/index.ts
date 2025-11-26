@@ -62,6 +62,45 @@ export interface SizeQuantities {
 // Maps color name to size quantities for multi-color orders
 export type ColorSizeQuantities = Record<string, SizeQuantities>
 
+// Multi-garment selection for orders with multiple styles
+export interface GarmentSelection {
+  selectedColors: string[]
+  colorSizeQuantities: ColorSizeQuantities
+}
+
+// Maps garment ID to its selection (colors, sizes, quantities)
+export type SelectedGarments = Record<string, GarmentSelection>
+
+// Multi-garment quote request
+export interface MultiGarmentQuoteRequest {
+  garments: {
+    garment_id: string
+    quantity: number
+  }[]
+  print_config: PrintConfig
+}
+
+// Multi-garment quote response with per-garment breakdown
+export interface MultiGarmentQuoteResponse {
+  garment_breakdown: {
+    garment_id: string
+    quantity: number
+    garment_cost: number
+    garment_cost_per_shirt: number
+  }[]
+  total_quantity: number
+  garment_cost: number
+  print_cost: number
+  print_cost_per_shirt: number
+  setup_fees: number
+  total_screens: number
+  subtotal: number
+  total: number
+  per_shirt_price: number
+  deposit_amount: number
+  balance_due: number
+}
+
 export type OrderStatus = 
   | 'pending_art_review'
   | 'art_approved'
@@ -201,11 +240,14 @@ export interface OrderDraft {
   customer_id: string
   name?: string // User-friendly name like "Blue T-Shirt Draft"
   
-  // Garment selection
+  // Garment selection (legacy single-garment)
   garment_id?: string
   selected_colors: string[]
   
-  // Size and quantities
+  // Multi-garment selection (new)
+  selected_garments?: SelectedGarments
+  
+  // Size and quantities (legacy single-garment)
   color_size_quantities: ColorSizeQuantities
   
   // Print configuration
@@ -241,6 +283,7 @@ export interface OrderDraft {
 export interface OrderDraftInput {
   garment_id?: string | null
   selected_colors: string[]
+  selected_garments?: SelectedGarments
   color_size_quantities: ColorSizeQuantities
   print_config: PrintConfig
   artwork_file_records: { [location: string]: ArtworkFile | null }
