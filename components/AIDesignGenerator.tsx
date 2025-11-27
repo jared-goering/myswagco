@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PrintLocation } from '@/types'
+import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 
 interface AIDesignGeneratorProps {
   isOpen: boolean
@@ -58,6 +59,9 @@ interface SavedDesign {
 }
 
 export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, availableLocations = ['front'] }: AIDesignGeneratorProps) {
+  // Auth hook for gating AI generation
+  const { isAuthenticated, openAuthModal, customer } = useCustomerAuth()
+  
   const [prompt, setPrompt] = useState('')
   const [referenceImages, setReferenceImages] = useState<string[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
@@ -86,6 +90,10 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
   // Previously generated designs (persisted)
   const [savedDesigns, setSavedDesigns] = useState<SavedDesign[]>([])
   const [showSavedDesigns, setShowSavedDesigns] = useState(false)
+  
+  // State for saving to account
+  const [isSavingToAccount, setIsSavingToAccount] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   
   // Load saved designs from localStorage on mount
   useEffect(() => {
@@ -340,6 +348,20 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
   }
 
   const handleGenerate = async () => {
+    // Require authentication for AI generation
+    if (!isAuthenticated) {
+      openAuthModal({
+        feature: 'ai_generator',
+        title: 'Sign in to use AI Design Generator',
+        message: 'Create a free account to generate custom designs with AI and save them to your account.',
+        onSuccess: () => {
+          // After successful auth, try generating again
+          handleGenerate()
+        },
+      })
+      return
+    }
+    
     if (!prompt.trim()) {
       setError('Please enter a description of your design')
       return
@@ -379,7 +401,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
         setDesignHistory((prev) => [data.image, ...prev].slice(0, 8))
         setGeneratedImage(data.image)
         setBackgroundRemoved(false)
-        // Save to persistent storage
+        // Save to persistent storage (local)
         saveDesignToHistory(data.image, prompt.trim())
         // Show success animation briefly
         setShowSuccessAnimation(true)
@@ -391,6 +413,50 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
       setError(err instanceof Error ? err.message : 'Failed to generate design')
     } finally {
       setIsGenerating(false)
+    }
+  }
+  
+  // Save artwork to user's account
+  const handleSaveToAccount = async () => {
+    if (!generatedImage) return
+    
+    if (!isAuthenticated) {
+      openAuthModal({
+        feature: 'save_artwork',
+        title: 'Sign in to save your artwork',
+        message: 'Create a free account to save your designs and access them anytime.',
+        onSuccess: () => {
+          handleSaveToAccount()
+        },
+      })
+      return
+    }
+    
+    setIsSavingToAccount(true)
+    setSaveSuccess(false)
+    
+    try {
+      const response = await fetch('/api/saved-artwork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: prompt.trim() || 'Untitled Design',
+          image_data: generatedImage,
+          prompt: prompt.trim(),
+          is_ai_generated: true,
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to save artwork')
+      }
+      
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save artwork')
+    } finally {
+      setIsSavingToAccount(false)
     }
   }
 
@@ -658,6 +724,75 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
             </div>
           </div>
 
+          {/* Authentication Gate */}
+          {!isAuthenticated ? (
+            <div className="flex flex-col items-center justify-center p-8 md:p-12 text-center min-h-[400px]">
+              {/* Lock Icon */}
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-fuchsia-100 flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-2xl font-black text-charcoal-700 mb-3">
+                Sign In to Generate AI Designs
+              </h3>
+              
+              {/* Description */}
+              <p className="text-charcoal-500 font-medium max-w-md mb-8 leading-relaxed">
+                Create unlimited screen print-ready graphics with our AI Design Generator. 
+                Sign in to save your designs to your account and access them anytime.
+              </p>
+              
+              {/* Benefits */}
+              <div className="flex flex-wrap justify-center gap-4 mb-8">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Unlimited generations</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Save to your account</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Screen print optimized</span>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => openAuthModal({ 
+                    title: 'Sign in to use AI Design Generator',
+                    message: 'Create and save unlimited AI-generated designs for your custom shirts.'
+                  })}
+                  className="px-8 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento font-bold shadow-soft hover:shadow-bento transition-all"
+                >
+                  Sign In or Create Account
+                </button>
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-3 text-charcoal-600 hover:text-charcoal-700 hover:bg-surface-100 rounded-bento font-semibold transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+              
+              {/* Footer Note */}
+              <p className="mt-8 text-xs text-charcoal-400 font-medium">
+                Free to use • No credit card required
+              </p>
+            </div>
+          ) : (
+          <>
           {/* Content */}
           <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-4 md:p-6">
             {/* Mobile: Preview first on mobile when generating or has result */}
@@ -1354,6 +1489,43 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                       )}
                     </div>
                     
+                    {/* Save to Account Button */}
+                    <button
+                      onClick={handleSaveToAccount}
+                      disabled={isSavingToAccount || isRemovingBackground}
+                      className={`w-full px-4 py-2.5 border-2 rounded-bento font-bold text-sm transition-all disabled:opacity-50 hover:scale-[1.02] ${
+                        saveSuccess 
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700' 
+                          : 'border-pink-300 bg-pink-50 hover:bg-pink-100 text-pink-700 hover:text-pink-800'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        {isSavingToAccount ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Saving...
+                          </>
+                        ) : saveSuccess ? (
+                          <>
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Saved to My Designs!
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                            Save to My Designs
+                          </>
+                        )}
+                      </span>
+                    </button>
+                    
                     {/* Primary CTA - Use Design (more prominent) */}
                     <button
                       onClick={handleUseDesign}
@@ -1453,6 +1625,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
           
           {/* Mobile bottom padding to account for sticky button */}
           <div className="h-20 md:hidden" />
+          </>
+          )}
 
           {/* Location Picker Overlay */}
           <AnimatePresence>

@@ -1,11 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { orderCreationSchema } from '@/lib/schemas'
 import { calculateQuote, calculateTotalQuantity, calculateTotalQuantityFromColors } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
+// Helper to get current user
+async function getCurrentUser() {
+  const cookieStore = cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.delete({ name, ...options })
+        },
+      },
+    }
+  )
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    
+    // Check if user is authenticated
+    const user = await getCurrentUser()
     
     // Validate request
     const validatedData = orderCreationSchema.parse(body)
@@ -38,10 +68,17 @@ export async function POST(request: NextRequest) {
       validatedData.print_config
     )
     
-    // Create order
+    // Apply discount if provided
+    const discountAmount = validatedData.discount_amount || 0
+    const discountedTotal = Math.max(0, quote.total - discountAmount)
+    const discountedDeposit = Math.round((discountedTotal * 0.5) * 100) / 100
+    const discountedBalance = discountedTotal - discountedDeposit
+    
+    // Create order (link to customer account if logged in)
     const { data: order, error } = await supabaseAdmin
       .from('orders')
       .insert({
+        customer_id: user?.id || null, // Link to customer if authenticated
         customer_name: validatedData.customer_name,
         email: validatedData.email,
         phone: validatedData.phone,
@@ -52,12 +89,15 @@ export async function POST(request: NextRequest) {
         garment_color: validatedData.garment_color || (validatedData.color_size_quantities ? Object.keys(validatedData.color_size_quantities)[0] : ''),
         size_quantities: validatedData.size_quantities || {},
         color_size_quantities: validatedData.color_size_quantities,
+        selected_garments: validatedData.selected_garments || null,
         total_quantity: totalQuantity,
         print_config: validatedData.print_config,
-        total_cost: quote.total,
-        deposit_amount: quote.deposit_amount,
+        total_cost: discountedTotal,
+        deposit_amount: discountedDeposit,
         deposit_paid: false,
-        balance_due: quote.balance_due,
+        balance_due: discountedBalance,
+        discount_code_id: validatedData.discount_code_id || null,
+        discount_amount: discountAmount,
         status: 'pending_art_review'
       })
       .select()
@@ -77,6 +117,52 @@ export async function POST(request: NextRequest) {
         description: 'Order created and awaiting art review',
         performed_by: 'system'
       })
+    
+    // If user is authenticated, update their customer profile with checkout info for faster future checkouts
+    if (user?.id) {
+      try {
+        // Build update object with only the fields that have values
+        const customerUpdates: Record<string, any> = {}
+        
+        if (validatedData.customer_name) {
+          customerUpdates.name = validatedData.customer_name
+        }
+        
+        if (validatedData.phone) {
+          customerUpdates.phone = validatedData.phone
+        }
+        
+        if (validatedData.organization_name) {
+          customerUpdates.organization_name = validatedData.organization_name
+        }
+        
+        // Update shipping address if provided
+        if (validatedData.shipping_address && validatedData.shipping_address.line1) {
+          customerUpdates.default_shipping_address = validatedData.shipping_address
+        }
+        
+        // Only update if we have something to update
+        if (Object.keys(customerUpdates).length > 0) {
+          const { error: updateError } = await supabaseAdmin
+            .from('customers')
+            .update({
+              ...customerUpdates,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id)
+          
+          if (updateError) {
+            // Log but don't fail the order - this is a nice-to-have
+            console.error('Error updating customer profile:', updateError)
+          } else {
+            console.log(`Updated customer profile for user ${user.id} with checkout info`)
+          }
+        }
+      } catch (updateErr) {
+        // Log but don't fail the order
+        console.error('Error in customer profile update:', updateErr)
+      }
+    }
     
     return NextResponse.json(order)
   } catch (error: any) {

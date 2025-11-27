@@ -53,7 +53,8 @@ export async function PATCH(
       garment_id,
       garment_color,
       size_quantities,
-      print_config
+      print_config,
+      selected_garments
     } = body
     
     const updateData: any = {}
@@ -67,6 +68,7 @@ export async function PATCH(
     if (garment_color) updateData.garment_color = garment_color
     if (size_quantities) updateData.size_quantities = size_quantities
     if (print_config) updateData.print_config = print_config
+    if (selected_garments !== undefined) updateData.selected_garments = selected_garments
     
     const { data: order, error } = await supabaseAdmin
       .from('orders')

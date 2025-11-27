@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import NextImage from 'next/image'
 import { useOrderStore } from '@/lib/store/orderStore'
+import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { PrintLocation, ArtworkTransform, Garment } from '@/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as Popover from '@radix-ui/react-popover'
@@ -20,8 +21,9 @@ export default function ArtworkUpload() {
   const router = useRouter()
   const params = useParams()
   const garmentId = params.garmentId as string
+  const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading: authLoading } = useCustomerAuth()
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription, saveDraft, draftId, setGarmentId, garmentId: storeGarmentId } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
@@ -56,9 +58,79 @@ export default function ArtworkUpload() {
     }))
   }
 
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false)
+  const [showSavedArtworkBrowser, setShowSavedArtworkBrowser] = useState(false)
+  const [savedArtworkList, setSavedArtworkList] = useState<any[]>([])
+  const [loadingSavedArtwork, setLoadingSavedArtwork] = useState(false)
+  const [selectedLocationForSaved, setSelectedLocationForSaved] = useState<PrintLocation | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const accountDropdownRef = useRef<HTMLDivElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasInitialized = useRef(false)
+
+  // Debounced save draft function
+  const debouncedSaveDraft = useCallback(async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (isAuthenticated && garmentId) {
+        setSaveStatus('saving')
+        await saveDraft()
+        setSaveStatus('saved')
+        
+        // Auto-hide after 2 seconds
+        if (saveStatusTimeoutRef.current) {
+          clearTimeout(saveStatusTimeoutRef.current)
+        }
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setSaveStatus('idle')
+        }, 2000)
+      }
+    }, 2000)
+  }, [isAuthenticated, garmentId, saveDraft])
+
+  // Auto-save draft when authenticated user makes changes
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true
+      return
+    }
+    
+    if (isAuthenticated && garmentId) {
+      debouncedSaveDraft()
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [artworkFileRecords, artworkTransforms, textDescription, isAuthenticated, garmentId, debouncedSaveDraft])
+
+  // Close account dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
+        setShowAccountDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+>>>>>>> feature/customer-auth
+
   const enabledLocations = Object.entries(printConfig.locations)
     .filter(([, config]) => config?.enabled)
     .map(([location]) => location as PrintLocation)
+
+  // Ensure garmentId is set in store (for draft saving)
+  useEffect(() => {
+    if (garmentId && garmentId !== storeGarmentId) {
+      setGarmentId(garmentId)
+    }
+  }, [garmentId, storeGarmentId, setGarmentId])
 
   // Fetch garment data and app config on mount
   useEffect(() => {
@@ -129,7 +201,7 @@ export default function ArtworkUpload() {
     }
   }, [artworkFiles, artworkFileRecords, enabledLocations, hasShownCompletionToast])
 
-  async function handleFileSelect(location: PrintLocation, file: File | null) {
+  async function handleFileSelect(location: PrintLocation, file: File | null, options?: { skipAutoSave?: boolean; existingArtworkId?: string; existingImageUrl?: string }) {
     setArtworkFile(location, file)
     
     if (file) {
@@ -140,10 +212,10 @@ export default function ArtworkUpload() {
       
       // Create a client-side record for immediate UI feedback
       const tempRecord = {
-        id: `temp-${location}-${Date.now()}`,
+        id: options?.existingArtworkId || `temp-${location}-${Date.now()}`,
         order_id: 'pending',
         location: location,
-        file_url: URL.createObjectURL(file),
+        file_url: options?.existingImageUrl || URL.createObjectURL(file),
         file_name: file.name,
         file_size: file.size,
         is_vector: isVector,
@@ -158,6 +230,61 @@ export default function ArtworkUpload() {
         type: 'success',
         show: true,
       })
+      
+      // If user is authenticated and not skipping auto-save, save to their account
+      if (isAuthenticated && user && !options?.skipAutoSave) {
+        try {
+          // Convert file to base64 data URL for the saved-artwork API
+          const reader = new FileReader()
+          reader.onload = async () => {
+            const base64Data = reader.result as string
+            const artworkName = file.name.replace(/\.[^/.]+$/, '') // Remove extension
+            
+            const response = await fetch('/api/saved-artwork', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                name: artworkName,
+                image_data: base64Data,
+                is_ai_generated: false,
+                metadata: {
+                  original_filename: file.name,
+                  file_size: file.size,
+                  location: location,
+                  is_vector: isVector,
+                  auto_saved_from_order: true
+                }
+              })
+            })
+            
+            if (response.ok) {
+              const savedArtwork = await response.json()
+              console.log(`Artwork "${artworkName}" saved to user's account`, savedArtwork)
+              
+              // Update the record with the persistent URL so it survives page reloads
+              const persistentRecord = {
+                id: savedArtwork.id,
+                order_id: 'pending',
+                location: location,
+                file_url: savedArtwork.image_url, // Use the persistent URL from storage
+                file_name: file.name,
+                file_size: file.size,
+                is_vector: isVector,
+                vectorization_status: isVector ? 'not_needed' as const : 'pending' as const,
+                created_at: savedArtwork.created_at
+              }
+              setArtworkFileRecord(location, persistentRecord)
+            } else {
+              console.error('Failed to save artwork to account:', await response.text())
+            }
+          }
+          reader.readAsDataURL(file)
+        } catch (error) {
+          console.error('Error saving artwork to account:', error)
+          // Don't show error to user - this is a background operation
+        }
+      }
     }
   }
 
@@ -267,6 +394,40 @@ export default function ArtworkUpload() {
               show: true,
             })
           }
+          
+          // Auto-save vectorized file to user's account if authenticated
+          if (isAuthenticated && user && result.svg_data_url) {
+            try {
+              const originalName = file.name.replace(/\.[^/.]+$/, '') // Remove extension
+              const vectorName = `${originalName}_vectorized`
+              
+              const saveResponse = await fetch('/api/saved-artwork', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  name: vectorName,
+                  image_data: result.svg_data_url,
+                  is_ai_generated: false,
+                  metadata: {
+                    original_filename: `${originalName}.svg`,
+                    is_vector: true,
+                    location: location,
+                    color_count: colorCount,
+                    auto_vectorized: true
+                  }
+                })
+              })
+              
+              if (saveResponse.ok) {
+                console.log(`Vectorized artwork "${vectorName}" saved to user's account`)
+              } else {
+                console.error('Failed to save vectorized artwork to account:', await saveResponse.text())
+              }
+            } catch (saveError) {
+              console.error('Error saving vectorized artwork to account:', saveError)
+            }
+          }
         }
       } else {
         const error = await response.json()
@@ -287,6 +448,69 @@ export default function ArtworkUpload() {
 
   function handleTransformChange(location: PrintLocation, transform: ArtworkTransform) {
     setArtworkTransform(location, transform)
+  }
+
+  async function fetchSavedArtwork() {
+    if (!isAuthenticated) return
+    setLoadingSavedArtwork(true)
+    try {
+      const response = await fetch('/api/saved-artwork', {
+        credentials: 'include',
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setSavedArtworkList(data)
+      }
+    } catch (error) {
+      console.error('Error fetching saved artwork:', error)
+    } finally {
+      setLoadingSavedArtwork(false)
+    }
+  }
+
+  async function handleUseSavedArtwork(artwork: any) {
+    if (!selectedLocationForSaved) return
+    
+    try {
+      // Fetch the image and convert to a File object
+      const response = await fetch(artwork.image_url)
+      const blob = await response.blob()
+      
+      // Determine file extension from metadata or URL
+      const isVector = artwork.metadata?.is_vector || artwork.image_url.endsWith('.svg')
+      const extension = isVector ? 'svg' : 'png'
+      const fileName = `${artwork.name}.${extension}`
+      const file = new File([blob], fileName, { type: blob.type })
+      
+      // Use the existing file select handler, but skip auto-save since it's already saved
+      await handleFileSelect(selectedLocationForSaved, file, {
+        skipAutoSave: true,
+        existingArtworkId: artwork.id,
+        existingImageUrl: artwork.image_url
+      })
+      
+      setToast({
+        message: `"${artwork.name}" added to ${getLocationLabel(selectedLocationForSaved)}`,
+        type: 'success',
+        show: true,
+      })
+      
+      setShowSavedArtworkBrowser(false)
+      setSelectedLocationForSaved(null)
+    } catch (error) {
+      console.error('Error using saved artwork:', error)
+      setToast({
+        message: 'Failed to load saved artwork',
+        type: 'error',
+        show: true,
+      })
+    }
+  }
+
+  function openSavedArtworkBrowser(location: PrintLocation) {
+    setSelectedLocationForSaved(location)
+    setShowSavedArtworkBrowser(true)
+    fetchSavedArtwork()
   }
 
   const MAX_DIMENSIONS: Record<PrintLocation, { width: number; height: number }> = {
@@ -489,8 +713,16 @@ export default function ArtworkUpload() {
     return 'Continue to Checkout →'
   }
 
-  function handleContinue() {
+  async function handleContinue() {
     if (canContinue()) {
+      // Save draft immediately before navigating (don't wait for debounce)
+      if (isAuthenticated) {
+        // Clear any pending debounced save
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+        await saveDraft()
+      }
       router.push(`/custom-shirts/configure/${garmentId}/checkout`)
     }
   }
@@ -518,7 +750,7 @@ export default function ArtworkUpload() {
         className="fixed top-4 left-0 right-0 z-50 transition-all duration-300 flex justify-center px-4"
       >
         <div className="bg-white/60 backdrop-blur-xl border border-white/20 shadow-lg rounded-full px-10 py-4 flex items-center gap-8">
-          <Link href="/custom-shirts" className="hover:opacity-80 transition-opacity">
+          <Link href="/" className="hover:opacity-80 transition-opacity">
             <NextImage 
               src="/logo.png" 
               alt="My Swag Co" 
@@ -529,7 +761,23 @@ export default function ArtworkUpload() {
             />
           </Link>
           <nav className="flex items-center gap-4">
-            <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
+            <div className="relative">
+              <span className="inline-flex items-center justify-center w-8 h-8 bg-primary-500 text-white rounded-full text-sm font-black">3</span>
+              {/* Subtle save indicator overlaid on step number */}
+              {isAuthenticated && saveStatus !== 'idle' && (
+                <span className={`absolute -top-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+                  saveStatus === 'saving' ? 'bg-white shadow-sm' : 'bg-emerald-500'
+                }`}>
+                  {saveStatus === 'saving' ? (
+                    <span className="w-2 h-2 border-[1.5px] border-primary-500 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </span>
+              )}
+            </div>
             <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap">Upload Artwork</span>
             {/* Progress indicator */}
             <div className="flex items-center gap-3 ml-2 pl-4 border-l border-surface-300">
@@ -546,6 +794,93 @@ export default function ArtworkUpload() {
               </span>
             </div>
           </nav>
+          
+          {/* Account Button */}
+          <div className="border-l border-charcoal-200 pl-4">
+            {authLoading ? (
+              <div className="w-8 h-8 rounded-full bg-surface-200 animate-pulse" />
+            ) : isAuthenticated ? (
+              <div className="relative" ref={accountDropdownRef}>
+                <button
+                  onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                  className="flex items-center gap-2 p-1 rounded-full hover:bg-white/50 transition-colors"
+                >
+                  {customer?.avatar_url ? (
+                    <img 
+                      src={customer.avatar_url} 
+                      alt={customer?.name || 'Avatar'} 
+                      className="w-8 h-8 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                      {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {showAccountDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-surface-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-surface-100">
+                      <p className="text-sm font-bold text-charcoal-700 truncate">
+                        {customer?.name || 'Welcome!'}
+                      </p>
+                      <p className="text-xs text-charcoal-400 truncate">{customer?.email || user?.email || 'Signed in'}</p>
+                    </div>
+                    
+                    <Link
+                      href="/account"
+                      onClick={() => setShowAccountDropdown(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-charcoal-600 hover:bg-surface-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Account
+                    </Link>
+                    
+                    <Link
+                      href="/account/orders"
+                      onClick={() => setShowAccountDropdown(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-charcoal-600 hover:bg-surface-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Order History
+                    </Link>
+                    
+                    <div className="border-t border-surface-100 mt-2 pt-2">
+                      <button
+                        onClick={() => {
+                          signOut()
+                          setShowAccountDropdown(false)
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => openAuthModal()}
+                className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/50 transition-colors"
+                title="Sign In"
+              >
+                <div className="w-8 h-8 rounded-full bg-surface-200 flex items-center justify-center text-charcoal-500">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
       </motion.header>
 
@@ -565,6 +900,23 @@ export default function ArtworkUpload() {
           
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+            {/* Browse My Designs - only show if logged in */}
+            {isAuthenticated && (
+              <button
+                onClick={() => {
+                  setSelectedLocationForSaved(enabledLocations[0] || 'front')
+                  setShowSavedArtworkBrowser(true)
+                  fetchSavedArtwork()
+                }}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-bento font-bold text-sm transition-all shadow-soft hover:shadow-bento"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                My Saved Designs
+              </button>
+            )}
+            
             <button
               onClick={() => setShowGallery(true)}
               className="inline-flex items-center gap-2 px-5 py-3 bg-white border-2 border-surface-300 hover:border-primary-400 hover:bg-primary-50 rounded-bento font-bold text-sm text-charcoal-700 hover:text-primary-700 transition-all shadow-soft hover:shadow-bento"
@@ -1070,6 +1422,140 @@ export default function ArtworkUpload() {
                     </div>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Saved Artwork Browser Modal */}
+      <AnimatePresence>
+        {showSavedArtworkBrowser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-charcoal-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowSavedArtworkBrowser(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-bento-lg shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-surface-200 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-charcoal-700">My Saved Designs</h2>
+                  <p className="text-charcoal-500 text-sm mt-1">
+                    Select a design to use for {selectedLocationForSaved ? getLocationLabel(selectedLocationForSaved) : 'your print'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSavedArtworkBrowser(false)}
+                  className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6 text-charcoal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Location Selector */}
+              <div className="px-6 py-3 bg-surface-50 border-b border-surface-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-charcoal-600">Apply to:</span>
+                  <div className="flex gap-2">
+                    {enabledLocations.map((loc) => (
+                      <button
+                        key={loc}
+                        onClick={() => setSelectedLocationForSaved(loc)}
+                        className={`px-3 py-1.5 text-sm font-bold rounded-full transition-all ${
+                          selectedLocationForSaved === loc
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-white border border-surface-300 text-charcoal-600 hover:border-primary-400'
+                        }`}
+                      >
+                        {getLocationLabel(loc)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {loadingSavedArtwork ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="aspect-square bg-surface-100 rounded-xl animate-pulse" />
+                    ))}
+                  </div>
+                ) : savedArtworkList.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-surface-100 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-charcoal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <p className="text-charcoal-600 font-semibold">No saved designs yet</p>
+                    <p className="text-charcoal-400 text-sm mt-1">Upload artwork to save it to your account</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {savedArtworkList.map((artwork) => (
+                      <button
+                        key={artwork.id}
+                        onClick={() => handleUseSavedArtwork(artwork)}
+                        className="group relative aspect-square bg-white rounded-xl border-2 border-surface-200 hover:border-primary-400 overflow-hidden transition-all hover:shadow-bento"
+                      >
+                        {/* Image */}
+                        <div 
+                          className="absolute inset-0 flex items-center justify-center p-4"
+                          style={{
+                            background: 'repeating-conic-gradient(#f0f0f0 0% 25%, transparent 0% 50%) 50% / 12px 12px'
+                          }}
+                        >
+                          <img
+                            src={artwork.image_url}
+                            alt={artwork.name}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+
+                        {/* Badges */}
+                        <div className="absolute top-2 left-2 flex flex-col gap-1">
+                          {artwork.is_ai_generated && (
+                            <span className="px-2 py-0.5 bg-violet-500 text-white text-xs font-bold rounded-full">
+                              AI
+                            </span>
+                          )}
+                          {artwork.metadata?.is_vector ? (
+                            <span className="px-2 py-0.5 bg-emerald-500 text-white text-xs font-bold rounded-full">
+                              Vector
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded-full">
+                              Raster
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-primary-500/90 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="text-white font-bold">Use This Design</span>
+                        </div>
+
+                        {/* Name */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm p-2 border-t border-surface-200">
+                          <p className="text-sm font-semibold text-charcoal-700 truncate">{artwork.name}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>

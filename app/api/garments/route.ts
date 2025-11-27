@@ -7,10 +7,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const adminView = searchParams.get('admin') === 'true'
     
-    // Build query
+    // Build query - join with pricing_tiers to get markup
     let query = supabase
       .from('garments')
-      .select('*')
+      .select(`
+        *,
+        pricing_tier:pricing_tiers!pricing_tier_id (
+          id,
+          name,
+          garment_markup_percentage
+        )
+      `)
       .order('name', { ascending: true })
     
     // Only filter by active if not admin view
@@ -24,7 +31,18 @@ export async function GET(request: NextRequest) {
       throw error
     }
     
-    return NextResponse.json(garments)
+    // Calculate customer price for each garment (using first tier markup as starting price)
+    const garmentsWithPrice = garments?.map(garment => {
+      const markupPercentage = garment.pricing_tier?.garment_markup_percentage || 50
+      const customerPrice = garment.base_cost * (1 + markupPercentage / 100)
+      return {
+        ...garment,
+        customer_price: Math.round(customerPrice * 100) / 100, // Round to 2 decimal places
+        markup_percentage: markupPercentage
+      }
+    })
+    
+    return NextResponse.json(garmentsWithPrice)
   } catch (error) {
     console.error('Error fetching garments:', error)
     return NextResponse.json(

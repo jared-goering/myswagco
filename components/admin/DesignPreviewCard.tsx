@@ -11,6 +11,9 @@ interface DesignPreviewCardProps {
   artworkFiles: ArtworkFile[]
   garment: Garment | null
   orderColors?: string[] // For multi-color orders
+  // Multi-garment support
+  orderGarments?: Record<string, Garment>
+  selectedGarments?: Record<string, { selectedColors: string[]; colorSizeQuantities: Record<string, any> }>
 }
 
 // Canvas dimensions (match DesignEditor)
@@ -284,9 +287,42 @@ function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps
   )
 }
 
-export default function DesignPreviewCard({ artworkFiles, garment, orderColors }: DesignPreviewCardProps) {
+export default function DesignPreviewCard({ artworkFiles, garment, orderColors, orderGarments, selectedGarments }: DesignPreviewCardProps) {
   const [activeLocation, setActiveLocation] = useState<PrintLocation>(artworkFiles[0]?.location || 'front')
-  const [activeColor, setActiveColor] = useState<string>(orderColors?.[0] || garment?.available_colors[0] || '')
+  
+  // Determine available garments for multi-garment orders
+  const garmentIds = selectedGarments ? Object.keys(selectedGarments) : []
+  const hasMultipleGarments = garmentIds.length > 1 && orderGarments && Object.keys(orderGarments).length > 1
+  
+  const [activeGarmentId, setActiveGarmentId] = useState<string>(garmentIds[0] || '')
+  
+  // Get colors for the active garment
+  const getColorsForGarment = (garmentId: string) => {
+    if (selectedGarments?.[garmentId]?.selectedColors) {
+      return selectedGarments[garmentId].selectedColors
+    }
+    return orderColors || []
+  }
+  
+  const currentGarment = hasMultipleGarments && activeGarmentId 
+    ? orderGarments?.[activeGarmentId] || garment 
+    : garment
+  
+  const currentColors = hasMultipleGarments && activeGarmentId 
+    ? getColorsForGarment(activeGarmentId)
+    : orderColors || []
+  
+  const [activeColor, setActiveColor] = useState<string>(currentColors[0] || garment?.available_colors[0] || '')
+  
+  // Update active color when garment changes
+  React.useEffect(() => {
+    const colors = hasMultipleGarments && activeGarmentId 
+      ? getColorsForGarment(activeGarmentId)
+      : orderColors || []
+    if (colors.length > 0 && !colors.includes(activeColor)) {
+      setActiveColor(colors[0])
+    }
+  }, [activeGarmentId, hasMultipleGarments])
   
   if (!artworkFiles || artworkFiles.length === 0) {
     return (
@@ -344,19 +380,54 @@ export default function DesignPreviewCard({ artworkFiles, garment, orderColors }
         </Tabs.Root>
       )}
       
+      {/* Garment Selector - Only show for multi-garment orders */}
+      {hasMultipleGarments && orderGarments && (
+        <div className="mb-6 bg-purple-50 rounded-lg border border-purple-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-purple-700 uppercase tracking-wide">Preview Garment</h4>
+            <span className="text-xs text-purple-500">
+              {garmentIds.length} styles in order
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {garmentIds.map((garmentId) => {
+              const gmt = orderGarments[garmentId]
+              const isActive = garmentId === activeGarmentId
+              
+              return (
+                <button
+                  key={garmentId}
+                  onClick={() => setActiveGarmentId(garmentId)}
+                  className={`
+                    relative flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all
+                    ${isActive
+                      ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-200'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-300'
+                    }
+                  `}
+                >
+                  <span>{gmt?.name || garmentId}</span>
+                  {isActive && <span>✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      
       {/* Color Switcher - Only show for multi-color orders */}
-      {orderColors && orderColors.length > 1 && (
+      {currentColors && currentColors.length > 1 && (
         <div className="mb-6 bg-gray-50 rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Preview Color</h4>
             <span className="text-xs text-gray-500">
-              {orderColors.length} colors in order
+              {currentColors.length} colors in order
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {orderColors.map((color) => {
+            {currentColors.map((color) => {
               const isActive = color === activeColor
-              const colorImageUrl = garment?.color_images?.[color]
+              const colorImageUrl = currentGarment?.color_images?.[color]
               
               return (
                 <button
@@ -391,7 +462,7 @@ export default function DesignPreviewCard({ artworkFiles, garment, orderColors }
       {/* Preview Canvas */}
       <PreviewCanvas
         artworkFile={currentArtwork}
-        garment={garment}
+        garment={currentGarment}
         activeColor={activeColor}
       />
     </div>
