@@ -9,6 +9,7 @@ import { Garment } from '@/types'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { useOrderStore } from '@/lib/store/orderStore'
 import StyleCart from '@/components/StyleCart'
+import GarmentChatAssistant from '@/components/GarmentChatAssistant'
 
 type SortOption = 'name-asc' | 'name-desc' | 'brand-asc' | 'price-asc' | 'price-desc'
 
@@ -107,6 +108,9 @@ export default function GarmentSelection() {
   
   // Animation state for newly selected items
   const [justSelected, setJustSelected] = useState<string | null>(null)
+  
+  // Chat assistant state
+  const [showChatAssistant, setShowChatAssistant] = useState(false)
 
   const selectedGarmentIds = getSelectedGarmentIds()
   const selectedCount = selectedGarmentIds.length
@@ -223,10 +227,10 @@ export default function GarmentSelection() {
         sorted.sort((a, b) => a.brand.localeCompare(b.brand))
         break
       case 'price-asc':
-        sorted.sort((a, b) => a.base_cost - b.base_cost)
+        sorted.sort((a, b) => (a.customer_price || a.base_cost * 1.5) - (b.customer_price || b.base_cost * 1.5))
         break
       case 'price-desc':
-        sorted.sort((a, b) => b.base_cost - a.base_cost)
+        sorted.sort((a, b) => (b.customer_price || b.base_cost * 1.5) - (a.customer_price || a.base_cost * 1.5))
         break
     }
 
@@ -758,10 +762,20 @@ export default function GarmentSelection() {
                         {/* Card content */}
                         <div className="p-4">
                           <div className="mb-3">
-                            <h3 className="text-lg font-black text-charcoal-700 leading-tight mb-0.5">
-                              {garment.name}
-                            </h3>
-                            <p className="text-sm text-charcoal-400 font-semibold">{garment.brand}</p>
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="text-lg font-black text-charcoal-700 leading-tight mb-0.5">
+                                  {garment.name}
+                                </h3>
+                                <p className="text-sm text-charcoal-400 font-semibold">{garment.brand}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-lg font-black text-charcoal-800">
+                                  ${(garment.customer_price || garment.base_cost * 1.5).toFixed(2)}
+                                </p>
+                                <p className="text-xs text-charcoal-400 font-medium">per shirt</p>
+                              </div>
+                            </div>
                           </div>
                           
                           <p className="text-charcoal-500 text-sm mb-4 line-clamp-2 leading-relaxed">
@@ -867,6 +881,7 @@ export default function GarmentSelection() {
               <StyleCart 
                 garments={garments} 
                 onContinue={handleContinue}
+                onOpenChat={() => setShowChatAssistant(true)}
                 isInGrid={true}
               />
             </aside>
@@ -879,6 +894,19 @@ export default function GarmentSelection() {
         garments={garments} 
         onContinue={handleContinue}
         mobileOnly={true}
+      />
+
+      {/* AI Chat Assistant Modal */}
+      <GarmentChatAssistant
+        isOpen={showChatAssistant}
+        onClose={() => setShowChatAssistant(false)}
+        garments={garments}
+        onAddGarment={(garmentId) => {
+          addGarment(garmentId)
+          setJustSelected(garmentId)
+          setTimeout(() => setJustSelected(null), 600)
+        }}
+        selectedGarmentIds={selectedGarmentIds}
       />
     </div>
   )

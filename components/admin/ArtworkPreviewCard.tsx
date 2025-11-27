@@ -38,8 +38,30 @@ export default function ArtworkPreviewCard({ files }: ArtworkPreviewCardProps) {
     )
   }
 
-  const handleDownload = (file: ArtworkFile) => {
-    window.open(file.file_url, '_blank')
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      // Fetch the file as a blob to ensure it downloads instead of opening
+      const response = await fetch(fileUrl)
+      const blob = await response.blob()
+      
+      // Create a temporary URL for the blob
+      const url = window.URL.createObjectURL(blob)
+      
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      
+      // Cleanup
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Download failed:', error)
+      // Fallback to opening in new tab if fetch fails
+      window.open(fileUrl, '_blank')
+    }
   }
 
   const getFileExtension = (filename: string) => {
@@ -155,7 +177,7 @@ export default function ArtworkPreviewCard({ files }: ArtworkPreviewCardProps) {
                           </button>
                         )}
                         <button
-                          onClick={() => handleDownload(file)}
+                          onClick={() => handleDownload(file.file_url, file.file_name)}
                           className="flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                           title="Download Original"
                         >
@@ -173,7 +195,10 @@ export default function ArtworkPreviewCard({ files }: ArtworkPreviewCardProps) {
                             <MagnifyingGlassIcon className="w-5 h-5 text-green-600" />
                           </button>
                           <button
-                            onClick={() => window.open(file.vectorized_file_url!, '_blank')}
+                            onClick={() => {
+                              const vectorFileName = file.file_name.replace(/\.[^/.]+$/, '_vectorized.svg')
+                              handleDownload(file.vectorized_file_url!, vectorFileName)
+                            }}
                             className="flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
                             title="Download Vectorized (Production)"
                           >

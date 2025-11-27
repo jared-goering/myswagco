@@ -1,0 +1,12 @@
+discount codes
+SEO max
+update checkout page look
+email notifications
+    when they place an order 
+    when artwork gets approved 
+    when its completed
+email editor panel
+ability to charge card for missing amount
+
+Done:
+change when order is sent

@@ -9,6 +9,7 @@ import { useOrderStore } from '@/lib/store/orderStore'
 interface StyleCartProps {
   garments: Garment[]
   onContinue: () => void
+  onOpenChat?: () => void
   isInGrid?: boolean
   mobileOnly?: boolean
 }
@@ -55,7 +56,7 @@ function getColorValue(colorName: string): string {
   return '#9ca3af'
 }
 
-export default function StyleCart({ garments, onContinue, isInGrid = false, mobileOnly = false }: StyleCartProps) {
+export default function StyleCart({ garments, onContinue, onOpenChat, isInGrid = false, mobileOnly = false }: StyleCartProps) {
   const { removeGarment, getSelectedGarmentIds } = useOrderStore()
   const [showPulse, setShowPulse] = useState(false)
   const prevCountRef = useRef(0)
@@ -358,6 +359,69 @@ export default function StyleCart({ garments, onContinue, isInGrid = false, mobi
                 </p>
               )}
             </div>
+
+            {/* AI Chat Assistant Button */}
+            {onOpenChat && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="mt-4"
+              >
+                <button
+                  onClick={onOpenChat}
+                  className="w-full group relative overflow-hidden rounded-xl p-[1px] transition-all duration-300 hover:scale-[1.02]"
+                >
+                  {/* Animated gradient border */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 opacity-70 group-hover:opacity-100 transition-opacity" 
+                    style={{
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 3s linear infinite',
+                    }}
+                  />
+                  
+                  {/* Button content */}
+                  <div className="relative flex items-center gap-3 px-4 py-3 bg-charcoal-800 rounded-[11px] transition-all group-hover:bg-charcoal-750">
+                    {/* AI Icon with glow */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg group-hover:shadow-emerald-500/30 transition-shadow">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                      </div>
+                    </div>
+                    
+                    {/* Text */}
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-bold text-white group-hover:text-emerald-50 transition-colors">
+                        Need help choosing?
+                      </p>
+                      <p className="text-xs text-white/50 group-hover:text-white/60 transition-colors">
+                        Ask our AI Style Assistant
+                      </p>
+                    </div>
+                    
+                    {/* Arrow */}
+                    <svg 
+                      className="w-4 h-4 text-white/40 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+                
+                {/* Shimmer animation keyframes */}
+                <style jsx>{`
+                  @keyframes shimmer {
+                    0% { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
+                  }
+                `}</style>
+              </motion.div>
+            )}
           </div>
         </motion.div>
       </div>

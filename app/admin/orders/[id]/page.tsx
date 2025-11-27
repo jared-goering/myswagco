@@ -36,6 +36,7 @@ export default function AdminOrderDetail() {
   const [orderData, setOrderData] = useState<any>({})
   const [availableGarments, setAvailableGarments] = useState<any[]>([])
   const [garment, setGarment] = useState<Garment | null>(null)
+  const [orderGarments, setOrderGarments] = useState<Record<string, Garment>>({}) // For multi-garment orders
 
   useEffect(() => {
     fetchOrder()
@@ -55,7 +56,8 @@ export default function AdminOrderDetail() {
         garment_id: order.garment_id,
         garment_color: order.garment_color,
         size_quantities: order.size_quantities,
-        print_config: order.print_config
+        print_config: order.print_config,
+        selected_garments: order.selected_garments || null
       })
     }
   }, [order])
@@ -67,8 +69,30 @@ export default function AdminOrderDetail() {
         const data = await response.json()
         setOrder(data)
         
-        // Fetch the specific garment for this order
-        if (data.garment_id) {
+        // Fetch garments for multi-garment orders
+        if (data.selected_garments && Object.keys(data.selected_garments).length > 0) {
+          const garmentIds = Object.keys(data.selected_garments)
+          const garmentMap: Record<string, Garment> = {}
+          
+          await Promise.all(garmentIds.map(async (id) => {
+            try {
+              const garmentResponse = await fetch(`/api/garments/${id}`)
+              if (garmentResponse.ok) {
+                const garmentData = await garmentResponse.json()
+                garmentMap[id] = garmentData
+              }
+            } catch (err) {
+              console.error(`Error fetching garment ${id}:`, err)
+            }
+          }))
+          
+          setOrderGarments(garmentMap)
+          // Set primary garment
+          if (data.garment_id && garmentMap[data.garment_id]) {
+            setGarment(garmentMap[data.garment_id])
+          }
+        } else if (data.garment_id) {
+          // Single garment order
           const garmentResponse = await fetch(`/api/garments/${data.garment_id}`)
           if (garmentResponse.ok) {
             const garmentData = await garmentResponse.json()
@@ -188,7 +212,8 @@ export default function AdminOrderDetail() {
         garment_id: order.garment_id,
         garment_color: order.garment_color,
         size_quantities: order.size_quantities,
-        print_config: order.print_config
+        print_config: order.print_config,
+        selected_garments: order.selected_garments || null
       })
     }
   }
@@ -235,7 +260,57 @@ export default function AdminOrderDetail() {
     )
   }
 
-  const totalQty = Object.values(order.size_quantities).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+  // Calculate total quantity from multi-garment, multi-color, or legacy structure
+  const calculateTotalQuantity = () => {
+    // Multi-garment orders
+    if (order.selected_garments && Object.keys(order.selected_garments).length > 0) {
+      return Object.values(order.selected_garments).reduce((total: number, selection: any) => {
+        return total + Object.values(selection.colorSizeQuantities || {}).reduce((garmentTotal: number, sizeQty: any) => {
+          return garmentTotal + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+        }, 0)
+      }, 0)
+    }
+    // Multi-color orders
+    if (order.color_size_quantities) {
+      return Object.values(order.color_size_quantities).reduce((total: number, sizeQty: any) => {
+        return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+      }, 0)
+    }
+    // Legacy single-color orders
+    return Object.values(order.size_quantities || {}).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+  }
+  const totalQty = calculateTotalQuantity()
+  
+  // Get aggregated size quantities from all garments/colors
+  const getAggregatedSizeQuantities = () => {
+    const aggregated: Record<string, number> = {}
+    
+    // Multi-garment orders
+    if (order.selected_garments && Object.keys(order.selected_garments).length > 0) {
+      Object.values(order.selected_garments).forEach((selection: any) => {
+        Object.values(selection.colorSizeQuantities || {}).forEach((sizeQty: any) => {
+          Object.entries(sizeQty).forEach(([size, qty]) => {
+            aggregated[size] = (aggregated[size] || 0) + (qty as number || 0)
+          })
+        })
+      })
+      return aggregated
+    }
+    
+    // Multi-color orders
+    if (order.color_size_quantities) {
+      Object.values(order.color_size_quantities).forEach((sizeQty: any) => {
+        Object.entries(sizeQty).forEach(([size, qty]) => {
+          aggregated[size] = (aggregated[size] || 0) + (qty as number || 0)
+        })
+      })
+      return aggregated
+    }
+    
+    // Legacy single-color orders
+    return order.size_quantities || {}
+  }
+  const aggregatedSizes = getAggregatedSizeQuantities()
 
   return (
     <AdminLayout>
@@ -467,31 +542,137 @@ export default function AdminOrderDetail() {
               
               {!editingOrder ? (
                 <div className="space-y-5">
-                  <div className="flex justify-between items-center py-3">
-                    <span className="text-sm text-gray-600">Garment</span>
-                    <span className="font-semibold text-gray-900">{order.garments?.name || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-t border-gray-100">
-                    <span className="text-sm text-gray-600">Color</span>
-                    <span className="font-semibold text-gray-900">{order.garment_color}</span>
-                  </div>
+                  {/* Multi-garment display */}
+                  {order.selected_garments && Object.keys(order.selected_garments).length > 0 ? (
+                    <div className="py-3">
+                      <span className="text-sm text-gray-600 block mb-3">Garments ({Object.keys(order.selected_garments).length} styles)</span>
+                      <div className="space-y-4">
+                        {Object.entries(order.selected_garments).map(([garmentId, selection]: [string, any]) => {
+                          const garmentInfo = orderGarments[garmentId]
+                          const garmentQty = Object.values(selection.colorSizeQuantities || {}).reduce((total: number, sizeQty: any) => {
+                            return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+                          }, 0)
+                          
+                          return (
+                            <div key={garmentId} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="font-semibold text-gray-900">{garmentInfo?.name || garmentId}</span>
+                                <span className="text-sm font-medium text-gray-600">{garmentQty} pcs</span>
+                              </div>
+                              <div className="space-y-1">
+                                {Object.entries(selection.colorSizeQuantities || {}).map(([color, sizeQty]: [string, any]) => {
+                                  const colorQty = Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+                                  return colorQty > 0 && (
+                                    <div key={color} className="flex justify-between items-center text-sm">
+                                      <span className="text-gray-600 ml-2">• {color}</span>
+                                      <span className="text-gray-700">{colorQty} pcs</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Single garment display */}
+                      <div className="flex justify-between items-center py-3">
+                        <span className="text-sm text-gray-600">Garment</span>
+                        <span className="font-semibold text-gray-900">{order.garments?.name || garment?.name || 'N/A'}</span>
+                      </div>
+                      <div className="py-3 border-t border-gray-100">
+                        <span className="text-sm text-gray-600">Color{order.color_size_quantities && Object.keys(order.color_size_quantities).length > 1 ? 's' : ''}</span>
+                        {order.color_size_quantities ? (
+                          <div className="mt-2 space-y-1">
+                            {Object.entries(order.color_size_quantities).map(([color, sizeQty]: [string, any]) => {
+                              const colorQty = Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+                              return (
+                                <div key={color} className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-700">{color}</span>
+                                  <span className="font-semibold text-gray-900">{colorQty} pcs</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <span className="font-semibold text-gray-900 float-right">{order.garment_color}</span>
+                        )}
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between items-center py-3 border-t border-gray-100">
                     <span className="text-sm text-gray-600">Total Quantity</span>
                     <span className="font-semibold text-gray-900">{totalQty} pieces</span>
                   </div>
                   <div className="pt-5 border-t border-gray-100">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-4">Size Breakdown</p>
-                    <div className="grid grid-cols-4 gap-3">
-                      {Object.entries(order.size_quantities).map(([size, qty]) => {
-                        const quantity = qty as number
-                        return quantity > 0 && (
-                          <div key={size} className="bg-gray-50 border border-gray-200 px-3 py-2.5 rounded-lg text-center">
-                            <div className="text-xs text-gray-500 mb-1">{size}</div>
-                            <div className="font-semibold text-gray-900">{quantity}</div>
+                    
+                    {/* Detailed breakdown for multi-garment orders */}
+                    {order.selected_garments && Object.keys(order.selected_garments).length > 0 ? (
+                      <div className="space-y-4">
+                        {Object.entries(order.selected_garments).map(([garmentId, selection]: [string, any]) => {
+                          const garmentInfo = orderGarments[garmentId]
+                          return (
+                            <div key={garmentId} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                              <p className="text-sm font-semibold text-gray-800 mb-2">{garmentInfo?.name || garmentId}</p>
+                              <div className="space-y-2">
+                                {Object.entries(selection.colorSizeQuantities || {}).map(([color, sizeQty]: [string, any]) => (
+                                  <div key={color} className="bg-white rounded-lg px-3 py-2 border border-gray-100">
+                                    <p className="text-xs text-gray-500 mb-1.5">{color}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.entries(sizeQty).map(([size, qty]) => {
+                                        const quantity = qty as number
+                                        return quantity > 0 && (
+                                          <div key={size} className="bg-gray-100 px-2 py-1 rounded text-xs">
+                                            <span className="text-gray-500">{size}:</span>{' '}
+                                            <span className="font-semibold text-gray-800">{quantity}</span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : order.color_size_quantities ? (
+                      /* Breakdown for multi-color single-garment orders */
+                      <div className="space-y-3">
+                        {Object.entries(order.color_size_quantities).map(([color, sizeQty]: [string, any]) => (
+                          <div key={color} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <p className="text-sm font-medium text-gray-700 mb-2">{color}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(sizeQty).map(([size, qty]) => {
+                                const quantity = qty as number
+                                return quantity > 0 && (
+                                  <div key={size} className="bg-white border border-gray-200 px-2.5 py-1.5 rounded text-xs">
+                                    <span className="text-gray-500">{size}:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{quantity}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
-                        )
-                      })}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Simple grid for legacy single-color orders */
+                      <div className="grid grid-cols-4 gap-3">
+                        {Object.entries(aggregatedSizes).map(([size, qty]) => {
+                          const quantity = qty as number
+                          return quantity > 0 && (
+                            <div key={size} className="bg-gray-50 border border-gray-200 px-3 py-2.5 rounded-lg text-center">
+                              <div className="text-xs text-gray-500 mb-1">{size}</div>
+                              <div className="font-semibold text-gray-900">{quantity}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="pt-5 border-t border-gray-100">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-4">Print Locations</p>
@@ -509,66 +690,320 @@ export default function AdminOrderDetail() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
-                      Garment
-                    </label>
-                    <select
-                      value={orderData.garment_id || ''}
-                      onChange={(e) => {
-                        const selectedGarment = availableGarments.find(g => g.id === e.target.value)
-                        setOrderData({
-                          ...orderData,
-                          garment_id: e.target.value,
-                          garment_color: selectedGarment?.color || orderData.garment_color
-                        })
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select Garment</option>
-                      {availableGarments.map((garment) => (
-                        <option key={garment.id} value={garment.id}>
-                          {garment.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
-                      Garment Color
-                    </label>
-                    <input
-                      type="text"
-                      value={orderData.garment_color || ''}
-                      onChange={(e) => setOrderData({...orderData, garment_color: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <div>
-                    <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">Size Breakdown</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(orderData.size_quantities || {}).map(([size, qty]) => (
-                        <div key={size} className="flex items-center space-x-2">
-                          <label className="text-sm text-gray-600 w-16">{size}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={qty as number}
-                            onChange={(e) => setOrderData({
-                              ...orderData,
-                              size_quantities: {
-                                ...orderData.size_quantities,
-                                [size]: parseInt(e.target.value) || 0
+                  {/* Multi-garment edit mode */}
+                  {orderData.selected_garments && Object.keys(orderData.selected_garments).length > 0 ? (
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">
+                        Garments ({Object.keys(orderData.selected_garments).length} styles)
+                      </p>
+                      <div className="space-y-4">
+                        {Object.entries(orderData.selected_garments).map(([garmentId, selection]: [string, any]) => {
+                          const garmentInfo = orderGarments[garmentId] || availableGarments.find(g => g.id === garmentId)
+                          return (
+                            <div key={garmentId} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Style</label>
+                                  <select
+                                    value={garmentId}
+                                    onChange={(e) => {
+                                      const newGarmentId = e.target.value
+                                      if (newGarmentId && newGarmentId !== garmentId) {
+                                        const newSelectedGarments = { ...orderData.selected_garments }
+                                        newSelectedGarments[newGarmentId] = newSelectedGarments[garmentId]
+                                        delete newSelectedGarments[garmentId]
+                                        setOrderData({
+                                          ...orderData,
+                                          selected_garments: newSelectedGarments,
+                                          garment_id: Object.keys(newSelectedGarments)[0]
+                                        })
+                                      }
+                                    }}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  >
+                                    {availableGarments.map((g) => (
+                                      <option key={g.id} value={g.id}>{g.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newSelectedGarments = { ...orderData.selected_garments }
+                                    delete newSelectedGarments[garmentId]
+                                    setOrderData({
+                                      ...orderData,
+                                      selected_garments: Object.keys(newSelectedGarments).length > 0 ? newSelectedGarments : null,
+                                      garment_id: Object.keys(newSelectedGarments)[0] || orderData.garment_id
+                                    })
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-sm"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              
+                              {/* Colors for this garment */}
+                              <div className="space-y-2">
+                                {Object.entries(selection.colorSizeQuantities || {}).map(([color, sizeQty]: [string, any]) => (
+                                  <div key={color} className="bg-white border border-gray-200 rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <input
+                                        type="text"
+                                        value={color}
+                                        onChange={(e) => {
+                                          const newColor = e.target.value
+                                          const newColorSizeQtys = { ...selection.colorSizeQuantities }
+                                          if (newColor !== color) {
+                                            newColorSizeQtys[newColor] = newColorSizeQtys[color]
+                                            delete newColorSizeQtys[color]
+                                          }
+                                          const newSelectedGarments = {
+                                            ...orderData.selected_garments,
+                                            [garmentId]: {
+                                              ...selection,
+                                              colorSizeQuantities: newColorSizeQtys,
+                                              selectedColors: Object.keys(newColorSizeQtys)
+                                            }
+                                          }
+                                          setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                        }}
+                                        className="text-sm font-medium px-2 py-1 border border-gray-200 rounded focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Color name"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newColorSizeQtys = { ...selection.colorSizeQuantities }
+                                          delete newColorSizeQtys[color]
+                                          const newSelectedGarments = {
+                                            ...orderData.selected_garments,
+                                            [garmentId]: {
+                                              ...selection,
+                                              colorSizeQuantities: newColorSizeQtys,
+                                              selectedColors: Object.keys(newColorSizeQtys)
+                                            }
+                                          }
+                                          setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                        }}
+                                        className="text-red-400 hover:text-red-600 text-xs"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                      {Object.entries(sizeQty).map(([size, qty]) => (
+                                        <div key={size} className="flex items-center space-x-1 bg-gray-50 rounded px-2 py-1">
+                                          <label className="text-xs text-gray-500">{size}</label>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={qty as number}
+                                            onChange={(e) => {
+                                              const newQty = parseInt(e.target.value) || 0
+                                              const newColorSizeQtys = {
+                                                ...selection.colorSizeQuantities,
+                                                [color]: {
+                                                  ...sizeQty,
+                                                  [size]: newQty
+                                                }
+                                              }
+                                              const newSelectedGarments = {
+                                                ...orderData.selected_garments,
+                                                [garmentId]: {
+                                                  ...selection,
+                                                  colorSizeQuantities: newColorSizeQtys
+                                                }
+                                              }
+                                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                            }}
+                                            className="w-14 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-2 focus:ring-blue-500"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newSizeQty = { ...sizeQty }
+                                              delete newSizeQty[size]
+                                              const newColorSizeQtys = {
+                                                ...selection.colorSizeQuantities,
+                                                [color]: newSizeQty
+                                              }
+                                              const newSelectedGarments = {
+                                                ...orderData.selected_garments,
+                                                [garmentId]: {
+                                                  ...selection,
+                                                  colorSizeQuantities: newColorSizeQtys
+                                                }
+                                              }
+                                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                            }}
+                                            className="text-gray-400 hover:text-red-500 text-xs ml-1"
+                                            title="Remove size"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      ))}
+                                      {/* Add Size Button */}
+                                      <div className="relative">
+                                        <select
+                                          onChange={(e) => {
+                                            const newSize = e.target.value
+                                            if (newSize && !sizeQty[newSize]) {
+                                              const newColorSizeQtys = {
+                                                ...selection.colorSizeQuantities,
+                                                [color]: {
+                                                  ...sizeQty,
+                                                  [newSize]: 0
+                                                }
+                                              }
+                                              const newSelectedGarments = {
+                                                ...orderData.selected_garments,
+                                                [garmentId]: {
+                                                  ...selection,
+                                                  colorSizeQuantities: newColorSizeQtys
+                                                }
+                                              }
+                                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                            }
+                                            e.target.value = '' // Reset select
+                                          }}
+                                          className="text-xs px-2 py-1 border border-dashed border-gray-300 rounded bg-white text-gray-500 hover:border-blue-400 hover:text-blue-500 cursor-pointer"
+                                          defaultValue=""
+                                        >
+                                          <option value="" disabled>+ Add Size</option>
+                                          {['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'].filter(s => !sizeQty[s]).map(size => (
+                                            <option key={size} value={size}>{size}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {/* Add Color Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const gmt = orderGarments[garmentId] || availableGarments.find(g => g.id === garmentId)
+                                    const usedColors = Object.keys(selection.colorSizeQuantities || {})
+                                    const availableColors = gmt?.available_colors?.filter((c: string) => !usedColors.includes(c)) || []
+                                    const newColor = availableColors[0] || `Color ${usedColors.length + 1}`
+                                    
+                                    const newColorSizeQtys = {
+                                      ...selection.colorSizeQuantities,
+                                      [newColor]: { S: 0, M: 0, L: 0, XL: 0 }
+                                    }
+                                    const newSelectedGarments = {
+                                      ...orderData.selected_garments,
+                                      [garmentId]: {
+                                        ...selection,
+                                        colorSizeQuantities: newColorSizeQtys,
+                                        selectedColors: Object.keys(newColorSizeQtys)
+                                      }
+                                    }
+                                    setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                  }}
+                                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                >
+                                  + Add Color
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        
+                        {/* Add New Garment Style Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const usedGarmentIds = Object.keys(orderData.selected_garments || {})
+                            const availableGarmentsToAdd = availableGarments.filter(g => !usedGarmentIds.includes(g.id))
+                            if (availableGarmentsToAdd.length > 0) {
+                              const newGarment = availableGarmentsToAdd[0]
+                              const defaultColor = newGarment.available_colors?.[0] || 'Default'
+                              const newSelectedGarments = {
+                                ...orderData.selected_garments,
+                                [newGarment.id]: {
+                                  selectedColors: [defaultColor],
+                                  colorSizeQuantities: {
+                                    [defaultColor]: { S: 0, M: 0, L: 0, XL: 0 }
+                                  }
+                                }
                               }
-                            })}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                      ))}
+                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                            }
+                          }}
+                          className="mt-4 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                        >
+                          + Add Another Garment Style
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* Single garment edit mode */
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
+                          Garment
+                        </label>
+                        <select
+                          value={orderData.garment_id || ''}
+                          onChange={(e) => {
+                            const selectedGarment = availableGarments.find(g => g.id === e.target.value)
+                            setOrderData({
+                              ...orderData,
+                              garment_id: e.target.value,
+                              garment_color: selectedGarment?.color || orderData.garment_color
+                            })
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select Garment</option>
+                          {availableGarments.map((garment) => (
+                            <option key={garment.id} value={garment.id}>
+                              {garment.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
+                          Garment Color
+                        </label>
+                        <input
+                          type="text"
+                          value={orderData.garment_color || ''}
+                          onChange={(e) => setOrderData({...orderData, garment_color: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">Size Breakdown</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {Object.entries(orderData.size_quantities || {}).map(([size, qty]) => (
+                            <div key={size} className="flex items-center space-x-2">
+                              <label className="text-sm text-gray-600 w-16">{size}</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={qty as number}
+                                onChange={(e) => setOrderData({
+                                  ...orderData,
+                                  size_quantities: {
+                                    ...orderData.size_quantities,
+                                    [size]: parseInt(e.target.value) || 0
+                                  }
+                                })}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">Print Locations</p>
@@ -628,6 +1063,8 @@ export default function AdminOrderDetail() {
               artworkFiles={order.artwork_files || []} 
               garment={garment}
               orderColors={order.color_size_quantities ? Object.keys(order.color_size_quantities) : [order.garment_color].filter(Boolean)}
+              orderGarments={Object.keys(orderGarments).length > 0 ? orderGarments : undefined}
+              selectedGarments={order.selected_garments}
             />
 
             {/* Artwork Files */}

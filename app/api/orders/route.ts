@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         garment_color: validatedData.garment_color || (validatedData.color_size_quantities ? Object.keys(validatedData.color_size_quantities)[0] : ''),
         size_quantities: validatedData.size_quantities || {},
         color_size_quantities: validatedData.color_size_quantities,
+        selected_garments: validatedData.selected_garments || null,
         total_quantity: totalQuantity,
         print_config: validatedData.print_config,
         total_cost: quote.total,

@@ -344,7 +344,7 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
-  const [orderId, setOrderId] = useState<string | null>(null)
+  // Order is now created AFTER payment succeeds (via webhook)
   
   // Pre-fill customer info from logged-in account
   useEffect(() => {
@@ -368,7 +368,6 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
 
     try {
       // For multi-garment orders, we'll create the order with the first garment for now
-      // A full implementation would need an updated orders API to handle multiple garments
       const firstGarmentId = garments[0]?.id
       if (!firstGarmentId) throw new Error('No garments selected')
       
@@ -397,9 +396,14 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
         })
       })
 
+      // Include selected_garments if there are multiple garments
+      const hasMultipleGarments = Object.keys(store.selectedGarments).length > 1
+      
+      // Create the order (with deposit_paid: false - will be updated by webhook on payment)
       const orderData = {
-        garment_id: firstGarmentId, // Primary garment
+        garment_id: firstGarmentId,
         color_size_quantities: combinedColorSizeQuantities,
+        selected_garments: hasMultipleGarments ? store.selectedGarments : undefined,
         print_config: store.printConfig,
         customer_name: store.customerName,
         email: store.email,
@@ -418,7 +422,6 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       if (!orderResponse.ok) throw new Error('Failed to create order')
 
       const order = await orderResponse.json()
-      setOrderId(order.id)
 
       // Upload artwork files
       for (const [location, file] of Object.entries(store.artworkFiles)) {
@@ -474,6 +477,10 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
 
       const { clientSecret: secret } = await paymentResponse.json()
       setClientSecret(secret)
+      
+      // Store order ID for confirmation page
+      sessionStorage.setItem('pendingOrderId', order.id)
+      
       setStep('payment')
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -592,10 +599,10 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
     )
   }
 
-  if (step === 'payment' && clientSecret && orderId) {
+  if (step === 'payment' && clientSecret) {
     return (
       <Elements stripe={stripePromise} options={{ clientSecret }}>
-        <PaymentForm orderId={orderId} />
+        <PaymentForm />
       </Elements>
     )
   }
@@ -603,8 +610,7 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
   return null
 }
 
-function PaymentForm({ orderId }: { orderId: string }) {
-  const router = useRouter()
+function PaymentForm() {
   const stripe = useStripe()
   const elements = useElements()
   const [submitting, setSubmitting] = useState(false)
@@ -620,7 +626,8 @@ function PaymentForm({ orderId }: { orderId: string }) {
     const { error: submitError } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/custom-shirts/orders/${orderId}/confirmation`,
+        // Use a generic confirmation page that will look up the order from the payment intent
+        return_url: `${window.location.origin}/custom-shirts/orders/confirmation`,
       },
     })
 

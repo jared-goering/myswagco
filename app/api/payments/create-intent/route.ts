@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Create payment intent
+    // Create payment intent with order reference
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
     })
     
     return NextResponse.json({
-      clientSecret: paymentIntent.client_secret
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
     })
   } catch (error: any) {
     console.error('Error creating payment intent:', error)

@@ -28,6 +28,15 @@ export const sizeQuantitiesSchema = z.object({
 // Color size quantities schema (maps color names to size quantities)
 export const colorSizeQuantitiesSchema = z.record(z.string(), sizeQuantitiesSchema)
 
+// Garment selection schema (for multi-garment orders)
+export const garmentSelectionSchema = z.object({
+  selectedColors: z.array(z.string()),
+  colorSizeQuantities: colorSizeQuantitiesSchema
+})
+
+// Selected garments schema (maps garment ID to selection)
+export const selectedGarmentsSchema = z.record(z.string(), garmentSelectionSchema)
+
 // Shipping address schema
 export const shippingAddressSchema = z.object({
   line1: z.string().min(1, 'Address is required'),
@@ -63,6 +72,8 @@ export const orderCreationSchema = z.object({
   size_quantities: sizeQuantitiesSchema.optional(),
   // New multi-color support
   color_size_quantities: colorSizeQuantitiesSchema.optional(),
+  // Multi-garment support
+  selected_garments: selectedGarmentsSchema.optional(),
   print_config: printConfigSchema,
 }).merge(customerInfoSchema).refine(
   (data) => {

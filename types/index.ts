@@ -8,6 +8,8 @@ export interface Garment {
   category: string | null
   active: boolean
   base_cost: number
+  customer_price?: number // Calculated price with markup applied
+  markup_percentage?: number // The markup percentage from pricing tier
   thumbnail_url: string | null
   available_colors: string[]
   color_images: Record<string, string> // Maps color name to front image URL
@@ -125,6 +127,7 @@ export interface Order {
   garment_color: string // Legacy - kept for backwards compatibility
   size_quantities: SizeQuantities // Legacy - kept for backwards compatibility
   color_size_quantities?: ColorSizeQuantities // New multi-color support
+  selected_garments?: SelectedGarments // Multi-garment order support
   total_quantity: number
   
   print_config: PrintConfig
