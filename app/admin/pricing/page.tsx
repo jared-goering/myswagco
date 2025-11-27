@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/AdminLayout'
-import { PricingTier, PrintPricing, AppConfig } from '@/types'
+import { PricingTier, PrintPricing, AppConfig, DiscountCode } from '@/types'
 import Toast from '@/components/Toast'
 import DeleteConfirmModal from '@/components/admin/pricing/DeleteConfirmModal'
 import EmptyState from '@/components/admin/pricing/EmptyState'
@@ -11,7 +11,7 @@ import Tooltip from '@/components/admin/pricing/Tooltip'
 import TierRangeChart from '@/components/admin/pricing/TierRangeChart'
 
 export default function AdminPricing() {
-  const [activeTab, setActiveTab] = useState<'tiers' | 'print' | 'config'>('tiers')
+  const [activeTab, setActiveTab] = useState<'tiers' | 'print' | 'config' | 'discounts'>('tiers')
   
   // Pricing Tiers State
   const [tiers, setTiers] = useState<PricingTier[]>([])
@@ -27,6 +27,12 @@ export default function AdminPricing() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null)
   const [editedConfig, setEditedConfig] = useState<Partial<AppConfig>>({})
   
+  // Discount Codes State
+  const [discountCodes, setDiscountCodes] = useState<DiscountCode[]>([])
+  const [editedCodes, setEditedCodes] = useState<Record<string, Partial<DiscountCode>>>({})
+  const [newCode, setNewCode] = useState<Partial<DiscountCode> | null>(null)
+  const [discountEditMode, setDiscountEditMode] = useState(false)
+  
   // UI State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -39,7 +45,7 @@ export default function AdminPricing() {
   // Delete Modal State
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean
-    type: 'tier' | 'pricing' | null
+    type: 'tier' | 'pricing' | 'discount' | null
     id: string
     name: string
     impactMessage?: string
@@ -85,6 +91,13 @@ export default function AdminPricing() {
       if (configRes.ok) {
         const configData = await configRes.json()
         setAppConfig(configData)
+      }
+
+      // Fetch discount codes
+      const discountsRes = await fetch('/api/discount-codes')
+      if (discountsRes.ok) {
+        const discountsData = await discountsRes.json()
+        setDiscountCodes(discountsData)
       }
     } catch (error) {
       console.error('Error fetching pricing data:', error)
@@ -271,6 +284,23 @@ export default function AdminPricing() {
           return newEdited
         })
         showToast('Print pricing deleted successfully', 'success')
+      } else if (deleteModal.type === 'discount') {
+        const response = await fetch(`/api/discount-codes?id=${deleteModal.id}`, {
+          method: 'DELETE'
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to delete discount code')
+        }
+
+        setDiscountCodes(prev => prev.filter(c => c.id !== deleteModal.id))
+        setEditedCodes(prev => {
+          const newEdited = { ...prev }
+          delete newEdited[deleteModal.id]
+          return newEdited
+        })
+        showToast('Discount code deleted successfully', 'success')
       }
       
       setDeleteModal({ isOpen: false, type: null, id: '', name: '' })
@@ -549,6 +579,16 @@ export default function AdminPricing() {
                 }`}
               >
                 General Config
+              </button>
+              <button
+                onClick={() => setActiveTab('discounts')}
+                className={`px-6 py-4 font-medium border-b-2 ${
+                  activeTab === 'discounts'
+                    ? 'border-primary-600 text-primary-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Discount Codes
               </button>
             </nav>
           </div>
@@ -1518,6 +1558,24 @@ export default function AdminPricing() {
                 )}
               </div>
             )}
+
+            {/* DISCOUNT CODES TAB */}
+            {activeTab === 'discounts' && (
+              <DiscountCodesTab
+                codes={discountCodes}
+                setCodes={setDiscountCodes}
+                editedCodes={editedCodes}
+                setEditedCodes={setEditedCodes}
+                newCode={newCode}
+                setNewCode={setNewCode}
+                editMode={discountEditMode}
+                setEditMode={setDiscountEditMode}
+                saving={saving}
+                setSaving={setSaving}
+                showToast={showToast}
+                setDeleteModal={setDeleteModal}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -1531,7 +1589,7 @@ export default function AdminPricing() {
       
       <DeleteConfirmModal
         isOpen={deleteModal.isOpen}
-        title={deleteModal.type === 'tier' ? 'Delete Pricing Tier' : 'Delete Print Pricing'}
+        title={deleteModal.type === 'tier' ? 'Delete Pricing Tier' : deleteModal.type === 'discount' ? 'Delete Discount Code' : 'Delete Print Pricing'}
         itemName={deleteModal.name}
         impactMessage={deleteModal.impactMessage}
         onConfirm={handleConfirmDelete}
@@ -1539,5 +1597,526 @@ export default function AdminPricing() {
         isDeleting={saving}
       />
     </AdminLayout>
+  )
+}
+
+// Discount Codes Tab Component
+function DiscountCodesTab({
+  codes,
+  setCodes,
+  editedCodes,
+  setEditedCodes,
+  newCode,
+  setNewCode,
+  editMode,
+  setEditMode,
+  saving,
+  setSaving,
+  showToast,
+  setDeleteModal
+}: {
+  codes: DiscountCode[]
+  setCodes: React.Dispatch<React.SetStateAction<DiscountCode[]>>
+  editedCodes: Record<string, Partial<DiscountCode>>
+  setEditedCodes: React.Dispatch<React.SetStateAction<Record<string, Partial<DiscountCode>>>>
+  newCode: Partial<DiscountCode> | null
+  setNewCode: React.Dispatch<React.SetStateAction<Partial<DiscountCode> | null>>
+  editMode: boolean
+  setEditMode: React.Dispatch<React.SetStateAction<boolean>>
+  saving: boolean
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+  showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
+  setDeleteModal: React.Dispatch<React.SetStateAction<{
+    isOpen: boolean
+    type: 'tier' | 'pricing' | 'discount' | null
+    id: string
+    name: string
+    impactMessage?: string
+  }>>
+}) {
+  function updateCodeField(codeId: string, field: keyof DiscountCode, value: any) {
+    setEditedCodes(prev => ({
+      ...prev,
+      [codeId]: {
+        ...prev[codeId],
+        [field]: value
+      }
+    }))
+  }
+
+  function addNewCodeRow() {
+    setNewCode({
+      code: '',
+      description: '',
+      discount_type: 'percentage',
+      discount_value: 10,
+      active: true,
+      expires_at: null
+    })
+  }
+
+  function cancelNewCode() {
+    setNewCode(null)
+  }
+
+  async function saveNewCode() {
+    if (!newCode || !newCode.code || !newCode.discount_type || newCode.discount_value === undefined) {
+      showToast('Please fill in all required fields', 'warning')
+      return
+    }
+
+    try {
+      setSaving(true)
+      const response = await fetch('/api/discount-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCode)
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to create discount code')
+      }
+
+      const created = await response.json()
+      setCodes(prev => [created, ...prev])
+      setNewCode(null)
+      showToast('Discount code created successfully', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to create discount code', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveCodeChanges() {
+    try {
+      setSaving(true)
+      const updates = Object.entries(editedCodes)
+
+      for (const [codeId, changes] of updates) {
+        const response = await fetch('/api/discount-codes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: codeId, ...changes })
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to update discount code')
+        }
+
+        const updated = await response.json()
+        setCodes(prev => prev.map(c => c.id === codeId ? updated : c))
+      }
+
+      setEditedCodes({})
+      setEditMode(false)
+      showToast('Changes saved successfully', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save changes', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggleCodeActive(codeId: string, currentActive: boolean) {
+    try {
+      const response = await fetch('/api/discount-codes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: codeId, active: !currentActive })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle code status')
+      }
+
+      const updated = await response.json()
+      setCodes(prev => prev.map(c => c.id === codeId ? updated : c))
+      showToast(`Discount code ${!currentActive ? 'activated' : 'deactivated'}`, 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to update code status', 'error')
+    }
+  }
+
+  function enterEditMode() {
+    setEditMode(true)
+  }
+
+  function exitEditMode() {
+    setEditMode(false)
+    setEditedCodes({})
+    setNewCode(null)
+  }
+
+  const hasChanges = Object.keys(editedCodes).length > 0
+
+  function isExpired(expiresAt: string | null | undefined): boolean {
+    if (!expiresAt) return false
+    return new Date(expiresAt) < new Date()
+  }
+
+  function formatDate(dateString: string | null | undefined): string {
+    if (!dateString) return 'Never'
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    })
+  }
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <p className="text-sm text-gray-600">
+          Create and manage discount codes that customers can use at checkout.
+        </p>
+        <div className="flex items-center gap-3">
+          {!editMode ? (
+            <button
+              onClick={enterEditMode}
+              disabled={saving}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Manage Codes
+            </button>
+          ) : (
+            <button
+              onClick={addNewCodeRow}
+              disabled={newCode !== null || saving}
+              className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add New Code
+            </button>
+          )}
+        </div>
+      </div>
+
+      {codes.length === 0 && !newCode ? (
+        <div className="text-center py-16">
+          <div className="w-20 h-20 mx-auto mb-6 bg-gray-100 rounded-xl flex items-center justify-center">
+            <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">No discount codes yet</h3>
+          <p className="text-gray-500 mb-6">Create your first discount code to offer savings to customers.</p>
+          <button
+            onClick={() => { enterEditMode(); addNewCodeRow(); }}
+            className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Create First Code
+          </button>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Code</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Description</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Value</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expires</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {/* New code row */}
+              {newCode && (
+                <tr className="bg-green-50 border-2 border-green-200">
+                  <td className="px-6 py-4">
+                    <input
+                      type="text"
+                      value={newCode.code || ''}
+                      onChange={(e) => setNewCode({ ...newCode, code: e.target.value.toUpperCase() })}
+                      placeholder="MYCODE"
+                      className="w-full border border-green-300 rounded-md px-3 py-2 font-mono font-medium uppercase focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                      autoFocus
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <input
+                      type="text"
+                      value={newCode.description || ''}
+                      onChange={(e) => setNewCode({ ...newCode, description: e.target.value })}
+                      placeholder="Description (optional)"
+                      className="w-full border border-green-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <select
+                      value={newCode.discount_type || 'percentage'}
+                      onChange={(e) => setNewCode({ ...newCode, discount_type: e.target.value as 'percentage' | 'fixed' })}
+                      className="w-full border border-green-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white font-medium"
+                    >
+                      <option value="percentage">Percentage</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-center gap-1">
+                      {newCode.discount_type === 'fixed' && <span className="text-gray-500 font-medium">$</span>}
+                      <input
+                        type="number"
+                        min="0"
+                        step={newCode.discount_type === 'percentage' ? '1' : '0.01'}
+                        max={newCode.discount_type === 'percentage' ? '100' : undefined}
+                        value={newCode.discount_value || ''}
+                        onChange={(e) => setNewCode({ ...newCode, discount_value: parseFloat(e.target.value) })}
+                        className="w-20 border border-green-300 rounded-md px-3 py-2 text-center font-medium focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                      />
+                      {newCode.discount_type === 'percentage' && <span className="text-gray-500 font-medium">%</span>}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="px-3 py-1.5 bg-green-100 text-green-800 border border-green-200 rounded-full text-xs font-semibold">
+                      Active
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <input
+                      type="date"
+                      value={newCode.expires_at ? new Date(newCode.expires_at).toISOString().split('T')[0] : ''}
+                      onChange={(e) => setNewCode({ ...newCode, expires_at: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                      className="w-full border border-green-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={saveNewCode}
+                        disabled={saving}
+                        className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                        title="Save"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={cancelNewCode}
+                        disabled={saving}
+                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                        title="Cancel"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+
+              {/* Existing codes */}
+              {codes.map((code, index) => {
+                const edited = editedCodes[code.id] || {}
+                const displayCode = edited.code !== undefined ? edited.code : code.code
+                const displayDescription = edited.description !== undefined ? edited.description : code.description
+                const displayType = edited.discount_type !== undefined ? edited.discount_type : code.discount_type
+                const displayValue = edited.discount_value !== undefined ? edited.discount_value : code.discount_value
+                const displayExpiresAt = edited.expires_at !== undefined ? edited.expires_at : code.expires_at
+                const hasEdits = !!editedCodes[code.id]
+                const expired = isExpired(code.expires_at)
+
+                return (
+                  <tr 
+                    key={code.id} 
+                    className={`transition-colors ${
+                      hasEdits ? 'bg-amber-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    } ${expired ? 'opacity-60' : ''} hover:bg-blue-50`}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={displayCode}
+                          onChange={(e) => updateCodeField(code.id, 'code', e.target.value.toUpperCase())}
+                          className={`w-full border rounded-md px-3 py-2 font-mono font-medium uppercase focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${hasEdits ? 'border-amber-400' : 'border-gray-300'}`}
+                        />
+                      ) : (
+                        <span className="font-mono font-semibold text-primary-600">{code.code}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={displayDescription || ''}
+                          onChange={(e) => updateCodeField(code.id, 'description', e.target.value)}
+                          className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${hasEdits ? 'border-amber-400' : 'border-gray-300'}`}
+                        />
+                      ) : (
+                        <span className="text-gray-600">{code.description || '—'}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {editMode ? (
+                        <select
+                          value={displayType}
+                          onChange={(e) => updateCodeField(code.id, 'discount_type', e.target.value)}
+                          className={`border rounded-md px-3 py-2 font-medium focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${hasEdits ? 'border-amber-400' : 'border-gray-300'}`}
+                        >
+                          <option value="percentage">Percentage</option>
+                          <option value="fixed">Fixed</option>
+                        </select>
+                      ) : (
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          code.discount_type === 'percentage' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {code.discount_type === 'percentage' ? 'Percentage' : 'Fixed'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {editMode ? (
+                        <div className="flex items-center justify-center gap-1">
+                          {displayType === 'fixed' && <span className="text-gray-500 font-medium">$</span>}
+                          <input
+                            type="number"
+                            min="0"
+                            step={displayType === 'percentage' ? '1' : '0.01'}
+                            value={displayValue}
+                            onChange={(e) => updateCodeField(code.id, 'discount_value', parseFloat(e.target.value))}
+                            className={`w-20 border rounded-md px-3 py-2 text-center font-medium focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${hasEdits ? 'border-amber-400' : 'border-gray-300'}`}
+                          />
+                          {displayType === 'percentage' && <span className="text-gray-500 font-medium">%</span>}
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-gray-900">
+                          {code.discount_type === 'percentage' ? `${code.discount_value}%` : `$${code.discount_value}`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {expired ? (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                          Expired
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => toggleCodeActive(code.id, code.active)}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            code.active
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {code.active ? 'Active' : 'Inactive'}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {editMode ? (
+                        <input
+                          type="date"
+                          value={displayExpiresAt ? new Date(displayExpiresAt).toISOString().split('T')[0] : ''}
+                          onChange={(e) => updateCodeField(code.id, 'expires_at', e.target.value ? new Date(e.target.value).toISOString() : null)}
+                          className={`border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${hasEdits ? 'border-amber-400' : 'border-gray-300'}`}
+                        />
+                      ) : (
+                        <span className={`text-sm ${expired ? 'text-red-600' : 'text-gray-500'}`}>
+                          {formatDate(code.expires_at)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {editMode ? (
+                        <button
+                          onClick={() => setDeleteModal({ isOpen: true, type: 'discount', id: code.id, name: code.code })}
+                          disabled={saving}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Unsaved changes banner */}
+      {editMode && (hasChanges || newCode) && (
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-medium text-amber-900">
+                  {newCode && !hasChanges ? 'Adding New Code' : 'Unsaved Changes'}
+                </p>
+                <p className="text-sm text-amber-700">
+                  {newCode && !hasChanges 
+                    ? 'Complete the form and save your new discount code'
+                    : `You have ${Object.keys(editedCodes).length} code(s) with unsaved changes`
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={exitEditMode}
+                disabled={saving}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              {hasChanges && (
+                <button
+                  onClick={saveCodeChanges}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
+                      </svg>
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

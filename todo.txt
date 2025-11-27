@@ -1,4 +1,3 @@
-discount codes
 SEO max
 update checkout page look
 email notifications
@@ -10,3 +9,9 @@ ability to charge card for missing amount
 
 Done:
 change when order is sent
+
+Future things:
+    Launch order site
+    Make swag box for employee 
+        integerate with gusto / zenefits
+discount codes

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput, SelectedGarments, GarmentSelection, MultiGarmentQuoteResponse } from '@/types'
+import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput, SelectedGarments, GarmentSelection, MultiGarmentQuoteResponse, AppliedDiscount } from '@/types'
 
 interface OrderState {
   // Draft tracking
@@ -48,6 +48,10 @@ interface OrderState {
   quote: QuoteResponse | null
   multiGarmentQuote: MultiGarmentQuoteResponse | null
   
+  // Discount
+  appliedDiscount: AppliedDiscount | null
+  discountCodeId: string | null
+  
   // Text description for artwork (persisted)
   textDescription: string
   
@@ -82,6 +86,8 @@ interface OrderState {
   setQuote: (quote: QuoteResponse | null) => void
   setMultiGarmentQuote: (quote: MultiGarmentQuoteResponse | null) => void
   setTextDescription: (text: string) => void
+  setAppliedDiscount: (discount: AppliedDiscount | null, discountCodeId: string | null) => void
+  clearDiscount: () => void
   reset: () => void
   
   // Draft management actions
@@ -121,6 +127,8 @@ const initialState = {
   artworkTransforms: {} as { [location: string]: ArtworkTransform },
   quote: null as QuoteResponse | null,
   multiGarmentQuote: null as MultiGarmentQuoteResponse | null,
+  appliedDiscount: null as AppliedDiscount | null,
+  discountCodeId: null as string | null,
   textDescription: ''
 }
 
@@ -334,6 +342,8 @@ export const useOrderStore = create<OrderState>()(
       setQuote: (quote) => set({ quote }),
       setMultiGarmentQuote: (quote) => set({ multiGarmentQuote: quote }),
       setTextDescription: (text) => set({ textDescription: text }),
+      setAppliedDiscount: (discount, discountCodeId) => set({ appliedDiscount: discount, discountCodeId }),
+      clearDiscount: () => set({ appliedDiscount: null, discountCodeId: null }),
       reset: () => set(initialState),
       
       // Draft management
@@ -487,6 +497,8 @@ export const useOrderStore = create<OrderState>()(
         artworkTransforms: state.artworkTransforms,
         quote: state.quote,
         multiGarmentQuote: state.multiGarmentQuote,
+        appliedDiscount: state.appliedDiscount,
+        discountCodeId: state.discountCodeId,
         textDescription: state.textDescription,
         // Note: artworkFiles is NOT persisted as File objects can't be serialized
       }),

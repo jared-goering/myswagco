@@ -137,6 +137,10 @@ export interface Order {
   deposit_paid: boolean
   balance_due: number
   
+  // Discount fields
+  discount_code_id?: string
+  discount_amount?: number
+  
   status: OrderStatus
   internal_notes?: string
   
@@ -202,6 +206,28 @@ export interface AppConfig {
   min_order_quantity: number
   max_ink_colors: number
   updated_at: string
+}
+
+// Discount Codes
+export type DiscountType = 'percentage' | 'fixed'
+
+export interface DiscountCode {
+  id: string
+  code: string
+  description?: string
+  discount_type: DiscountType
+  discount_value: number
+  active: boolean
+  expires_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AppliedDiscount {
+  code: string
+  discount_type: DiscountType
+  discount_value: number
+  discount_amount: number // Actual amount discounted from order
 }
 
 // Customer Authentication Types

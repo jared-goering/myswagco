@@ -239,7 +239,59 @@ export default function MultiGarmentCheckout() {
 }
 
 function OrderSummary({ garments, quote }: { garments: Garment[]; quote: MultiGarmentQuoteResponse }) {
-  const { selectedGarments, printConfig } = useOrderStore()
+  const { selectedGarments, printConfig, appliedDiscount, discountCodeId, setAppliedDiscount, clearDiscount } = useOrderStore()
+  const [discountCode, setDiscountCode] = useState('')
+  const [discountError, setDiscountError] = useState<string | null>(null)
+  const [applyingDiscount, setApplyingDiscount] = useState(false)
+  const [showDiscountInput, setShowDiscountInput] = useState(false)
+
+  // Calculate totals with discount
+  const discountAmount = appliedDiscount?.discount_amount || 0
+  const discountedTotal = Math.max(0, quote.total - discountAmount)
+  const discountedDeposit = Math.round((discountedTotal * 0.5) * 100) / 100
+  const discountedBalance = discountedTotal - discountedDeposit
+
+  async function handleApplyDiscount() {
+    if (!discountCode.trim()) {
+      setDiscountError('Please enter a discount code')
+      return
+    }
+
+    setApplyingDiscount(true)
+    setDiscountError(null)
+
+    try {
+      const response = await fetch('/api/discount-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: discountCode,
+          subtotal: quote.total
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.valid) {
+        setDiscountError(data.error || 'Invalid discount code')
+        return
+      }
+
+      setAppliedDiscount(data.discount, data.discount_code_id)
+      setDiscountCode('')
+      setShowDiscountInput(false)
+    } catch (error) {
+      setDiscountError('Failed to apply discount code')
+    } finally {
+      setApplyingDiscount(false)
+    }
+  }
+
+  function handleRemoveDiscount() {
+    clearDiscount()
+    setDiscountCode('')
+    setDiscountError(null)
+  }
 
   return (
     <motion.div 
@@ -314,20 +366,96 @@ function OrderSummary({ garments, quote }: { garments: Garment[]; quote: MultiGa
           <span className="text-white/70 font-semibold">Setup Fees</span>
           <span className="font-black">${quote.setup_fees.toFixed(2)}</span>
         </div>
+
+        {/* Discount Code Section */}
         <div className="border-t border-white/20 pt-4">
+          {appliedDiscount ? (
+            <div className="bg-data-green/20 border border-data-green/40 rounded-lg p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-data-green" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <span className="font-mono font-bold text-data-green text-sm">{appliedDiscount.code}</span>
+                    <span className="text-white/70 text-xs ml-2">
+                      ({appliedDiscount.discount_type === 'percentage' ? `${appliedDiscount.discount_value}% off` : `$${appliedDiscount.discount_value} off`})
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleRemoveDiscount}
+                  className="text-white/60 hover:text-white transition-colors"
+                  title="Remove discount"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-data-green font-semibold">Discount</span>
+                <span className="font-black text-data-green">-${discountAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : showDiscountInput ? (
+            <div className="mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={discountCode}
+                  onChange={(e) => { setDiscountCode(e.target.value.toUpperCase()); setDiscountError(null); }}
+                  placeholder="Enter code"
+                  className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-white/40 font-mono font-bold uppercase text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-400/20"
+                />
+                <button
+                  onClick={handleApplyDiscount}
+                  disabled={applyingDiscount}
+                  className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
+                >
+                  {applyingDiscount ? '...' : 'Apply'}
+                </button>
+              </div>
+              {discountError && (
+                <p className="text-error-400 text-xs mt-2 font-semibold">{discountError}</p>
+              )}
+              <button
+                onClick={() => { setShowDiscountInput(false); setDiscountCode(''); setDiscountError(null); }}
+                className="text-white/50 hover:text-white/70 text-xs mt-2 font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowDiscountInput(true)}
+              className="flex items-center gap-2 text-primary-400 hover:text-primary-300 font-semibold text-sm transition-colors mb-4"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+              Have a discount code?
+            </button>
+          )}
+
           <div className="flex justify-between items-baseline mb-2">
             <span className="text-white/90 font-black text-lg">Total</span>
-            <span className="text-4xl font-black text-primary-400">${quote.total.toFixed(2)}</span>
+            <div className="text-right">
+              {discountAmount > 0 && (
+                <span className="text-white/50 line-through text-xl mr-2">${quote.total.toFixed(2)}</span>
+              )}
+              <span className="text-4xl font-black text-primary-400">${discountedTotal.toFixed(2)}</span>
+            </div>
           </div>
         </div>
         <div className="bg-white/10 rounded-bento-lg p-4 mt-4">
           <div className="flex justify-between mb-2">
             <span className="font-bold">Deposit (50%)</span>
-            <span className="font-black text-data-green text-xl">${quote.deposit_amount.toFixed(2)}</span>
+            <span className="font-black text-data-green text-xl">${discountedDeposit.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm text-white/70">
             <span>Balance Due Later</span>
-            <span className="font-bold">${quote.balance_due.toFixed(2)}</span>
+            <span className="font-bold">${discountedBalance.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -363,6 +491,12 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
 
   async function handleCustomerInfoSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    // Prevent double submission
+    if (submitting || clientSecret) {
+      return
+    }
+    
     setError(null)
     setSubmitting(true)
 
@@ -399,87 +533,61 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       // Include selected_garments if there are multiple garments
       const hasMultipleGarments = Object.keys(store.selectedGarments).length > 1
       
-      // Create the order (with deposit_paid: false - will be updated by webhook on payment)
-      const orderData = {
+      // Create a PENDING order (actual order created after payment succeeds)
+      const pendingOrderData = {
+        customer_id: user?.id || null,
         garment_id: firstGarmentId,
         color_size_quantities: combinedColorSizeQuantities,
-        selected_garments: hasMultipleGarments ? store.selectedGarments : undefined,
+        selected_garments: hasMultipleGarments ? store.selectedGarments : null,
         print_config: store.printConfig,
         customer_name: store.customerName,
         email: store.email,
         phone: store.phone,
         shipping_address: store.shippingAddress,
         organization_name: store.organizationName,
-        need_by_date: store.needByDate
+        need_by_date: store.needByDate,
+        // Include discount if applied
+        discount_code_id: store.discountCodeId || undefined,
+        discount_amount: store.appliedDiscount?.discount_amount || undefined,
+        // Store artwork references for upload after payment
+        artwork_data: Object.entries(store.artworkFiles)
+          .filter(([_, file]) => file)
+          .map(([location, file]) => ({
+            location,
+            fileName: file?.name,
+            transform: store.artworkTransforms[location]
+          }))
       }
 
-      const orderResponse = await fetch('/api/orders', {
+      const pendingResponse = await fetch('/api/pending-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderData)
+        body: JSON.stringify(pendingOrderData)
       })
 
-      if (!orderResponse.ok) throw new Error('Failed to create order')
+      if (!pendingResponse.ok) throw new Error('Failed to prepare order')
 
-      const order = await orderResponse.json()
+      const pendingOrder = await pendingResponse.json()
 
-      // Upload artwork files
-      for (const [location, file] of Object.entries(store.artworkFiles)) {
-        if (file) {
-          const formData = new FormData()
-          formData.append('file', file)
-          formData.append('order_id', order.id)
-          formData.append('location', location)
-          
-          if (user) {
-            formData.append('user_id', user.id)
-            if (user.email) formData.append('user_email', user.email)
-          }
-          
-          const transform = store.artworkTransforms[location]
-          if (transform) formData.append('transform', JSON.stringify(transform))
-
-          await fetch('/api/artwork/upload', { method: 'POST', body: formData })
-          
-          const svgData = store.vectorizedSvgData[location]
-          if (svgData && svgData.startsWith('data:')) {
-            const base64Data = svgData.split(',')[1]
-            const binaryData = atob(base64Data)
-            const bytes = new Uint8Array(binaryData.length)
-            for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i)
-            const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
-            
-            const vectorFormData = new FormData()
-            vectorFormData.append('file', svgBlob, `${file.name.replace(/\.[^/.]+$/, '')}_vectorized.svg`)
-            vectorFormData.append('order_id', order.id)
-            vectorFormData.append('location', location)
-            if (user) {
-              vectorFormData.append('user_id', user.id)
-              if (user.email) vectorFormData.append('user_email', user.email)
-            }
-            await fetch('/api/artwork/upload', { method: 'POST', body: vectorFormData })
-          }
-        }
-      }
-
-      // Create payment intent
+      // Create payment intent with pending order reference
       const paymentResponse = await fetch('/api/payments/create-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: quote.deposit_amount,
-          orderId: order.id,
+          pendingOrderId: pendingOrder.id,
           customerEmail: store.email
         })
       })
 
       if (!paymentResponse.ok) throw new Error('Failed to create payment intent')
 
-      const { clientSecret: secret } = await paymentResponse.json()
+      const { clientSecret: secret, paymentIntentId } = await paymentResponse.json()
       setClientSecret(secret)
       
-      // Store order ID for confirmation page
-      sessionStorage.setItem('pendingOrderId', order.id)
+      // Store pending order ID for confirmation page
+      sessionStorage.setItem('pendingOrderId', pendingOrder.id)
+      sessionStorage.setItem('paymentIntentId', paymentIntentId)
       
       setStep('payment')
     } catch (err: any) {
@@ -618,7 +726,7 @@ function PaymentForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!stripe || !elements) return
+    if (!stripe || !elements || submitting) return
 
     setSubmitting(true)
     setError(null)

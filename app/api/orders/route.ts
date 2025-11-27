@@ -68,6 +68,12 @@ export async function POST(request: NextRequest) {
       validatedData.print_config
     )
     
+    // Apply discount if provided
+    const discountAmount = validatedData.discount_amount || 0
+    const discountedTotal = Math.max(0, quote.total - discountAmount)
+    const discountedDeposit = Math.round((discountedTotal * 0.5) * 100) / 100
+    const discountedBalance = discountedTotal - discountedDeposit
+    
     // Create order (link to customer account if logged in)
     const { data: order, error } = await supabaseAdmin
       .from('orders')
@@ -86,10 +92,12 @@ export async function POST(request: NextRequest) {
         selected_garments: validatedData.selected_garments || null,
         total_quantity: totalQuantity,
         print_config: validatedData.print_config,
-        total_cost: quote.total,
-        deposit_amount: quote.deposit_amount,
+        total_cost: discountedTotal,
+        deposit_amount: discountedDeposit,
         deposit_paid: false,
-        balance_due: quote.balance_due,
+        balance_due: discountedBalance,
+        discount_code_id: validatedData.discount_code_id || null,
+        discount_amount: discountAmount,
         status: 'pending_art_review'
       })
       .select()

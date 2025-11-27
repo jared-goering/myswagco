@@ -75,6 +75,9 @@ export const orderCreationSchema = z.object({
   // Multi-garment support
   selected_garments: selectedGarmentsSchema.optional(),
   print_config: printConfigSchema,
+  // Discount support
+  discount_code_id: z.string().uuid().optional(),
+  discount_amount: z.number().min(0).optional(),
 }).merge(customerInfoSchema).refine(
   (data) => {
     // Either legacy fields or new multi-color field must be provided

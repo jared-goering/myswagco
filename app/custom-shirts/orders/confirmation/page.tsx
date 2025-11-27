@@ -14,23 +14,26 @@ function ConfirmationContent() {
   const [order, setOrder] = useState<Order & { garments: Garment } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { deleteDraft, reset, draftId } = useOrderStore()
+  const [uploadingArtwork, setUploadingArtwork] = useState(false)
+  const { deleteDraft, reset, draftId, artworkFiles, artworkTransforms, vectorizedSvgData } = useOrderStore()
   const hasCleanedUp = useRef(false)
+  const hasUploadedArtwork = useRef(false)
+  const isProcessingPayment = useRef(false)
 
   useEffect(() => {
     const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret')
     
+    // Prevent duplicate processing (React StrictMode, re-renders, etc.)
+    if (isProcessingPayment.current) {
+      return
+    }
+    
     if (paymentIntentClientSecret) {
+      isProcessingPayment.current = true
       checkPaymentAndFetchOrder(paymentIntentClientSecret)
     } else {
-      // Try to get order ID from session storage (fallback)
-      const storedOrderId = sessionStorage.getItem('pendingOrderId')
-      if (storedOrderId) {
-        fetchOrder(storedOrderId)
-      } else {
-        setError('No payment information found')
-        setLoading(false)
-      }
+      setError('No payment information found')
+      setLoading(false)
     }
   }, [searchParams])
 
@@ -52,23 +55,56 @@ function ConfirmationContent() {
         return
       }
 
-      // Get order ID from payment intent metadata
-      const orderId = paymentIntent.metadata?.order_id
+      // Get order ID from payment intent metadata (set by webhook after creating order)
+      let orderId = paymentIntent.metadata?.order_id
       
       if (!orderId) {
-        // Try session storage as fallback
-        const storedOrderId = sessionStorage.getItem('pendingOrderId')
-        if (storedOrderId) {
-          await fetchOrder(storedOrderId)
-          return
+        // Check if order exists via payment intent lookup
+        const checkResponse = await fetch(`/api/payments/check-order?payment_intent_id=${paymentIntent.id}`)
+        let pendingOrderIdFromAPI: string | null = null
+        
+        if (checkResponse.ok) {
+          const checkData = await checkResponse.json()
+          if (checkData.orderId) {
+            orderId = checkData.orderId
+          }
+          pendingOrderIdFromAPI = checkData.pendingOrderId
         }
-        throw new Error('Order not found. Please contact support.')
+      
+        if (!orderId) {
+          // Order not created yet (webhook may not have fired - common in local dev)
+          // Get pending order ID and create the order now
+          const pendingOrderId = pendingOrderIdFromAPI || paymentIntent.metadata?.pending_order_id || sessionStorage.getItem('pendingOrderId')
+          
+          if (pendingOrderId) {
+            // Create order from pending order
+            const createResponse = await fetch('/api/orders/from-pending', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                pendingOrderId,
+                paymentIntentId: paymentIntent.id
+              })
+            })
+            
+            if (createResponse.ok) {
+              const newOrder = await createResponse.json()
+              orderId = newOrder.id
+            } else {
+              const errorData = await createResponse.json()
+              throw new Error(errorData.error || 'Failed to create order. Please contact support.')
+            }
+          } else {
+            throw new Error('Order is being processed. Please refresh in a moment or contact support.')
+          }
+        }
       }
 
       await fetchOrder(orderId)
       
       // Clear session storage
       sessionStorage.removeItem('pendingOrderId')
+      sessionStorage.removeItem('paymentIntentId')
     } catch (err: any) {
       console.error('Error checking payment:', err)
       setError(err.message || 'An error occurred')
@@ -82,6 +118,12 @@ function ConfirmationContent() {
       if (response.ok) {
         const data = await response.json()
         setOrder(data)
+        
+        // Upload artwork if we have it in the store and haven't uploaded yet
+        if (!hasUploadedArtwork.current && Object.keys(artworkFiles).some(k => artworkFiles[k])) {
+          hasUploadedArtwork.current = true
+          await uploadArtworkFiles(orderId)
+        }
       } else {
         throw new Error('Order not found')
       }
@@ -93,9 +135,47 @@ function ConfirmationContent() {
     }
   }
 
-  // Clean up draft and reset store when order is confirmed
+  async function uploadArtworkFiles(orderId: string) {
+    setUploadingArtwork(true)
+    try {
+      for (const [location, file] of Object.entries(artworkFiles)) {
+        if (file) {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('order_id', orderId)
+          formData.append('location', location)
+          
+          const transform = artworkTransforms[location]
+          if (transform) formData.append('transform', JSON.stringify(transform))
+
+          await fetch('/api/artwork/upload', { method: 'POST', body: formData })
+          
+          const svgData = vectorizedSvgData[location]
+          if (svgData && svgData.startsWith('data:')) {
+            const base64Data = svgData.split(',')[1]
+            const binaryData = atob(base64Data)
+            const bytes = new Uint8Array(binaryData.length)
+            for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i)
+            const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
+            
+            const vectorFormData = new FormData()
+            vectorFormData.append('file', svgBlob, `${file.name.replace(/\.[^/.]+$/, '')}_vectorized.svg`)
+            vectorFormData.append('order_id', orderId)
+            vectorFormData.append('location', location)
+            await fetch('/api/artwork/upload', { method: 'POST', body: vectorFormData })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error uploading artwork:', err)
+    } finally {
+      setUploadingArtwork(false)
+    }
+  }
+
+  // Clean up draft and reset store when order is confirmed and artwork uploaded
   useEffect(() => {
-    if (order && !hasCleanedUp.current) {
+    if (order && !hasCleanedUp.current && !uploadingArtwork) {
       hasCleanedUp.current = true
       
       // Delete the draft from database
@@ -106,7 +186,7 @@ function ConfirmationContent() {
       // Reset the local order store
       reset()
     }
-  }, [order, draftId, deleteDraft, reset])
+  }, [order, draftId, deleteDraft, reset, uploadingArtwork])
 
   if (loading) {
     return (
@@ -183,6 +263,12 @@ function ConfirmationContent() {
           <p className="text-xl text-charcoal-600 font-semibold">
             Thank you for your order. We've received your deposit payment.
           </p>
+          {uploadingArtwork && (
+            <p className="text-sm text-charcoal-500 mt-4">
+              <span className="inline-block animate-spin mr-2">⏳</span>
+              Uploading your artwork...
+            </p>
+          )}
         </div>
 
         {/* Order Details */}

@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       orderId: null,
       status: paymentIntent.status,
+      pendingOrderId: paymentIntent.metadata?.pending_order_id || null,
       message: 'Order not yet created'
     })
   } catch (error: any) {
