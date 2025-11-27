@@ -282,17 +282,28 @@ export default function StyleCart({ garments, onContinue, isInGrid = false, mobi
                           </p>
                           <div className="flex items-center gap-1 mt-1.5">
                             <div className="flex -space-x-1">
-                              {garment.available_colors.slice(0, 5).map((color, idx) => (
-                                <div
-                                  key={color}
-                                  className="w-3.5 h-3.5 rounded-full border border-white/20"
-                                  style={{ 
-                                    backgroundColor: getColorValue(color),
-                                    zIndex: 5 - idx
-                                  }}
-                                  title={color}
-                                />
-                              ))}
+                              {garment.available_colors.slice(0, 5).map((color, idx) => {
+                                const colorImage = garment.color_images?.[color]
+                                return (
+                                  <div
+                                    key={color}
+                                    className="w-3.5 h-3.5 rounded-full border border-white/20 overflow-hidden"
+                                    style={{ 
+                                      backgroundColor: colorImage ? undefined : getColorValue(color),
+                                      zIndex: 5 - idx
+                                    }}
+                                    title={color}
+                                  >
+                                    {colorImage && (
+                                      <img 
+                                        src={colorImage} 
+                                        alt={color}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
                             <span className="text-[10px] text-primary-400 font-bold ml-0.5">
                               {garment.available_colors.length} colors
@@ -490,17 +501,28 @@ export default function StyleCart({ garments, onContinue, isInGrid = false, mobi
                           {/* Color dot preview */}
                           <div className="flex items-center gap-1 mt-1.5">
                             <div className="flex -space-x-1">
-                              {garment.available_colors.slice(0, 5).map((color, idx) => (
-                                <div
-                                  key={color}
-                                  className="w-3.5 h-3.5 rounded-full border border-white/20"
-                                  style={{ 
-                                    backgroundColor: getColorValue(color),
-                                    zIndex: 5 - idx
-                                  }}
-                                  title={color}
-                                />
-                              ))}
+                              {garment.available_colors.slice(0, 5).map((color, idx) => {
+                                const colorImage = garment.color_images?.[color]
+                                return (
+                                  <div
+                                    key={color}
+                                    className="w-3.5 h-3.5 rounded-full border border-white/20 overflow-hidden"
+                                    style={{ 
+                                      backgroundColor: colorImage ? undefined : getColorValue(color),
+                                      zIndex: 5 - idx
+                                    }}
+                                    title={color}
+                                  >
+                                    {colorImage && (
+                                      <img 
+                                        src={colorImage} 
+                                        alt={color}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
                             <span className="text-[10px] text-primary-400 font-bold ml-0.5">
                               {garment.available_colors.length} colors

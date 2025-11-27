@@ -724,6 +724,75 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
             </div>
           </div>
 
+          {/* Authentication Gate */}
+          {!isAuthenticated ? (
+            <div className="flex flex-col items-center justify-center p-8 md:p-12 text-center min-h-[400px]">
+              {/* Lock Icon */}
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-fuchsia-100 flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-2xl font-black text-charcoal-700 mb-3">
+                Sign In to Generate AI Designs
+              </h3>
+              
+              {/* Description */}
+              <p className="text-charcoal-500 font-medium max-w-md mb-8 leading-relaxed">
+                Create unlimited screen print-ready graphics with our AI Design Generator. 
+                Sign in to save your designs to your account and access them anytime.
+              </p>
+              
+              {/* Benefits */}
+              <div className="flex flex-wrap justify-center gap-4 mb-8">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Unlimited generations</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Save to your account</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
+                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-700">Screen print optimized</span>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => openAuthModal({ 
+                    title: 'Sign in to use AI Design Generator',
+                    message: 'Create and save unlimited AI-generated designs for your custom shirts.'
+                  })}
+                  className="px-8 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento font-bold shadow-soft hover:shadow-bento transition-all"
+                >
+                  Sign In or Create Account
+                </button>
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-3 text-charcoal-600 hover:text-charcoal-700 hover:bg-surface-100 rounded-bento font-semibold transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+              
+              {/* Footer Note */}
+              <p className="mt-8 text-xs text-charcoal-400 font-medium">
+                Free to use • No credit card required
+              </p>
+            </div>
+          ) : (
+          <>
           {/* Content */}
           <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-4 md:p-6">
             {/* Mobile: Preview first on mobile when generating or has result */}
@@ -1556,6 +1625,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
           
           {/* Mobile bottom padding to account for sticky button */}
           <div className="h-20 md:hidden" />
+          </>
+          )}
 
           {/* Location Picker Overlay */}
           <AnimatePresence>

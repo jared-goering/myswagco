@@ -768,21 +768,32 @@ export default function GarmentSelection() {
                             {garment.description}
                           </p>
                           
-                          {/* Color dots with count */}
+                          {/* Color dots with count - use actual product images when available */}
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-1.5">
                               <div className="flex -space-x-1.5">
-                                {garment.available_colors.slice(0, 6).map((color, idx) => (
-                                  <div
-                                    key={color}
-                                    className="w-5 h-5 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5"
-                                    style={{ 
-                                      backgroundColor: getColorValue(color),
-                                      zIndex: 6 - idx
-                                    }}
-                                    title={color}
-                                  />
-                                ))}
+                                {garment.available_colors.slice(0, 6).map((color, idx) => {
+                                  const colorImage = garment.color_images?.[color]
+                                  return (
+                                    <div
+                                      key={color}
+                                      className="w-5 h-5 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5 overflow-hidden"
+                                      style={{ 
+                                        backgroundColor: colorImage ? undefined : getColorValue(color),
+                                        zIndex: 6 - idx
+                                      }}
+                                      title={color}
+                                    >
+                                      {colorImage && (
+                                        <img 
+                                          src={colorImage} 
+                                          alt={color}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                               {colorCount > 6 && (
                                 <span className="text-xs font-bold text-charcoal-400 ml-1">
