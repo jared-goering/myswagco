@@ -647,7 +647,9 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
         body: JSON.stringify({
           amount: quote.deposit_amount,
           pendingOrderId: pendingOrder.id,
-          customerEmail: store.email
+          customerEmail: store.email,
+          customerName: store.customerName,
+          paymentType: 'deposit'
         })
       })
 

@@ -92,7 +92,7 @@ export async function POST(
       case 'balance_due':
         // Generate payment link - this should point to a balance payment page
         const balancePaymentLink = payment_link || 
-          `${process.env.NEXT_PUBLIC_APP_URL || 'https://myswagco.com'}/custom-shirts/orders/${orderId}/pay-balance`
+          `${process.env.NEXT_PUBLIC_APP_URL || 'https://myswagco.co'}/custom-shirts/orders/${orderId}`
         result = await sendBalanceDueEmail(
           order.email,
           customerName,

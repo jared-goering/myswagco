@@ -121,6 +121,10 @@ export async function POST(request: NextRequest) {
               }
             }
             
+            // Get Stripe customer ID from metadata if available
+            const stripeCustomerId = paymentIntent.metadata.stripe_customer_id || 
+              (paymentIntent.customer ? String(paymentIntent.customer) : null)
+            
             // Create the actual order
             const { data: newOrder, error: orderError } = await supabaseAdmin
               .from('orders')
@@ -145,7 +149,8 @@ export async function POST(request: NextRequest) {
                 balance_due: quote.balance_due,
                 pricing_breakdown: pricingBreakdown,
                 status: 'pending_art_review',
-                stripe_payment_intent_id: paymentIntent.id
+                stripe_payment_intent_id: paymentIntent.id,
+                stripe_customer_id: stripeCustomerId
               })
               .select()
               .single()

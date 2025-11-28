@@ -660,7 +660,7 @@ export default function EmailTemplatesPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-charcoal-700">My Swag Co</p>
-                      <p className="text-xs text-charcoal-400">noreply@myswagco.com</p>
+                      <p className="text-xs text-charcoal-400">noreply@myswagco.co</p>
                     </div>
                   </div>
                   <p className="text-sm text-charcoal-600 font-semibold">

@@ -59,6 +59,10 @@ export default function AdminOrderDetail() {
   const [trackingNumber, setTrackingNumber] = useState('')
   const [carrier, setCarrier] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
+  
+  // Invoice state
+  const [sendingInvoice, setSendingInvoice] = useState(false)
+  const [invoiceSent, setInvoiceSent] = useState(false)
 
   useEffect(() => {
     fetchOrder()
@@ -307,10 +311,17 @@ export default function AdminOrderDetail() {
     setShowConfirmModal(false)
     
     try {
+      // Build update payload - include tracking info for completed status
+      const updatePayload: any = { status: pendingStatus }
+      if (pendingStatus === 'completed' && trackingNumber) {
+        updatePayload.tracking_number = trackingNumber
+        updatePayload.carrier = carrier || null
+      }
+      
       const response = await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: pendingStatus })
+        body: JSON.stringify(updatePayload)
       })
 
       if (response.ok) {
@@ -365,6 +376,58 @@ export default function AdminOrderDetail() {
       console.error('Error sending email notification:', error)
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  async function sendInvoice() {
+    if (!order || order.balance_due <= 0) return
+    
+    setSendingInvoice(true)
+    try {
+      // Calculate due date (30 days from now)
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + 30)
+      const invoiceDueDate = dueDate.toISOString().split('T')[0]
+      
+      // Update order with invoice sent timestamp and due date
+      const updateResponse = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_sent_at: new Date().toISOString(),
+          invoice_due_date: invoiceDueDate
+        })
+      })
+      
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update invoice date')
+      }
+      
+      // Generate payment link
+      const paymentLink = `${window.location.origin}/custom-shirts/orders/${orderId}`
+      
+      // Send balance_due email with payment link
+      const emailResponse = await fetch(`/api/orders/${orderId}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email_type: 'balance_due',
+          payment_link: paymentLink
+        })
+      })
+      
+      if (emailResponse.ok) {
+        setInvoiceSent(true)
+        await fetchOrder() // Refresh to show updated invoice info
+        // Reset after a few seconds
+        setTimeout(() => setInvoiceSent(false), 5000)
+      } else {
+        console.error('Failed to send invoice email')
+      }
+    } catch (error) {
+      console.error('Error sending invoice:', error)
+    } finally {
+      setSendingInvoice(false)
     }
   }
 
@@ -1487,6 +1550,60 @@ export default function AdminOrderDetail() {
                       <span className="text-sm font-medium text-gray-900">Balance Due</span>
                       <span className="text-lg font-bold text-gray-900">${order.balance_due.toFixed(2)}</span>
                     </div>
+                    
+                    {/* Invoice Info */}
+                    {order.invoice_sent_at && (
+                      <div className="mt-3 p-2 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-blue-700 font-medium">
+                          Invoice sent {new Date(order.invoice_sent_at).toLocaleDateString()}
+                        </p>
+                        {order.invoice_due_date && (
+                          <p className="text-xs text-blue-600">
+                            Due: {new Date(order.invoice_due_date).toLocaleDateString('en-US', { 
+                              month: 'long', day: 'numeric', year: 'numeric' 
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Send Invoice Button */}
+                    {order.balance_due > 0 && order.deposit_paid && (
+                      <div className="mt-4">
+                        {invoiceSent ? (
+                          <div className="flex items-center justify-center text-green-600 bg-green-50 py-2 px-4 rounded-lg">
+                            <CheckCircleIcon className="w-5 h-5 mr-2" />
+                            <span className="text-sm font-medium">Invoice sent!</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={sendInvoice}
+                            disabled={sendingInvoice}
+                            className="w-full flex items-center justify-center px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {sendingInvoice ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Send Invoice
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                          Sends payment link to {order.email}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

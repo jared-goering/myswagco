@@ -8,7 +8,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(request: NextRequest) {
   try {
-    const { amount, orderId, pendingOrderId, customerEmail } = await request.json()
+    const { amount, orderId, pendingOrderId, customerEmail, customerName, paymentType = 'deposit' } = await request.json()
     
     if (!amount) {
       return NextResponse.json(
@@ -19,12 +19,41 @@ export async function POST(request: NextRequest) {
     
     // Build metadata based on whether this is a new order or existing order
     const metadata: Record<string, string> = {
-      payment_type: 'deposit'
+      payment_type: paymentType
     }
+    
+    let stripeCustomerId: string | undefined
     
     if (orderId) {
       // Existing order (for balance payments)
       metadata.order_id = orderId
+      
+      // For balance payments, try to get the existing Stripe Customer
+      if (paymentType === 'balance') {
+        const { data: order } = await supabaseAdmin
+          .from('orders')
+          .select('stripe_customer_id, email, customer_name')
+          .eq('id', orderId)
+          .single()
+        
+        if (order?.stripe_customer_id) {
+          stripeCustomerId = order.stripe_customer_id
+        } else if (order?.email) {
+          // Create a Stripe customer if one doesn't exist
+          const customer = await stripe.customers.create({
+            email: order.email,
+            name: order.customer_name || undefined,
+            metadata: { order_id: orderId }
+          })
+          stripeCustomerId = customer.id
+          
+          // Store the customer ID on the order
+          await supabaseAdmin
+            .from('orders')
+            .update({ stripe_customer_id: customer.id })
+            .eq('id', orderId)
+        }
+      }
     } else if (pendingOrderId) {
       // New order - reference the pending order
       metadata.pending_order_id = pendingOrderId
@@ -34,6 +63,17 @@ export async function POST(request: NextRequest) {
         .from('pending_orders')
         .update({ stripe_payment_intent_id: 'pending' })
         .eq('id', pendingOrderId)
+      
+      // For deposit payments, create a Stripe Customer to save the payment method
+      if (paymentType === 'deposit' && customerEmail) {
+        const customer = await stripe.customers.create({
+          email: customerEmail,
+          name: customerName || undefined,
+          metadata: { pending_order_id: pendingOrderId }
+        })
+        stripeCustomerId = customer.id
+        metadata.stripe_customer_id = customer.id
+      }
     } else {
       return NextResponse.json(
         { error: 'Either orderId or pendingOrderId is required' },
@@ -41,13 +81,21 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
+    // Create payment intent with setup_future_usage to save the card
+    const paymentIntentData: Stripe.PaymentIntentCreateParams = {
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
       metadata,
       receipt_email: customerEmail || undefined
-    })
+    }
+    
+    // Attach customer and save payment method for future use
+    if (stripeCustomerId) {
+      paymentIntentData.customer = stripeCustomerId
+      paymentIntentData.setup_future_usage = 'off_session' // Save the card for later
+    }
+    
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData)
     
     // Update pending order with actual payment intent ID
     if (pendingOrderId) {
@@ -59,7 +107,8 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
+      paymentIntentId: paymentIntent.id,
+      stripeCustomerId
     })
   } catch (error: any) {
     console.error('Error creating payment intent:', error)

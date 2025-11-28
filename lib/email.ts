@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { defaultTemplates, EmailTemplate, EmailTemplateId } from '@/lib/email-templates'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'onboarding@resend.dev'
+const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'hello@myswagco.co'
 
 interface EmailOptions {
   to: string
@@ -64,6 +64,7 @@ export function generateEmailHtml(
     ctaUrl?: string
     badge?: { text: string; color: string }
     revisionNotes?: string
+    viewOrderUrl?: string // Link to customer order status page
   }
 ): string {
   const heading = interpolate(template.heading, variables)
@@ -190,6 +191,13 @@ export function generateEmailHtml(
         </p>
         ` : ''}
         
+        ${extraContent?.viewOrderUrl ? `
+        <div style="margin-top: 25px; padding: 20px; background: #f3f4f6; border-radius: 8px; text-align: center;">
+          <p style="margin: 0 0 12px 0; color: #4b5563; font-size: 14px;">Track your order status anytime:</p>
+          <a href="${extraContent.viewOrderUrl}" style="display: inline-block; background: #374151; color: white; padding: 10px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">View Order Status</a>
+        </div>
+        ` : ''}
+        
         <p style="margin-top: 20px; color: #374151;">
           Best regards,<br>
           <strong>The My Swag Co Team</strong>
@@ -198,6 +206,12 @@ export function generateEmailHtml(
     </body>
     </html>
   `
+}
+
+// Helper to generate order status page URL
+function getOrderStatusUrl(orderId: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://myswagco.co'
+  return `${baseUrl}/custom-shirts/orders/${orderId}`
 }
 
 async function sendEmail({ to, subject, html }: EmailOptions) {
@@ -244,7 +258,9 @@ export async function sendOrderConfirmationEmail(
     balance_due: (totalCost - depositAmount).toFixed(2)
   }
 
-  const html = generateEmailHtml(template, variables)
+  const html = generateEmailHtml(template, variables, {
+    viewOrderUrl: getOrderStatusUrl(orderId)
+  })
   const subject = interpolate(template.subject, variables)
 
   return sendEmail({ to: customerEmail, subject, html })
@@ -264,7 +280,8 @@ export async function sendArtApprovedEmail(
   }
 
   const html = generateEmailHtml(template, variables, { 
-    badge: { text: '✓ Artwork Approved', color: '#065f46' }
+    badge: { text: '✓ Artwork Approved', color: '#065f46' },
+    viewOrderUrl: getOrderStatusUrl(orderId)
   })
   const subject = interpolate(template.subject, variables)
 
@@ -286,8 +303,10 @@ export async function sendBalanceDueEmail(
     payment_link: paymentLink
   }
 
+  // For balance due, the main CTA is already the payment link which goes to the order page
   const html = generateEmailHtml(template, variables, { 
-    ctaUrl: paymentLink
+    ctaUrl: paymentLink,
+    viewOrderUrl: getOrderStatusUrl(orderId)
   })
   const subject = interpolate(template.subject, variables)
 
@@ -308,7 +327,8 @@ export async function sendBalancePaidEmail(
   }
 
   const html = generateEmailHtml(template, variables, { 
-    badge: { text: '✓ Payment Confirmed', color: '#065f46' }
+    badge: { text: '✓ Payment Confirmed', color: '#065f46' },
+    viewOrderUrl: getOrderStatusUrl(orderId)
   })
   const subject = interpolate(template.subject, variables)
 
@@ -329,7 +349,8 @@ export async function sendArtRevisionNeededEmail(
   }
 
   const html = generateEmailHtml(template, variables, { 
-    revisionNotes
+    revisionNotes,
+    viewOrderUrl: getOrderStatusUrl(orderId)
   })
   const subject = interpolate(template.subject, variables)
 
@@ -392,9 +413,10 @@ export async function sendShippingNotificationEmail(
   }
 
   // Only include CTA button if we have a valid tracking URL
-  const html = generateEmailHtml(customTemplate, variables, hasTracking ? { 
-    ctaUrl: trackingUrl
-  } : undefined)
+  const html = generateEmailHtml(customTemplate, variables, { 
+    ctaUrl: hasTracking ? trackingUrl : undefined,
+    viewOrderUrl: getOrderStatusUrl(orderId)
+  })
   const subject = interpolate(template.subject, variables)
 
   return sendEmail({ to: customerEmail, subject, html })

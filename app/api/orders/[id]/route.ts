@@ -10,11 +10,17 @@ export async function GET(
       .from('orders')
       .select(`
         *,
-        garments(name, brand, thumbnail_url),
+        garments(id, name, brand, thumbnail_url, color_images),
         artwork_files(*)
       `)
       .eq('id', params.id)
       .single()
+    
+    // Flatten garment data for easier access
+    if (order && order.garments) {
+      order.garment = order.garments
+      delete order.garments
+    }
     
     if (error) {
       throw error
@@ -61,7 +67,13 @@ export async function PATCH(
       total_cost,
       deposit_amount,
       deposit_paid,
-      balance_due
+      balance_due,
+      // Invoice fields
+      invoice_sent_at,
+      invoice_due_date,
+      // Tracking fields
+      tracking_number,
+      carrier
     } = body
     
     const updateData: any = {}
@@ -83,6 +95,12 @@ export async function PATCH(
     if (deposit_amount !== undefined) updateData.deposit_amount = deposit_amount
     if (deposit_paid !== undefined) updateData.deposit_paid = deposit_paid
     if (balance_due !== undefined) updateData.balance_due = balance_due
+    // Invoice field updates
+    if (invoice_sent_at !== undefined) updateData.invoice_sent_at = invoice_sent_at
+    if (invoice_due_date !== undefined) updateData.invoice_due_date = invoice_due_date
+    // Tracking field updates
+    if (tracking_number !== undefined) updateData.tracking_number = tracking_number
+    if (carrier !== undefined) updateData.carrier = carrier
     
     // Get old order data for logging price adjustments
     let oldOrder = null

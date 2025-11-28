@@ -1228,7 +1228,7 @@ export default function Home() {
             <div>
               <h4 className="font-black text-lg mb-4">Contact</h4>
               <ul className="space-y-3 text-white/60 font-medium">
-                <li>hello@myswagco.com</li>
+                <li>hello@myswagco.co</li>
                 <li>(555) 123-4567</li>
                 <li>Mon-Fri 9am-5pm EST</li>
               </ul>
