@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { sendOrderConfirmationEmail } from '@/lib/email'
-import { calculateQuote, calculateTotalQuantityFromColors } from '@/lib/pricing'
+import { calculateQuote, calculateTotalQuantityFromColors, calculateGarmentCost, calculatePrintCost } from '@/lib/pricing'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16'
@@ -58,6 +58,69 @@ export async function POST(request: NextRequest) {
               pendingOrder.print_config
             )
             
+            // Calculate pricing breakdown for storage
+            let pricingBreakdown: {
+              garment_cost_per_shirt: number
+              print_cost_per_shirt: number
+              setup_fees: number
+              total_screens: number
+              per_shirt_total: number
+              garment_breakdown?: { garment_id: string; name: string; quantity: number; cost_per_shirt: number; total: number }[]
+            }
+            
+            // Check if this is a multi-garment order
+            if (pendingOrder.selected_garments && Object.keys(pendingOrder.selected_garments).length > 0) {
+              const garmentBreakdown: { garment_id: string; name: string; quantity: number; cost_per_shirt: number; total: number }[] = []
+              let totalGarmentCost = 0
+              
+              const garmentIds = Object.keys(pendingOrder.selected_garments)
+              const { data: garmentsData } = await supabaseAdmin
+                .from('garments')
+                .select('id, name')
+                .in('id', garmentIds)
+              const garmentNames = Object.fromEntries((garmentsData || []).map((g: any) => [g.id, g.name]))
+              
+              for (const [garmentId, selection] of Object.entries(pendingOrder.selected_garments)) {
+                const sel = selection as { colorSizeQuantities: Record<string, Record<string, number>> }
+                let garmentQty = 0
+                Object.values(sel.colorSizeQuantities || {}).forEach((sizeQty: any) => {
+                  Object.values(sizeQty).forEach((qty: any) => { garmentQty += qty || 0 })
+                })
+                
+                if (garmentQty > 0) {
+                  const { totalCost, costPerShirt } = await calculateGarmentCost(garmentId, garmentQty)
+                  garmentBreakdown.push({
+                    garment_id: garmentId,
+                    name: garmentNames[garmentId] || 'Unknown',
+                    quantity: garmentQty,
+                    cost_per_shirt: costPerShirt,
+                    total: totalCost
+                  })
+                  totalGarmentCost += totalCost
+                }
+              }
+              
+              const printResult = await calculatePrintCost(totalQuantity, pendingOrder.print_config)
+              const avgGarmentCostPerShirt = totalGarmentCost / totalQuantity
+              
+              pricingBreakdown = {
+                garment_cost_per_shirt: avgGarmentCostPerShirt,
+                print_cost_per_shirt: printResult.costPerShirt,
+                setup_fees: printResult.setupFees,
+                total_screens: printResult.totalScreens,
+                per_shirt_total: (totalGarmentCost + printResult.totalCost) / totalQuantity,
+                garment_breakdown: garmentBreakdown
+              }
+            } else {
+              pricingBreakdown = {
+                garment_cost_per_shirt: quote.garment_cost_per_shirt,
+                print_cost_per_shirt: quote.print_cost_per_shirt,
+                setup_fees: quote.setup_fees,
+                total_screens: quote.total_screens,
+                per_shirt_total: quote.per_shirt_price
+              }
+            }
+            
             // Create the actual order
             const { data: newOrder, error: orderError } = await supabaseAdmin
               .from('orders')
@@ -80,6 +143,7 @@ export async function POST(request: NextRequest) {
                 deposit_amount: quote.deposit_amount,
                 deposit_paid: true,
                 balance_due: quote.balance_due,
+                pricing_breakdown: pricingBreakdown,
                 status: 'pending_art_review',
                 stripe_payment_intent_id: paymentIntent.id
               })
@@ -91,10 +155,28 @@ export async function POST(request: NextRequest) {
               break
             }
             
-            // Handle artwork if stored in pending order
-            if (pendingOrder.artwork_data) {
-              // Artwork references are stored - they'll be uploaded by the confirmation page
-              // using the files from the client's Zustand store
+            // Create artwork_files records from uploaded temp files
+            if (pendingOrder.artwork_data && Array.isArray(pendingOrder.artwork_data)) {
+              for (const artwork of pendingOrder.artwork_data as any[]) {
+                if (artwork.file_url) {
+                  const isVector = artwork.file_name?.toLowerCase().endsWith('.svg') || 
+                                  artwork.file_name?.toLowerCase().endsWith('.ai') ||
+                                  artwork.file_name?.toLowerCase().endsWith('.eps')
+                  
+                  await supabaseAdmin
+                    .from('artwork_files')
+                    .insert({
+                      order_id: newOrder.id,
+                      location: artwork.location,
+                      file_url: artwork.file_url,
+                      file_name: artwork.file_name || 'artwork',
+                      file_size: 0,
+                      is_vector: isVector,
+                      vectorization_status: isVector ? 'not_needed' : 'pending',
+                      transform: artwork.transform || null
+                    })
+                }
+              }
             }
             
             // Log order creation

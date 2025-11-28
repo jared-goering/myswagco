@@ -9,9 +9,10 @@ ability to charge card for missing amount
 
 Done:
 change when order is sent
+discount codes
+
 
 Future things:
     Launch order site
     Make swag box for employee 
         integerate with gusto / zenefits
-discount codes

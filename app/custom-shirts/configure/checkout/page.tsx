@@ -533,6 +533,83 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       // Include selected_garments if there are multiple garments
       const hasMultipleGarments = Object.keys(store.selectedGarments).length > 1
       
+      // Upload artwork files BEFORE creating pending order (File objects can't persist across redirect)
+      const uploadedArtwork: { location: string; file_url: string; file_name: string; transform?: any }[] = []
+      
+      for (const [location, file] of Object.entries(store.artworkFiles)) {
+        if (file) {
+          try {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('location', location)
+            // Upload to temporary storage (will be linked to order after payment)
+            if (user) {
+              formData.append('user_id', user.id)
+            }
+            
+            const transform = store.artworkTransforms[location]
+            if (transform) {
+              formData.append('transform', JSON.stringify(transform))
+            }
+            
+            const uploadResponse = await fetch('/api/artwork/upload-temp', {
+              method: 'POST',
+              body: formData
+            })
+            
+            if (uploadResponse.ok) {
+              const uploadResult = await uploadResponse.json()
+              uploadedArtwork.push({
+                location,
+                file_url: uploadResult.file_url,
+                file_name: file.name,
+                transform: transform
+              })
+            }
+          } catch (err) {
+            console.error(`Error uploading artwork for ${location}:`, err)
+          }
+        }
+      }
+      
+      // Also upload vectorized SVGs
+      for (const [location, svgData] of Object.entries(store.vectorizedSvgData)) {
+        if (svgData && svgData.startsWith('data:')) {
+          try {
+            const base64Data = svgData.split(',')[1]
+            const binaryData = atob(base64Data)
+            const bytes = new Uint8Array(binaryData.length)
+            for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i)
+            const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
+            
+            const originalFile = store.artworkFiles[location]
+            const fileName = originalFile ? `${originalFile.name.replace(/\.[^/.]+$/, '')}_vectorized.svg` : `${location}_vectorized.svg`
+            
+            const formData = new FormData()
+            formData.append('file', svgBlob, fileName)
+            formData.append('location', location)
+            formData.append('is_vectorized', 'true')
+            
+            const uploadResponse = await fetch('/api/artwork/upload-temp', {
+              method: 'POST',
+              body: formData
+            })
+            
+            if (uploadResponse.ok) {
+              const uploadResult = await uploadResponse.json()
+              uploadedArtwork.push({
+                location,
+                file_url: uploadResult.file_url,
+                file_name: fileName,
+                transform: store.artworkTransforms[location]
+              })
+            }
+          } catch (err) {
+            console.error(`Error uploading vectorized SVG for ${location}:`, err)
+          }
+        }
+      }
+      
       // Create a PENDING order (actual order created after payment succeeds)
       const pendingOrderData = {
         customer_id: user?.id || null,
@@ -549,14 +626,8 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
         // Include discount if applied
         discount_code_id: store.discountCodeId || undefined,
         discount_amount: store.appliedDiscount?.discount_amount || undefined,
-        // Store artwork references for upload after payment
-        artwork_data: Object.entries(store.artworkFiles)
-          .filter(([_, file]) => file)
-          .map(([location, file]) => ({
-            location,
-            fileName: file?.name,
-            transform: store.artworkTransforms[location]
-          }))
+        // Store uploaded artwork URLs (already uploaded to temp storage)
+        artwork_data: uploadedArtwork
       }
 
       const pendingResponse = await fetch('/api/pending-orders', {

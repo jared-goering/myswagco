@@ -9,6 +9,8 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetchOrders()
@@ -29,6 +31,28 @@ export default function AdminOrders() {
       console.error('Error fetching orders:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDeleteOrder() {
+    if (!deleteOrderId) return
+    
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/orders/${deleteOrderId}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        setOrders(orders.filter(o => o.id !== deleteOrderId))
+        setDeleteOrderId(null)
+      } else {
+        console.error('Failed to delete order')
+      }
+    } catch (error) {
+      console.error('Error deleting order:', error)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -128,15 +152,26 @@ export default function AdminOrders() {
                         {new Date(order.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm">
-                        <Link
-                          href={`/admin/orders/${order.id}`}
-                          className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-700 font-black"
-                        >
-                          View
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/admin/orders/${order.id}`}
+                            className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-700 font-black"
+                          >
+                            View
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                          <button
+                            onClick={() => setDeleteOrderId(order.id)}
+                            className="inline-flex items-center gap-1 text-error-600 hover:text-error-700 font-black"
+                            title="Delete order"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -149,6 +184,48 @@ export default function AdminOrders() {
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {deleteOrderId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-error-100 rounded-full">
+                  <svg className="w-6 h-6 text-error-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-black text-charcoal-700">Delete Order</h3>
+              </div>
+              <p className="text-charcoal-600 mb-6">
+                Are you sure you want to delete this order? This will also remove all associated artwork files and activity logs. This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteOrderId(null)}
+                  disabled={deleting}
+                  className="px-4 py-2.5 rounded-xl font-bold text-charcoal-600 hover:bg-surface-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteOrder}
+                  disabled={deleting}
+                  className="px-4 py-2.5 rounded-xl font-bold bg-error-600 text-white hover:bg-error-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Order'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   )

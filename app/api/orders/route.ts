@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { orderCreationSchema } from '@/lib/schemas'
-import { calculateQuote, calculateTotalQuantity, calculateTotalQuantityFromColors } from '@/lib/pricing'
+import { calculateQuote, calculateGarmentCost, calculatePrintCost, calculateTotalQuantity, calculateTotalQuantityFromColors, getDepositPercentage } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 // Helper to get current user
@@ -61,17 +61,101 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Get quote to calculate pricing
+    // Calculate pricing breakdown for storage
+    let pricingBreakdown: {
+      garment_cost_per_shirt: number
+      print_cost_per_shirt: number
+      setup_fees: number
+      total_screens: number
+      per_shirt_total: number
+      garment_breakdown?: { garment_id: string; name: string; quantity: number; cost_per_shirt: number; total: number }[]
+    }
+    
+    // Check if this is a multi-garment order
+    if (validatedData.selected_garments && Object.keys(validatedData.selected_garments).length > 0) {
+      // Multi-garment order - calculate breakdown for each garment
+      const garmentBreakdown: { garment_id: string; name: string; quantity: number; cost_per_shirt: number; total: number }[] = []
+      let totalGarmentCost = 0
+      
+      // Fetch garment names
+      const garmentIds = Object.keys(validatedData.selected_garments)
+      const { data: garmentsData } = await supabaseAdmin
+        .from('garments')
+        .select('id, name')
+        .in('id', garmentIds)
+      const garmentNames = Object.fromEntries((garmentsData || []).map(g => [g.id, g.name]))
+      
+      for (const [garmentId, selection] of Object.entries(validatedData.selected_garments)) {
+        const sel = selection as { colorSizeQuantities: Record<string, Record<string, number>> }
+        let garmentQty = 0
+        Object.values(sel.colorSizeQuantities || {}).forEach(sizeQty => {
+          Object.values(sizeQty).forEach(qty => { garmentQty += qty || 0 })
+        })
+        
+        if (garmentQty > 0) {
+          const { totalCost, costPerShirt } = await calculateGarmentCost(garmentId, garmentQty)
+          garmentBreakdown.push({
+            garment_id: garmentId,
+            name: garmentNames[garmentId] || 'Unknown',
+            quantity: garmentQty,
+            cost_per_shirt: costPerShirt,
+            total: totalCost
+          })
+          totalGarmentCost += totalCost
+        }
+      }
+      
+      // Calculate print costs based on total quantity
+      const printResult = await calculatePrintCost(totalQuantity, validatedData.print_config)
+      
+      // Calculate per-shirt averages
+      const avgGarmentCostPerShirt = totalGarmentCost / totalQuantity
+      
+      pricingBreakdown = {
+        garment_cost_per_shirt: avgGarmentCostPerShirt,
+        print_cost_per_shirt: printResult.costPerShirt,
+        setup_fees: printResult.setupFees,
+        total_screens: printResult.totalScreens,
+        per_shirt_total: (totalGarmentCost + printResult.totalCost) / totalQuantity,
+        garment_breakdown: garmentBreakdown
+      }
+    } else {
+      // Single-garment order
+      const quote = await calculateQuote(
+        validatedData.garment_id,
+        totalQuantity,
+        validatedData.print_config
+      )
+      
+      pricingBreakdown = {
+        garment_cost_per_shirt: quote.garment_cost_per_shirt,
+        print_cost_per_shirt: quote.print_cost_per_shirt,
+        setup_fees: quote.setup_fees,
+        total_screens: quote.total_screens,
+        per_shirt_total: quote.per_shirt_price
+      }
+    }
+    
+    // Get quote to calculate final pricing
     const quote = await calculateQuote(
       validatedData.garment_id,
       totalQuantity,
       validatedData.print_config
     )
     
+    // For multi-garment orders, recalculate total based on actual garment breakdown
+    let finalTotal = quote.total
+    if (pricingBreakdown.garment_breakdown && pricingBreakdown.garment_breakdown.length > 0) {
+      const totalGarmentCost = pricingBreakdown.garment_breakdown.reduce((sum, g) => sum + g.total, 0)
+      const printResult = await calculatePrintCost(totalQuantity, validatedData.print_config)
+      finalTotal = totalGarmentCost + printResult.totalCost
+    }
+    
     // Apply discount if provided
     const discountAmount = validatedData.discount_amount || 0
-    const discountedTotal = Math.max(0, quote.total - discountAmount)
-    const discountedDeposit = Math.round((discountedTotal * 0.5) * 100) / 100
+    const discountedTotal = Math.max(0, finalTotal - discountAmount)
+    const depositPercentage = await getDepositPercentage()
+    const discountedDeposit = Math.round((discountedTotal * (depositPercentage / 100)) * 100) / 100
     const discountedBalance = discountedTotal - discountedDeposit
     
     // Create order (link to customer account if logged in)
@@ -98,6 +182,7 @@ export async function POST(request: NextRequest) {
         balance_due: discountedBalance,
         discount_code_id: validatedData.discount_code_id || null,
         discount_amount: discountAmount,
+        pricing_breakdown: pricingBreakdown,
         status: 'pending_art_review'
       })
       .select()

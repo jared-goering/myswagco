@@ -37,11 +37,170 @@ export default function AdminOrderDetail() {
   const [availableGarments, setAvailableGarments] = useState<any[]>([])
   const [garment, setGarment] = useState<Garment | null>(null)
   const [orderGarments, setOrderGarments] = useState<Record<string, Garment>>({}) // For multi-garment orders
+  const [editingPayment, setEditingPayment] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    total_cost: number
+    deposit_amount: number
+    deposit_paid: boolean
+    balance_due: number
+  }>({ total_cost: 0, deposit_amount: 0, deposit_paid: false, balance_due: 0 })
+  const [pricingBreakdown, setPricingBreakdown] = useState<{
+    garment_cost_per_shirt: number
+    print_cost_per_shirt: number
+    setup_fees: number
+    total_screens?: number
+    per_shirt_total: number
+    garment_breakdown?: { garment_id?: string; name: string; quantity: number; cost_per_shirt: number; total: number }[]
+  } | null>(null)
+  const [loadingPricing, setLoadingPricing] = useState(false)
 
   useEffect(() => {
     fetchOrder()
     fetchGarments()
   }, [orderId])
+
+  // Load pricing breakdown from order or fallback to recalculating
+  useEffect(() => {
+    if (order) {
+      loadPricingBreakdown()
+    }
+  }, [order, garment, orderGarments])
+
+  async function loadPricingBreakdown() {
+    if (!order) return
+    
+    // Use stored pricing breakdown if available (for orders created after this feature)
+    if (order.pricing_breakdown) {
+      setPricingBreakdown({
+        garment_cost_per_shirt: order.pricing_breakdown.garment_cost_per_shirt,
+        print_cost_per_shirt: order.pricing_breakdown.print_cost_per_shirt,
+        setup_fees: order.pricing_breakdown.setup_fees,
+        total_screens: order.pricing_breakdown.total_screens,
+        per_shirt_total: order.pricing_breakdown.per_shirt_total,
+        garment_breakdown: order.pricing_breakdown.garment_breakdown
+      })
+      return
+    }
+    
+    // Fallback: recalculate for legacy orders without stored breakdown
+    setLoadingPricing(true)
+    try {
+      // Calculate total quantity
+      let totalQuantity = 0
+      if (order.selected_garments && Object.keys(order.selected_garments).length > 0) {
+        totalQuantity = Object.values(order.selected_garments).reduce((total: number, selection: any) => {
+          return total + Object.values(selection.colorSizeQuantities || {}).reduce((garmentTotal: number, sizeQty: any) => {
+            return garmentTotal + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+          }, 0)
+        }, 0)
+      } else if (order.color_size_quantities) {
+        totalQuantity = Object.values(order.color_size_quantities).reduce((total: number, sizeQty: any) => {
+          return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+        }, 0)
+      } else {
+        totalQuantity = Object.values(order.size_quantities || {}).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+      }
+      
+      if (totalQuantity === 0) {
+        setLoadingPricing(false)
+        return
+      }
+
+      // For multi-garment orders, calculate breakdown per garment
+      if (order.selected_garments && Object.keys(order.selected_garments).length > 0 && Object.keys(orderGarments).length > 0) {
+        const garmentBreakdown: { name: string; quantity: number; cost_per_shirt: number; total: number }[] = []
+        
+        for (const [garmentId, selection] of Object.entries(order.selected_garments)) {
+          const sel = selection as any
+          const gmt = orderGarments[garmentId]
+          if (!gmt) continue
+
+          const garmentQty = Object.values(sel.colorSizeQuantities || {}).reduce((total: number, sizeQty: any) => {
+            return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+          }, 0)
+
+          // Fetch quote for this garment
+          try {
+            const response = await fetch('/api/quote', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                garment_id: garmentId,
+                quantity: totalQuantity, // Use total quantity for tier pricing
+                print_config: order.print_config
+              })
+            })
+            
+            if (response.ok) {
+              const quote = await response.json()
+              garmentBreakdown.push({
+                name: gmt.name,
+                quantity: garmentQty,
+                cost_per_shirt: quote.garment_cost_per_shirt,
+                total: quote.garment_cost_per_shirt * garmentQty
+              })
+            }
+          } catch (err) {
+            console.error(`Error fetching quote for garment ${garmentId}:`, err)
+          }
+        }
+
+        // Fetch overall quote for print costs
+        const primaryGarmentId = Object.keys(order.selected_garments)[0]
+        const response = await fetch('/api/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            garment_id: primaryGarmentId,
+            quantity: totalQuantity,
+            print_config: order.print_config
+          })
+        })
+
+        if (response.ok) {
+          const quote = await response.json()
+          const avgGarmentCost = garmentBreakdown.length > 0 
+            ? garmentBreakdown.reduce((sum, g) => sum + g.total, 0) / totalQuantity 
+            : quote.garment_cost_per_shirt
+
+          setPricingBreakdown({
+            garment_cost_per_shirt: avgGarmentCost,
+            print_cost_per_shirt: quote.print_cost_per_shirt,
+            setup_fees: quote.setup_fees,
+            total_screens: quote.total_screens,
+            per_shirt_total: avgGarmentCost + quote.print_cost_per_shirt + (quote.setup_fees / totalQuantity),
+            garment_breakdown: garmentBreakdown
+          })
+        }
+      } else if (order.garment_id && garment) {
+        // Single garment order
+        const response = await fetch('/api/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            garment_id: order.garment_id,
+            quantity: totalQuantity,
+            print_config: order.print_config
+          })
+        })
+
+        if (response.ok) {
+          const quote = await response.json()
+          setPricingBreakdown({
+            garment_cost_per_shirt: quote.garment_cost_per_shirt,
+            print_cost_per_shirt: quote.print_cost_per_shirt,
+            setup_fees: quote.setup_fees,
+            total_screens: quote.total_screens,
+            per_shirt_total: quote.per_shirt_price
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error calculating pricing breakdown:', error)
+    } finally {
+      setLoadingPricing(false)
+    }
+  }
 
   useEffect(() => {
     if (order) {
@@ -50,7 +209,9 @@ export default function AdminOrderDetail() {
         customer_name: order.customer_name,
         email: order.email,
         phone: order.phone,
-        shipping_address: order.shipping_address
+        shipping_address: order.shipping_address,
+        organization_name: order.organization_name || '',
+        need_by_date: order.need_by_date || ''
       })
       setOrderData({
         garment_id: order.garment_id,
@@ -58,6 +219,12 @@ export default function AdminOrderDetail() {
         size_quantities: order.size_quantities,
         print_config: order.print_config,
         selected_garments: order.selected_garments || null
+      })
+      setPaymentData({
+        total_cost: order.total_cost,
+        deposit_amount: order.deposit_amount,
+        deposit_paid: order.deposit_paid,
+        balance_due: order.balance_due
       })
     }
   }, [order])
@@ -200,7 +367,9 @@ export default function AdminOrderDetail() {
         customer_name: order.customer_name,
         email: order.email,
         phone: order.phone,
-        shipping_address: order.shipping_address
+        shipping_address: order.shipping_address,
+        organization_name: order.organization_name || '',
+        need_by_date: order.need_by_date || ''
       })
     }
   }
@@ -214,6 +383,38 @@ export default function AdminOrderDetail() {
         size_quantities: order.size_quantities,
         print_config: order.print_config,
         selected_garments: order.selected_garments || null
+      })
+    }
+  }
+
+  async function savePaymentInfo() {
+    setUpdating(true)
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentData)
+      })
+
+      if (response.ok) {
+        await fetchOrder()
+        setEditingPayment(false)
+      }
+    } catch (error) {
+      console.error('Error updating payment info:', error)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  function cancelPaymentEdit() {
+    setEditingPayment(false)
+    if (order) {
+      setPaymentData({
+        total_cost: order.total_cost,
+        deposit_amount: order.deposit_amount,
+        deposit_paid: order.deposit_paid,
+        balance_due: order.balance_due
       })
     }
   }
@@ -394,7 +595,29 @@ export default function AdminOrderDetail() {
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Phone</p>
                       <p className="text-gray-900 font-medium">{order.phone}</p>
                     </div>
+                    {order.organization_name && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Organization/Event</p>
+                        <p className="text-gray-900 font-medium">{order.organization_name}</p>
+                      </div>
+                    )}
                   </div>
+                  {order.need_by_date && (
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Need-by Date</p>
+                      <p className="text-gray-900 font-medium flex items-center">
+                        <svg className="w-4 h-4 text-orange-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {new Date(order.need_by_date).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  )}
                   <div className="mt-6 pt-6 border-t border-gray-100">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Shipping Address</p>
                     <p className="text-gray-700 leading-relaxed">
@@ -437,6 +660,29 @@ export default function AdminOrderDetail() {
                         type="tel"
                         value={customerData.phone || ''}
                         onChange={(e) => setCustomerData({...customerData, phone: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
+                        Organization/Event <span className="text-gray-400 normal-case">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customerData.organization_name || ''}
+                        onChange={(e) => setCustomerData({...customerData, organization_name: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Smith Family Reunion 2025"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
+                        Need-by Date <span className="text-gray-400 normal-case">(optional)</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={customerData.need_by_date || ''}
+                        onChange={(e) => setCustomerData({...customerData, need_by_date: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -1119,47 +1365,251 @@ export default function AdminOrderDetail() {
 
             {/* Payment Info */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center mb-5">
-                <CurrencyDollarIcon className="w-5 h-5 text-gray-700 mr-2" />
-                <h3 className="text-base font-semibold text-gray-900">Payment</h3>
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Total Cost</span>
-                  <span className="text-lg font-bold text-gray-900">${order.total_cost.toFixed(2)}</span>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center">
+                  <CurrencyDollarIcon className="w-5 h-5 text-gray-700 mr-2" />
+                  <h3 className="text-base font-semibold text-gray-900">Payment</h3>
                 </div>
-                <div className="pt-4 border-t border-gray-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-gray-600">Deposit</span>
-                    <div className="flex items-center">
-                      {order.deposit_paid ? (
-                        <>
-                          <CheckCircleIcon className="w-4 h-4 text-green-500 mr-1.5" />
-                          <span className="text-sm font-semibold text-green-600">
-                            ${order.deposit_amount.toFixed(2)}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <ExclamationCircleIcon className="w-4 h-4 text-red-500 mr-1.5" />
-                          <span className="text-sm font-semibold text-red-600">
-                            ${order.deposit_amount.toFixed(2)}
-                          </span>
-                        </>
-                      )}
+                {!editingPayment ? (
+                  <button
+                    onClick={() => setEditingPayment(true)}
+                    className="flex items-center text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    <PencilIcon className="w-4 h-4 mr-1" />
+                    Edit
+                  </button>
+                ) : (
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={cancelPaymentEdit}
+                      disabled={updating}
+                      className="px-2 py-1 border border-gray-300 rounded text-gray-700 text-xs hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={savePaymentInfo}
+                      disabled={updating}
+                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {!editingPayment ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Cost</span>
+                    <span className="text-lg font-bold text-gray-900">${order.total_cost.toFixed(2)}</span>
+                  </div>
+                  <div className="pt-4 border-t border-gray-100">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-600">Deposit</span>
+                      <div className="flex items-center">
+                        {order.deposit_paid ? (
+                          <>
+                            <CheckCircleIcon className="w-4 h-4 text-green-500 mr-1.5" />
+                            <span className="text-sm font-semibold text-green-600">
+                              ${order.deposit_amount.toFixed(2)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <ExclamationCircleIcon className="w-4 h-4 text-red-500 mr-1.5" />
+                            <span className="text-sm font-semibold text-red-600">
+                              ${order.deposit_amount.toFixed(2)}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {!order.deposit_paid && (
+                      <p className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">Unpaid</p>
+                    )}
+                  </div>
+                  <div className="pt-4 border-t border-gray-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-900">Balance Due</span>
+                      <span className="text-lg font-bold text-gray-900">${order.balance_due.toFixed(2)}</span>
                     </div>
                   </div>
-                  {!order.deposit_paid && (
-                    <p className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">Unpaid</p>
-                  )}
                 </div>
-                <div className="pt-4 border-t border-gray-100">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-900">Balance Due</span>
-                    <span className="text-lg font-bold text-gray-900">${order.balance_due.toFixed(2)}</span>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Total Cost</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={paymentData.total_cost}
+                        onChange={(e) => setPaymentData({
+                          ...paymentData,
+                          total_cost: parseFloat(e.target.value) || 0
+                        })}
+                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Deposit Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={paymentData.deposit_amount}
+                        onChange={(e) => setPaymentData({
+                          ...paymentData,
+                          deposit_amount: parseFloat(e.target.value) || 0
+                        })}
+                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="deposit_paid"
+                      checked={paymentData.deposit_paid}
+                      onChange={(e) => setPaymentData({
+                        ...paymentData,
+                        deposit_paid: e.target.checked
+                      })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="deposit_paid" className="text-sm text-gray-700">Deposit Paid</label>
+                  </div>
+                  <div className="pt-4 border-t border-gray-100">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Balance Due</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={paymentData.balance_due}
+                        onChange={(e) => setPaymentData({
+                          ...paymentData,
+                          balance_due: parseFloat(e.target.value) || 0
+                        })}
+                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Auto-calculate: ${(paymentData.total_cost - paymentData.deposit_amount).toFixed(2)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentData({
+                        ...paymentData,
+                        balance_due: Math.max(0, paymentData.total_cost - paymentData.deposit_amount)
+                      })}
+                      className="mt-1 text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Use calculated value
+                    </button>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Pricing Breakdown */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-gray-700 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <h3 className="text-base font-semibold text-gray-900">Per-Shirt Breakdown</h3>
+                </div>
+                {!order.pricing_breakdown && pricingBreakdown && (
+                  <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">Est.</span>
+                )}
               </div>
+              
+              {loadingPricing ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+              ) : pricingBreakdown ? (
+                <div className="space-y-3">
+                  {/* Multi-garment breakdown */}
+                  {pricingBreakdown.garment_breakdown && pricingBreakdown.garment_breakdown.length > 0 && (
+                    <div className="space-y-2 pb-3 border-b border-gray-100">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Garment Costs</p>
+                      {pricingBreakdown.garment_breakdown.map((item, idx) => (
+                        <div key={idx} className="bg-gray-50 rounded-lg p-2.5">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-700 font-medium">{item.name}</span>
+                            <span className="text-gray-600">{item.quantity} pcs</span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs text-gray-500">${item.cost_per_shirt.toFixed(2)}/shirt</span>
+                            <span className="text-sm font-semibold text-gray-900">${item.total.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Summary costs */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Garment Cost</span>
+                      <span className="text-sm font-medium text-gray-900">${pricingBreakdown.garment_cost_per_shirt.toFixed(2)}/shirt</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Print Cost</span>
+                      <span className="text-sm font-medium text-gray-900">${pricingBreakdown.print_cost_per_shirt.toFixed(2)}/shirt</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Setup Fees</span>
+                      <span className="text-sm font-medium text-gray-900">${pricingBreakdown.setup_fees.toFixed(2)}</span>
+                    </div>
+                    {pricingBreakdown.total_screens && (
+                      <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span>Screens</span>
+                        <span>{pricingBreakdown.total_screens}</span>
+                      </div>
+                    )}
+                    <div className="pt-3 border-t border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-900">Total Per Shirt</span>
+                        <span className="text-lg font-bold text-blue-600">${pricingBreakdown.per_shirt_total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Calculated total comparison */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 bg-gray-50 -mx-6 -mb-6 px-6 pb-6 rounded-b-lg">
+                    <div className="flex justify-between items-center text-sm text-gray-600 mb-1">
+                      <span>Breakdown Total ({totalQty} shirts)</span>
+                      <span className="font-medium">${(pricingBreakdown.per_shirt_total * totalQty).toFixed(2)}</span>
+                    </div>
+                    {order.discount_amount > 0 && (
+                      <div className="flex justify-between items-center text-sm text-green-600 mb-1">
+                        <span>Discount Applied</span>
+                        <span className="font-medium">-${order.discount_amount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {!order.pricing_breakdown && Math.abs((pricingBreakdown.per_shirt_total * totalQty) - order.total_cost - (order.discount_amount || 0)) > 1 && (
+                      <p className="text-xs text-orange-600 mt-2">
+                        Note: This is an estimate. Order was created before per-shirt tracking was added.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Unable to load pricing breakdown
+                </p>
+              )}
             </div>
           </div>
         </div>
