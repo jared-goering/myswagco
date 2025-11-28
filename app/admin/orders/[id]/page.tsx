@@ -53,6 +53,12 @@ export default function AdminOrderDetail() {
     garment_breakdown?: { garment_id?: string; name: string; quantity: number; cost_per_shirt: number; total: number }[]
   } | null>(null)
   const [loadingPricing, setLoadingPricing] = useState(false)
+  
+  // Email notification state
+  const [sendEmailNotification, setSendEmailNotification] = useState(true)
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [carrier, setCarrier] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   useEffect(() => {
     fetchOrder()
@@ -288,6 +294,9 @@ export default function AdminOrderDetail() {
 
   function handleStatusChange(newStatus: OrderStatus) {
     setPendingStatus(newStatus)
+    setSendEmailNotification(true) // Reset to checked by default
+    setTrackingNumber('') // Reset tracking fields
+    setCarrier('') // Reset to no carrier selected
     setShowConfirmModal(true)
   }
 
@@ -306,12 +315,56 @@ export default function AdminOrderDetail() {
 
       if (response.ok) {
         await fetchOrder()
+        
+        // Send email notification if enabled
+        if (sendEmailNotification) {
+          await sendStatusEmail(pendingStatus)
+        }
       }
     } catch (error) {
       console.error('Error updating status:', error)
     } finally {
       setUpdating(false)
       setPendingStatus(null)
+    }
+  }
+  
+  async function sendStatusEmail(status: OrderStatus) {
+    // Map status to email type
+    const statusToEmailType: Record<string, string> = {
+      'art_approved': 'art_approved',
+      'balance_due': 'balance_due',
+      'completed': 'shipped'
+    }
+    
+    const emailType = statusToEmailType[status]
+    if (!emailType) return // No email for this status
+    
+    setSendingEmail(true)
+    try {
+      const emailBody: Record<string, any> = { email_type: emailType }
+      
+      // Add tracking info for shipped status
+      if (status === 'completed' && trackingNumber && carrier) {
+        emailBody.tracking_number = trackingNumber
+        emailBody.carrier = carrier
+      }
+      
+      const response = await fetch(`/api/orders/${orderId}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailBody)
+      })
+      
+      if (response.ok) {
+        console.log(`Email notification sent for status: ${status}`)
+      } else {
+        console.error('Failed to send email notification')
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error)
+    } finally {
+      setSendingEmail(false)
     }
   }
 
@@ -1617,7 +1670,7 @@ export default function AdminOrderDetail() {
         {/* Status Update Confirmation Modal */}
         {showConfirmModal && pendingStatus && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center">
                   <ExclamationCircleIcon className="w-6 h-6 text-orange-500 mr-3" />
@@ -1635,13 +1688,113 @@ export default function AdminOrderDetail() {
               
               <div className="mb-6">
                 <p className="text-gray-600 mb-4">
-                  Are you sure you want to change the order status to <span className="font-semibold">{pendingStatus.replace('_', ' ')}</span>?
+                  Are you sure you want to change the order status to <span className="font-semibold capitalize">{pendingStatus.replace(/_/g, ' ')}</span>?
                 </p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-700">
-                    <strong>Note:</strong> This will send a notification email to the customer.
-                  </p>
-                </div>
+                
+                {/* Email notification section - only for statuses that trigger emails */}
+                {['art_approved', 'balance_due', 'completed'].includes(pendingStatus) && (
+                  <div className="space-y-4">
+                    {/* Email toggle */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sendEmailNotification}
+                          onChange={(e) => setSendEmailNotification(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <span className="text-sm text-blue-700">
+                          <strong>Send email notification</strong> to {order?.email}
+                        </span>
+                      </label>
+                    </div>
+                    
+                    {/* Email preview info */}
+                    {sendEmailNotification && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                          Email to be sent
+                        </p>
+                        {pendingStatus === 'art_approved' && (
+                          <div>
+                            <p className="font-medium text-gray-900">Artwork Approved</p>
+                            <p className="text-sm text-gray-600">
+                              Notifies customer that their artwork is approved and order is moving to production.
+                            </p>
+                          </div>
+                        )}
+                        {pendingStatus === 'balance_due' && (
+                          <div>
+                            <p className="font-medium text-gray-900">Balance Due</p>
+                            <p className="text-sm text-gray-600">
+                              Notifies customer that their order is ready and requests final payment of ${order?.balance_due?.toFixed(2)}.
+                            </p>
+                          </div>
+                        )}
+                        {pendingStatus === 'completed' && (
+                          <div>
+                            <p className="font-medium text-gray-900">Order Shipped</p>
+                            <p className="text-sm text-gray-600">
+                              Notifies customer that their order has shipped with tracking information.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Tracking info for completed/shipped status */}
+                    {pendingStatus === 'completed' && sendEmailNotification && (
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                        <p className="text-sm font-medium text-purple-900">
+                          Shipping Information <span className="font-normal text-purple-600">(optional)</span>
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-purple-700 mb-1">
+                              Carrier
+                            </label>
+                            <select
+                              value={carrier}
+                              onChange={(e) => setCarrier(e.target.value)}
+                              className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            >
+                              <option value="">Select carrier...</option>
+                              <option value="UPS">UPS</option>
+                              <option value="FedEx">FedEx</option>
+                              <option value="USPS">USPS</option>
+                              <option value="DHL">DHL</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-purple-700 mb-1">
+                              Tracking Number
+                            </label>
+                            <input
+                              type="text"
+                              value={trackingNumber}
+                              onChange={(e) => setTrackingNumber(e.target.value)}
+                              placeholder="1Z999AA10123456784"
+                              className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-purple-600">
+                          {trackingNumber ? 'Tracking info will be included in the email.' : 'Leave blank to send notification without tracking.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Info for statuses that don't send emails */}
+                {!['art_approved', 'balance_due', 'completed'].includes(pendingStatus) && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">
+                      No email will be sent for this status change.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3">
@@ -1655,9 +1808,9 @@ export default function AdminOrderDetail() {
                 <button
                   onClick={confirmStatusUpdate}
                   disabled={updating}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {updating ? 'Updating...' : 'Confirm Change'}
+                  {updating ? 'Updating...' : sendingEmail ? 'Sending Email...' : 'Confirm Change'}
                 </button>
               </div>
             </div>

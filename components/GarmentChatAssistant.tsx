@@ -89,7 +89,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   
   while (remaining.length > 0) {
     // Check for bold (**text** or __text__)
-    const boldMatch = remaining.match(/^(.*?)(\*\*|__)(.+?)\2(.*)$/s)
+    const boldMatch = remaining.match(/^([\s\S]*?)(\*\*|__)([\s\S]+?)\2([\s\S]*)$/)
     if (boldMatch) {
       if (boldMatch[1]) {
         parts.push(<span key={key++}>{renderInlineMarkdown(boldMatch[1])}</span>)
@@ -100,7 +100,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     }
     
     // Check for italic (*text* or _text_) - but not inside bold
-    const italicMatch = remaining.match(/^(.*?)(?<!\*)(\*|_)(?!\*)(.+?)\2(?!\*)(.*)$/s)
+    const italicMatch = remaining.match(/^([\s\S]*?)(?<!\*)(\*|_)(?!\*)([\s\S]+?)\2(?!\*)([\s\S]*)$/)
     if (italicMatch) {
       if (italicMatch[1]) {
         parts.push(<span key={key++}>{italicMatch[1]}</span>)

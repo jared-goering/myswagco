@@ -56,7 +56,9 @@ function ConfirmationContent() {
       }
 
       // Get order ID from payment intent metadata (set by webhook after creating order)
-      let orderId = paymentIntent.metadata?.order_id
+      // PaymentIntent from client SDK may have metadata
+      const metadata = (paymentIntent as any).metadata || {}
+      let orderId = metadata.order_id as string | undefined
       
       if (!orderId) {
         // Check if order exists via payment intent lookup
@@ -74,7 +76,7 @@ function ConfirmationContent() {
         if (!orderId) {
           // Order not created yet (webhook may not have fired - common in local dev)
           // Get pending order ID and create the order now
-          const pendingOrderId = pendingOrderIdFromAPI || paymentIntent.metadata?.pending_order_id || sessionStorage.getItem('pendingOrderId')
+          const pendingOrderId = pendingOrderIdFromAPI || metadata.pending_order_id || sessionStorage.getItem('pendingOrderId')
           
           if (pendingOrderId) {
             // Create order from pending order
@@ -98,6 +100,11 @@ function ConfirmationContent() {
             throw new Error('Order is being processed. Please refresh in a moment or contact support.')
           }
         }
+      }
+
+      // At this point, orderId must be set or an error was thrown
+      if (!orderId) {
+        throw new Error('Unable to find order. Please contact support.')
       }
 
       await fetchOrder(orderId)

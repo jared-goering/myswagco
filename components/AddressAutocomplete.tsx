@@ -3,6 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
+// Extend window type for Google Maps
+declare global {
+  interface Window {
+    google?: {
+      maps?: {
+        places?: any
+      }
+    }
+  }
+}
+
 interface AddressComponents {
   line1: string
   line2: string
@@ -86,18 +97,19 @@ export default function AddressAutocomplete({ value, onChange, className }: Addr
   
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null)
-  const placesService = useRef<google.maps.places.PlacesService | null>(null)
+  const autocompleteService = useRef<any>(null)
+  const placesService = useRef<any>(null)
   const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
   // Initialize Google Maps services
   useEffect(() => {
     loadGoogleMaps()
       .then(() => {
-        autocompleteService.current = new google.maps.places.AutocompleteService()
+        const gmaps = (window as any).google?.maps
+        autocompleteService.current = new gmaps.places.AutocompleteService()
         // PlacesService needs a DOM element or map
         const dummyDiv = document.createElement('div')
-        placesService.current = new google.maps.places.PlacesService(dummyDiv)
+        placesService.current = new gmaps.places.PlacesService(dummyDiv)
         setApiAvailable(true)
       })
       .catch(() => {
@@ -144,9 +156,10 @@ export default function AddressAutocomplete({ value, onChange, className }: Addr
         componentRestrictions: { country: 'us' },
         types: ['address']
       },
-      (results, status) => {
+      (results: any, status: any) => {
         setIsLoading(false)
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        const gmaps = (window as any).google?.maps
+        if (status === gmaps?.places?.PlacesServiceStatus?.OK && results) {
           setPredictions(results.slice(0, 5))
           setShowDropdown(true)
         } else {
@@ -216,10 +229,11 @@ export default function AddressAutocomplete({ value, onChange, className }: Addr
         placeId: prediction.place_id,
         fields: ['address_components', 'formatted_address']
       },
-      (place, status) => {
+      (place: any, status: any) => {
         setIsLoading(false)
+        const gmaps = (window as any).google?.maps
         
-        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+        if (status === gmaps?.places?.PlacesServiceStatus?.OK && place) {
           const addressComponents = place.address_components || []
           
           let streetNumber = ''

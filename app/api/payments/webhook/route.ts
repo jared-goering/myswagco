@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { sendOrderConfirmationEmail } from '@/lib/email'
+import { sendOrderConfirmationEmail, sendBalancePaidEmail } from '@/lib/email'
 import { calculateQuote, calculateTotalQuantityFromColors, calculateGarmentCost, calculatePrintCost } from '@/lib/pricing'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -262,6 +262,18 @@ export async function POST(request: NextRequest) {
               )
             }
           } else if (paymentType === 'balance') {
+            // Fetch order first to get customer info
+            const { data: order, error: fetchError } = await supabaseAdmin
+              .from('orders')
+              .select('*')
+              .eq('id', orderId)
+              .single()
+            
+            if (fetchError || !order) {
+              console.error('Order not found for balance payment:', orderId)
+              break
+            }
+            
             // Update order balance status
             await supabaseAdmin
               .from('orders')
@@ -281,6 +293,25 @@ export async function POST(request: NextRequest) {
                 description: `Balance payment of $${(paymentIntent.amount / 100).toFixed(2)} received`,
                 performed_by: 'system',
                 metadata: { payment_intent_id: paymentIntent.id }
+              })
+            
+            // Send balance paid confirmation email
+            await sendBalancePaidEmail(
+              order.email,
+              order.customer_name,
+              orderId,
+              paymentIntent.amount / 100
+            )
+            
+            // Log email sent
+            await supabaseAdmin
+              .from('order_activity')
+              .insert({
+                order_id: orderId,
+                activity_type: 'email_sent',
+                description: `Balance paid confirmation email sent to ${order.email}`,
+                performed_by: 'system',
+                metadata: { email_type: 'balance_paid', recipient: order.email }
               })
           }
         }
