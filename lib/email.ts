@@ -1,6 +1,7 @@
 // Email service using Resend
 import { Resend } from 'resend'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { defaultTemplates, EmailTemplate, EmailTemplateId } from '@/lib/email-templates'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'onboarding@resend.dev'
@@ -11,95 +12,12 @@ interface EmailOptions {
   html: string
 }
 
-interface EmailTemplate {
-  id: string
-  subject: string
-  heading: string
-  body_intro: string
-  body_details: string | null
-  cta_text: string | null
-  footer_text: string | null
-  header_color: string
-  estimated_ship_days?: number
-  order_details_template?: string | null
-}
+// Re-export for use in other files
+export { defaultTemplates }
+export type { EmailTemplate }
 
-// Default templates for fallback
-const defaultTemplates: Record<string, EmailTemplate> = {
-  order_confirmation: {
-    id: 'order_confirmation',
-    subject: 'Order Confirmation - My Swag Co',
-    heading: 'Thanks for your order, {{customer_name}}!',
-    body_intro: 'Your custom screen printing order has been received and we\'re excited to get started!',
-    body_details: `1. Our team will review your artwork within 1-2 business days.
-2. Once approved, your order moves into production.
-3. Most orders ship within ~14 business days after art approval.
-4. We'll collect the remaining balance before shipping.`,
-    cta_text: null,
-    footer_text: 'If you have any questions, simply reply to this email.',
-    header_color: '#0284c7',
-    order_details_template: 'Order ID: {{order_id}}\nTotal Cost: ${{total_cost}}\nDeposit Paid: ${{deposit_amount}}\nBalance Due: ${{balance_due}}'
-  },
-  art_approved: {
-    id: 'art_approved',
-    subject: 'Artwork Approved - Order Moving to Production!',
-    heading: 'Great news, {{customer_name}}!',
-    body_intro: 'Your artwork has been approved and we\'ve moved your order into production!',
-    body_details: null,
-    cta_text: null,
-    footer_text: 'We\'ll send you another email when your order is ready to ship with payment instructions for the remaining balance.',
-    header_color: '#059669',
-    estimated_ship_days: 14,
-    order_details_template: 'Order ID: {{order_id}}\nEstimated Ship Date: {{estimated_ship_date}}'
-  },
-  balance_due: {
-    id: 'balance_due',
-    subject: 'Balance Due - Your Order is Ready!',
-    heading: 'Your order is ready, {{customer_name}}!',
-    body_intro: 'Your custom screen printing order is complete and ready to ship! Before we send it out, we need to collect the remaining balance.',
-    body_details: null,
-    cta_text: 'Pay Balance Now',
-    footer_text: 'Once payment is received, we\'ll ship your order right away!',
-    header_color: '#d97706',
-    order_details_template: 'Order ID: {{order_id}}\nBalance Due: ${{balance_due}}'
-  },
-  balance_paid: {
-    id: 'balance_paid',
-    subject: 'Payment Received - Order Shipping Soon!',
-    heading: 'Payment Received!',
-    body_intro: 'Thanks, {{customer_name}}! We\'ve received your final payment and your order is now ready to ship.',
-    body_details: null,
-    cta_text: null,
-    footer_text: 'We\'ll send you tracking information as soon as your order ships!',
-    header_color: '#059669',
-    order_details_template: 'Order ID: {{order_id}}\nAmount Paid: ${{amount_paid}}'
-  },
-  art_revision_needed: {
-    id: 'art_revision_needed',
-    subject: 'Artwork Revision Needed - Action Required',
-    heading: 'Artwork Review Update',
-    body_intro: 'Hi {{customer_name}}, we\'ve reviewed your artwork and need to discuss a few things before we can proceed with production.',
-    body_details: null,
-    cta_text: null,
-    footer_text: 'Please reply to this email or give us a call to discuss. We\'ll help you get everything sorted out quickly!',
-    header_color: '#dc2626',
-    order_details_template: 'Order ID: {{order_id}}'
-  },
-  shipped: {
-    id: 'shipped',
-    subject: 'Your Order Has Shipped!',
-    heading: 'Your order is on its way!',
-    body_intro: 'Great news, {{customer_name}}! Your custom screen printing order has shipped and is on its way to you.',
-    body_details: null,
-    cta_text: 'Track Your Package',
-    footer_text: 'Thank you for your business! We hope you love your custom shirts.',
-    header_color: '#7c3aed',
-    order_details_template: 'Order ID: {{order_id}}\nCarrier: {{carrier}}\nTracking Number: {{tracking_number}}'
-  }
-}
-
-// Fetch template from database with fallback to defaults
-async function getTemplate(templateId: string): Promise<EmailTemplate> {
+// Export getTemplate for use in send-email route
+export async function getTemplate(templateId: string): Promise<EmailTemplate> {
   try {
     const { data, error } = await supabaseAdmin
       .from('email_templates')
@@ -107,13 +25,15 @@ async function getTemplate(templateId: string): Promise<EmailTemplate> {
       .eq('id', templateId)
       .single()
 
+    const validTemplateId = templateId as EmailTemplateId
     if (error || !data) {
-      return defaultTemplates[templateId] || defaultTemplates.order_confirmation
+      return defaultTemplates[validTemplateId] || defaultTemplates.order_confirmation
     }
 
     return data as EmailTemplate
   } catch {
-    return defaultTemplates[templateId] || defaultTemplates.order_confirmation
+    const validTemplateId = templateId as EmailTemplateId
+    return defaultTemplates[validTemplateId] || defaultTemplates.order_confirmation
   }
 }
 

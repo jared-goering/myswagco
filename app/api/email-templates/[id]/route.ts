@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { defaultTemplates, EmailTemplateId } from '../route'
+import { defaultTemplates, EmailTemplateId } from '@/lib/email-templates'
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic'

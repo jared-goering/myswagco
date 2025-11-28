@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Resend } from 'resend'
+import { supabaseAdmin } from '@/lib/supabase/server'
+import { defaultTemplates, EmailTemplateId } from '@/lib/email-templates'
+import { generateEmailHtml } from '@/lib/email'
+import { addBusinessDays, format } from 'date-fns'
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic'
-import { Resend } from 'resend'
-import { supabaseAdmin } from '@/lib/supabase/server'
-import { defaultTemplates, EmailTemplateId } from '../../route'
-import { generateEmailHtml } from '@/lib/email'
-import { addBusinessDays, format } from 'date-fns'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'onboarding@resend.dev'
