@@ -24,6 +24,75 @@ interface ImportedGarmentData {
   base_cost: number | null
   color_images?: { [color: string]: string }
   color_back_images?: { [color: string]: string } // NEW: Back view images
+  ss_style_id?: string | null // S&S Activewear style ID for inventory lookups
+  supplier_source?: string | null // Origin supplier: 'ssactivewear', 'ascolour', etc.
+}
+
+/**
+ * Enhance a technical supplier description into consumer-friendly marketing copy
+ * Uses Claude Haiku for speed and cost efficiency (~$0.0005 per call)
+ */
+async function enhanceDescription(
+  rawDescription: string,
+  productName: string,
+  brand: string,
+  category: string
+): Promise<string> {
+  // If description is too short or empty, return as-is
+  if (!rawDescription || rawDescription.length < 20) {
+    return rawDescription || `${productName} by ${brand}`
+  }
+
+  try {
+    console.log('✨ Enhancing description with AI...')
+    
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      temperature: 0.7, // Slightly creative for marketing copy
+      messages: [
+        {
+          role: 'user',
+          content: `You are a copywriter for a custom apparel printing company. Rewrite this technical supplier description into engaging, consumer-friendly marketing copy.
+
+PRODUCT: ${productName}
+BRAND: ${brand}
+CATEGORY: ${category}
+RAW DESCRIPTION: ${rawDescription}
+
+REQUIREMENTS:
+- Write 2-3 sentences maximum
+- MUST include the fabric weight (e.g., "6.1 oz" or "heavyweight 8 oz")
+- MUST include the fiber composition (e.g., "100% ring-spun cotton" or "50/50 cotton-polyester blend")  
+- Include fit type if mentioned (relaxed fit, retail fit, etc.)
+- Make technical terms consumer-friendly (e.g., "ring-spun cotton" is fine, but skip "30 singles")
+- Highlight comfort and quality benefits
+- Make it sound premium and desirable
+- Don't use marketing clichés or exclamation points
+- Keep it professional and trustworthy
+- Mention if it's good for screen printing/custom designs when relevant
+
+EXAMPLE OUTPUT:
+"A heavyweight 6.1 oz tee made from 100% ring-spun cotton with a relaxed fit that only gets softer with every wash. The garment-dyed finish means virtually no shrinkage and rich colors that hold up beautifully to screen printing."
+
+Return ONLY the new description, no quotes or explanations.`
+        }
+      ]
+    })
+
+    const content = message.content[0]
+    if (content.type === 'text' && content.text.trim()) {
+      console.log('✅ Description enhanced successfully')
+      return content.text.trim()
+    }
+    
+    // Fallback to raw description if AI response is empty
+    return rawDescription
+  } catch (error) {
+    // Graceful degradation - return cleaned raw description on failure
+    console.warn('⚠️ Description enhancement failed, using raw description:', error)
+    return rawDescription
+  }
 }
 
 /**
@@ -210,24 +279,40 @@ async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentDat
       thumbnailUrl = `${SSACTIVEWEAR_CDN_BASE}/${thumbnailUrl}`
     }
 
+    // Prepare product info for description enhancement
+    const productName = `${styleData.styleName || styleData.title} - ${styleId}`
+    const brandName = styleData.brandName || brand
+    const category = 'T-Shirt' // TODO: Extract from S&S API if available
+
+    // Enhance the description with AI for consumer-friendly copy
+    const enhancedDescription = await enhanceDescription(
+      cleanDescription,
+      productName,
+      brandName,
+      category
+    )
+
     console.log('✅ S&S API import successful:', {
       colors: availableColors.length,
       color_front_images: Object.keys(colorImages).length,
       color_back_images: Object.keys(colorBackImages).length,
-      sizes: sizeRange.length
+      sizes: sizeRange.length,
+      description_enhanced: enhancedDescription !== cleanDescription
     })
 
     return {
-      name: `${styleData.styleName || styleData.title} - ${styleId}`,
-      brand: styleData.brandName || brand,
-      description: cleanDescription || `${styleData.title || styleData.styleName} by ${styleData.brandName}`,
-      category: 'T-Shirt', // S&S API might have category data - check styleData.category
+      name: productName,
+      brand: brandName,
+      description: enhancedDescription || `${styleData.title || styleData.styleName} by ${styleData.brandName}`,
+      category: category,
       available_colors: availableColors,
       size_range: sizeRange,
       thumbnail_url: thumbnailUrl,
       base_cost: basePrice,
       color_images: colorImages,
-      color_back_images: colorBackImages
+      color_back_images: colorBackImages,
+      ss_style_id: String(styleData.styleID), // Capture S&S style ID for inventory lookups
+      supplier_source: 'ssactivewear' // Mark as S&S sourced
     }
   } catch (error) {
     console.error('❌ Error fetching from S&S API:', error)
@@ -500,6 +585,10 @@ Return ONLY valid JSON (no explanatory text before or after):
       color_images: Object.keys(data.color_images || {}).length
     })
 
+    // Add supplier source
+    data.supplier_source = isAsColour ? 'ascolour' : 'manual'
+    data.ss_style_id = null
+
     return data
 
   } catch (error) {
@@ -710,7 +799,9 @@ async function smartHtmlScraping(url: string, isAsColour: boolean): Promise<Impo
       thumbnail_url: thumbnailUrl,
       base_cost: basePrice,
       color_images: colorFrontImageMappings,
-      color_back_images: colorBackImageMappings
+      color_back_images: colorBackImageMappings,
+      ss_style_id: null, // AS Colour doesn't use S&S style IDs
+      supplier_source: 'ascolour' // Mark as AS Colour sourced
     }
   }
 
@@ -911,6 +1002,10 @@ Example output format (but with 50-80 colors, not just 3!):
   if (isAsColour && extractedData.available_colors.length < 40) {
     console.warn(`⚠️  Only found ${extractedData.available_colors.length} colors for AS Colour product. Expected 50-80. The page might have changed structure.`)
   }
+
+  // Add supplier source for non-API extracted data
+  extractedData.supplier_source = isAsColour ? 'ascolour' : 'manual'
+  extractedData.ss_style_id = null // Only S&S API imports have style IDs
 
   return extractedData
 }

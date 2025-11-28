@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Garment, PrintLocation, MultiGarmentQuoteResponse } from '@/types'
+import { Garment, PrintLocation, MultiGarmentQuoteResponse, GarmentInventory } from '@/types'
 import { useOrderStore } from '@/lib/store/orderStore'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 
@@ -87,6 +87,10 @@ export default function ColorsQuantitiesPage() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const hasInitialized = useRef(false)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Inventory state for S&S products
+  const [inventoryData, setInventoryData] = useState<Record<string, GarmentInventory>>({})
+  const [inventoryLoading, setInventoryLoading] = useState<Set<string>>(new Set())
 
   const selectedIds = getSelectedGarmentIds()
 
@@ -171,6 +175,61 @@ export default function ColorsQuantitiesPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Fetch inventory for a specific garment
+  async function fetchInventory(garmentId: string) {
+    // Don't fetch if already loading or already have data
+    if (inventoryLoading.has(garmentId) || inventoryData[garmentId]) {
+      return
+    }
+    
+    setInventoryLoading(prev => new Set(prev).add(garmentId))
+    
+    try {
+      const response = await fetch(`/api/garments/${garmentId}/inventory`)
+      if (response.ok) {
+        const data: GarmentInventory = await response.json()
+        setInventoryData(prev => ({ ...prev, [garmentId]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching inventory for garment:', garmentId, error)
+    } finally {
+      setInventoryLoading(prev => {
+        const next = new Set(prev)
+        next.delete(garmentId)
+        return next
+      })
+    }
+  }
+
+  // Fetch inventory for all selected garments
+  useEffect(() => {
+    selectedIds.forEach(id => {
+      fetchInventory(id)
+    })
+  }, [selectedIds.join(',')])
+
+  // Helper to get stock level for a specific color/size
+  function getStockLevel(garmentId: string, color: string, size: string): number | null {
+    const inv = inventoryData[garmentId]
+    if (!inv?.has_inventory) return null
+    return inv.inventory[color]?.[size] ?? null
+  }
+
+  // Helper to check if stock is low (< 50 units)
+  function isLowStock(stock: number | null): boolean {
+    return stock !== null && stock > 0 && stock < 50
+  }
+
+  // Helper to check if out of stock
+  function isOutOfStock(stock: number | null): boolean {
+    return stock !== null && stock === 0
+  }
+
+  // Helper to check if quantity exceeds stock
+  function exceedsStock(quantity: number, stock: number | null): boolean {
+    return stock !== null && quantity > stock
   }
 
   async function fetchMultiGarmentQuote() {
@@ -715,9 +774,16 @@ export default function ColorsQuantitiesPage() {
                                         </button>
                                       </div>
                                       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                                        {SIZES.map((size) => {
+                                        {garment.size_range.map((size) => {
                                           const sizeValue = selectedGarments[garment.id]?.colorSizeQuantities[color]?.[size as keyof typeof selectedGarments[string]['colorSizeQuantities'][string]] || 0
                                           const hasValue = sizeValue > 0
+                                          const stock = getStockLevel(garment.id, color, size)
+                                          const isLoadingInventory = inventoryLoading.has(garment.id)
+                                          const hasInventoryData = inventoryData[garment.id]?.has_inventory
+                                          const showStock = hasInventoryData && stock !== null
+                                          const lowStock = isLowStock(stock)
+                                          const outOfStock = isOutOfStock(stock)
+                                          const overStock = exceedsStock(sizeValue, stock)
                                           
                                           return (
                                             <div key={size} className="relative">
@@ -730,16 +796,70 @@ export default function ColorsQuantitiesPage() {
                                                 value={sizeValue || ''}
                                                 onChange={(e) => handleSizeQuantityChange(garment.id, color, size, e.target.value)}
                                                 className={`w-full border-2 rounded-xl px-2 py-2.5 text-center font-bold text-charcoal-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none text-sm ${
-                                                  hasValue 
-                                                    ? 'border-primary-300 bg-primary-50/50' 
-                                                    : 'border-surface-200 bg-white hover:border-surface-300'
+                                                  overStock
+                                                    ? 'border-amber-400 bg-amber-50/50'
+                                                    : hasValue 
+                                                      ? 'border-primary-300 bg-primary-50/50' 
+                                                      : outOfStock
+                                                        ? 'border-rose-200 bg-rose-50/30'
+                                                        : 'border-surface-200 bg-white hover:border-surface-300'
                                                 }`}
                                                 placeholder="0"
                                               />
+                                              {/* Inventory indicator */}
+                                              {isLoadingInventory ? (
+                                                <div className="mt-1 h-3 flex justify-center">
+                                                  <div className="w-8 h-2 bg-surface-200 rounded animate-pulse" />
+                                                </div>
+                                              ) : showStock ? (
+                                                <div className={`mt-1 text-[10px] font-semibold text-center leading-tight ${
+                                                  outOfStock 
+                                                    ? 'text-rose-500' 
+                                                    : lowStock 
+                                                      ? 'text-amber-600' 
+                                                      : overStock
+                                                        ? 'text-amber-600'
+                                                        : 'text-emerald-600'
+                                                }`}>
+                                                  {outOfStock ? (
+                                                    <span className="flex items-center justify-center gap-0.5">
+                                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                      </svg>
+                                                      Out
+                                                    </span>
+                                                  ) : overStock ? (
+                                                    <span className="flex items-center justify-center gap-0.5">
+                                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                      </svg>
+                                                      {stock}
+                                                    </span>
+                                                  ) : lowStock ? (
+                                                    <span>{stock} left</span>
+                                                  ) : (
+                                                    <span className="flex items-center justify-center gap-0.5">
+                                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                      </svg>
+                                                      {stock >= 1000 ? `${Math.floor(stock / 1000)}k+` : stock}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              ) : null}
                                             </div>
                                           )
                                         })}
                                       </div>
+                                      {/* Stock warning message */}
+                                      {inventoryData[garment.id]?.has_inventory && (
+                                        <div className="mt-3 flex items-center gap-1.5 text-xs text-charcoal-400">
+                                          <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                          </svg>
+                                          <span>Live inventory</span>
+                                        </div>
+                                      )}
                                     </motion.div>
                                   )
                                 })}

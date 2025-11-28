@@ -1,8 +1,3 @@
-SEO max
-update checkout page look
-live invetory for S&S
-
-
 Done:
 change when order is sent
 discount codes
@@ -12,9 +7,13 @@ email notifications
     when its completed
 email editor panel
 ability to charge card for missing amount
+live invetory for S&S
+SEO max
 
 
 Future things:
     Launch order site
     Make swag box for employee 
         integerate with gusto / zenefits
+update checkout page look
+

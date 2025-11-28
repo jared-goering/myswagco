@@ -1,5 +1,7 @@
 // Core data models
 
+export type FitType = 'unisex' | 'womens' | 'mens' | 'youth'
+
 export interface Garment {
   id: string
   name: string
@@ -16,8 +18,25 @@ export interface Garment {
   color_back_images?: Record<string, string> // Maps color name to back image URL
   size_range: string[]
   pricing_tier_id: string
+  ss_style_id?: string | null // S&S Activewear style ID for inventory lookups
+  supplier_source?: string | null // Origin supplier: 'ssactivewear', 'ascolour', 'manual', etc.
+  fit_type?: FitType // Fit type: unisex, womens, mens
   created_at: string
   updated_at: string
+}
+
+// S&S Activewear inventory types
+export type SupplierSource = 'ssactivewear' | 'ascolour' | 'manual' | string
+
+export interface InventoryLevel {
+  [size: string]: number // e.g., { "S": 1500, "M": 2300, "L": 1800 }
+}
+
+export interface GarmentInventory {
+  supplier: SupplierSource | null
+  has_inventory: boolean
+  inventory: Record<string, InventoryLevel> // Maps color name to size inventory
+  last_updated?: string
 }
 
 export interface PricingTier {

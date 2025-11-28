@@ -22,6 +22,8 @@ interface ImportedGarmentData {
   thumbnail_url: string | null
   base_cost: number | null
   color_images: Record<string, string> // Required now - maps color name to image URL
+  ss_style_id?: string | null // S&S Activewear style ID for inventory lookups
+  supplier_source?: string | null // Origin supplier: 'ssactivewear', 'ascolour', etc.
 }
 
 async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentData | null> {
@@ -210,7 +212,9 @@ async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentDat
       size_range: sizeRange,
       thumbnail_url: thumbnailUrl,
       base_cost: basePrice,
-      color_images: colorImages
+      color_images: colorImages,
+      ss_style_id: String(styleData.styleID), // Capture S&S style ID for inventory lookups
+      supplier_source: 'ssactivewear' // Mark as S&S sourced
     }
   } catch (error) {
     console.error('Error fetching from S&S API:', error)
@@ -469,6 +473,11 @@ DEBUGGING: If you find color/variant data structures in the JSON, extract as man
     } else {
       console.warn('No color images were extracted - check the page structure or AI extraction')
     }
+
+    // Determine supplier source based on URL
+    const isAsColour = url.toLowerCase().includes('ascolour.com')
+    extractedData.supplier_source = isAsColour ? 'ascolour' : 'manual'
+    extractedData.ss_style_id = null // Non-S&S imports don't have style IDs
 
     return NextResponse.json(extractedData)
 

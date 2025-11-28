@@ -10,6 +10,7 @@ import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { useOrderStore } from '@/lib/store/orderStore'
 import StyleCart from '@/components/StyleCart'
 import GarmentChatAssistant from '@/components/GarmentChatAssistant'
+import GarmentQuickView from '@/components/GarmentQuickView'
 
 type SortOption = 'name-asc' | 'name-desc' | 'brand-asc' | 'price-asc' | 'price-desc'
 
@@ -100,6 +101,7 @@ export default function GarmentSelection() {
   
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState<string>('All')
+  const [selectedFitType, setSelectedFitType] = useState<string>('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set())
   const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set())
@@ -111,6 +113,9 @@ export default function GarmentSelection() {
   
   // Chat assistant state
   const [showChatAssistant, setShowChatAssistant] = useState(false)
+  
+  // Quick view state
+  const [quickViewGarment, setQuickViewGarment] = useState<Garment | null>(null)
 
   const selectedGarmentIds = getSelectedGarmentIds()
   const selectedCount = selectedGarmentIds.length
@@ -214,6 +219,11 @@ export default function GarmentSelection() {
       )
     }
 
+    // Fit type filter
+    if (selectedFitType !== 'All') {
+      filtered = filtered.filter(g => g.fit_type === selectedFitType)
+    }
+
     // Sort
     const sorted = [...filtered]
     switch (sortBy) {
@@ -235,7 +245,7 @@ export default function GarmentSelection() {
     }
 
     return sorted
-  }, [garments, selectedCategory, searchQuery, selectedBrands, selectedColors, sortBy])
+  }, [garments, selectedCategory, selectedFitType, searchQuery, selectedBrands, selectedColors, sortBy])
 
   // Count garments per category
   const categoryCounts = useMemo(() => {
@@ -249,11 +259,12 @@ export default function GarmentSelection() {
   }, [garments])
 
   // Active filter count
-  const activeFilterCount = (selectedBrands.size > 0 ? 1 : 0) + (selectedColors.size > 0 ? 1 : 0)
+  const activeFilterCount = (selectedBrands.size > 0 ? 1 : 0) + (selectedColors.size > 0 ? 1 : 0) + (selectedFitType !== 'All' ? 1 : 0)
 
   // Clear all filters
   const clearAllFilters = () => {
     setSelectedCategory('All')
+    setSelectedFitType('All')
     setSearchQuery('')
     setSelectedBrands(new Set())
     setSelectedColors(new Set())
@@ -614,7 +625,27 @@ export default function GarmentSelection() {
                     className="overflow-hidden mt-3"
                   >
                     <div className="bg-white rounded-2xl shadow-soft border border-surface-200/50 p-5">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Fit Type Filter */}
+                        <div>
+                          <h3 className="text-sm font-black text-charcoal-700 mb-3 uppercase tracking-wide">Fit Type</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {(['All', 'unisex', 'womens', 'youth'] as const).map((fit) => (
+                              <button
+                                key={fit}
+                                onClick={() => setSelectedFitType(fit)}
+                                className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${
+                                  selectedFitType === fit
+                                    ? 'bg-violet-500 text-white shadow-sm'
+                                    : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                                }`}
+                              >
+                                {fit === 'All' ? 'All' : fit === 'unisex' ? 'Unisex' : fit === 'womens' ? "Women's" : 'Youth'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         {/* Brand Filter */}
                         <div>
                           <h3 className="text-sm font-black text-charcoal-700 mb-3 uppercase tracking-wide">Brand</h3>
@@ -755,8 +786,23 @@ export default function GarmentSelection() {
                             </div>
                           )}
                           
+                          {/* Quick view button - appears on hover */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setQuickViewGarment(garment)
+                            }}
+                            className="absolute bottom-3 left-3 right-3 py-2.5 bg-white/95 backdrop-blur-sm rounded-xl text-sm font-bold text-charcoal-700 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-white flex items-center justify-center gap-2 transform translate-y-2 group-hover:translate-y-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            View Details
+                          </button>
+                          
                           {/* Bottom gradient for better text readability */}
-                          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                         </div>
                         
                         {/* Card content */}
@@ -907,6 +953,17 @@ export default function GarmentSelection() {
           setTimeout(() => setJustSelected(null), 600)
         }}
         selectedGarmentIds={selectedGarmentIds}
+      />
+
+      {/* Garment Quick View Modal */}
+      <GarmentQuickView
+        garment={quickViewGarment}
+        isOpen={!!quickViewGarment}
+        onClose={() => setQuickViewGarment(null)}
+        isSelected={quickViewGarment ? hasGarment(quickViewGarment.id) : false}
+        onToggleSelect={(garmentId) => {
+          handleToggleGarment(garmentId)
+        }}
       />
     </div>
   )

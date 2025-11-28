@@ -79,6 +79,9 @@ export async function PATCH(
     if (body.thumbnail_url !== undefined) updates.thumbnail_url = body.thumbnail_url
     if (body.color_images !== undefined) updates.color_images = body.color_images
     if (body.color_back_images !== undefined) updates.color_back_images = body.color_back_images
+    if (body.ss_style_id !== undefined) updates.ss_style_id = body.ss_style_id
+    if (body.supplier_source !== undefined) updates.supplier_source = body.supplier_source
+    if (body.fit_type !== undefined) updates.fit_type = body.fit_type
     
     // Update garment using admin client
     const { data: garment, error } = await supabaseAdmin

@@ -29,6 +29,13 @@ const CATEGORY_OPTIONS = [
   'Other'
 ]
 
+const FIT_TYPE_OPTIONS = [
+  { value: 'unisex', label: 'Unisex' },
+  { value: 'womens', label: "Women's" },
+  { value: 'mens', label: "Men's" },
+  { value: 'youth', label: 'Youth' }
+]
+
 export default function GarmentForm({ mode, initialData, onSuccess, onCancel, onChange }: GarmentFormProps) {
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
@@ -42,7 +49,10 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
     size_range: initialData?.size_range || [],
     pricing_tier_id: initialData?.pricing_tier_id || '',
     active: initialData?.active ?? true,
-    thumbnail_url: initialData?.thumbnail_url || null
+    thumbnail_url: initialData?.thumbnail_url || null,
+    ss_style_id: initialData?.ss_style_id || null,
+    supplier_source: initialData?.supplier_source || 'manual',
+    fit_type: initialData?.fit_type || 'unisex'
   })
 
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([])
@@ -329,7 +339,9 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
         base_cost: importedData.base_cost || prev.base_cost,
         thumbnail_url: importedData.thumbnail_url || prev.thumbnail_url,
         color_images: importedData.color_images || prev.color_images,
-        color_back_images: importedData.color_back_images || prev.color_back_images
+        color_back_images: importedData.color_back_images || prev.color_back_images,
+        ss_style_id: importedData.ss_style_id || null,
+        supplier_source: importedData.supplier_source || 'manual'
       }))
 
       if (importedData.color_images) {
@@ -685,6 +697,25 @@ export default function GarmentForm({ mode, initialData, onSuccess, onCancel, on
                   {errors.category}
                 </p>
               )}
+            </div>
+
+            {/* Fit Type */}
+            <div>
+              <label htmlFor="fit_type" className="flex items-center gap-2 text-sm font-black text-charcoal-700 mb-2 uppercase tracking-wide">
+                Fit Type
+              </label>
+              <select
+                id="fit_type"
+                value={formData.fit_type}
+                onChange={(e) => handleFieldChange('fit_type', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-surface-200 bg-white text-charcoal-700 font-medium focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+              >
+                {FIT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Description */}

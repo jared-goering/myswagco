@@ -105,7 +105,10 @@ export async function POST(request: NextRequest) {
         size_range: body.size_range,
         pricing_tier_id: body.pricing_tier_id,
         active: body.active ?? true,
-        thumbnail_url: body.thumbnail_url || null
+        thumbnail_url: body.thumbnail_url || null,
+        ss_style_id: body.ss_style_id || null,
+        supplier_source: body.supplier_source || 'manual',
+        fit_type: body.fit_type || 'unisex'
       })
       .select()
       .single()
