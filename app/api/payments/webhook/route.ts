@@ -125,6 +125,21 @@ export async function POST(request: NextRequest) {
             const stripeCustomerId = paymentIntent.metadata.stripe_customer_id || 
               (paymentIntent.customer ? String(paymentIntent.customer) : null)
             
+            // Calculate actual total - for multi-garment orders, use the breakdown calculation
+            let actualTotal = quote.total
+            if (pricingBreakdown.garment_breakdown && pricingBreakdown.garment_breakdown.length > 0) {
+              const totalGarmentCost = pricingBreakdown.garment_breakdown.reduce((sum, g) => sum + g.total, 0)
+              const printResult = await calculatePrintCost(totalQuantity, pendingOrder.print_config)
+              actualTotal = totalGarmentCost + printResult.totalCost
+            }
+            
+            // Apply discount if one was used
+            const discountAmount = pendingOrder.discount_amount || 0
+            const discountedTotal = Math.max(0, actualTotal - discountAmount)
+            const depositRatio = quote.deposit_amount / quote.total
+            const discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
+            const discountedBalance = discountedTotal - discountedDeposit
+            
             // Create the actual order
             const { data: newOrder, error: orderError } = await supabaseAdmin
               .from('orders')
@@ -143,10 +158,12 @@ export async function POST(request: NextRequest) {
                 selected_garments: pendingOrder.selected_garments,
                 total_quantity: totalQuantity,
                 print_config: pendingOrder.print_config,
-                total_cost: quote.total,
-                deposit_amount: quote.deposit_amount,
+                total_cost: discountedTotal,
+                deposit_amount: discountedDeposit,
                 deposit_paid: true,
-                balance_due: quote.balance_due,
+                balance_due: discountedBalance,
+                discount_code_id: pendingOrder.discount_code_id || null,
+                discount_amount: discountAmount > 0 ? discountAmount : null,
                 pricing_breakdown: pricingBreakdown,
                 status: 'pending_art_review',
                 stripe_payment_intent_id: paymentIntent.id,

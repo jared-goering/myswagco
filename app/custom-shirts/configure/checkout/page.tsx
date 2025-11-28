@@ -246,9 +246,12 @@ function OrderSummary({ garments, quote }: { garments: Garment[]; quote: MultiGa
   const [showDiscountInput, setShowDiscountInput] = useState(false)
 
   // Calculate totals with discount
+  // Use the deposit ratio from the quote (deposit_amount / total) to get the actual configured percentage
+  const depositRatio = quote.deposit_amount / quote.total
+  const depositPercentage = Math.round(depositRatio * 100)
   const discountAmount = appliedDiscount?.discount_amount || 0
   const discountedTotal = Math.max(0, quote.total - discountAmount)
-  const discountedDeposit = Math.round((discountedTotal * 0.5) * 100) / 100
+  const discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
   const discountedBalance = discountedTotal - discountedDeposit
 
   async function handleApplyDiscount() {
@@ -450,7 +453,7 @@ function OrderSummary({ garments, quote }: { garments: Garment[]; quote: MultiGa
         </div>
         <div className="bg-white/10 rounded-bento-lg p-4 mt-4">
           <div className="flex justify-between mb-2">
-            <span className="font-bold">Deposit (50%)</span>
+            <span className="font-bold">Deposit ({depositPercentage}%)</span>
             <span className="font-black text-data-green text-xl">${discountedDeposit.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm text-white/70">
@@ -640,12 +643,19 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
 
       const pendingOrder = await pendingResponse.json()
 
+      // Calculate discounted deposit if a discount is applied
+      // Use the same deposit ratio from the quote (deposit_amount / total)
+      const discountAmount = store.appliedDiscount?.discount_amount || 0
+      const discountedTotal = Math.max(0, quote.total - discountAmount)
+      const depositRatio = quote.deposit_amount / quote.total
+      const discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
+
       // Create payment intent with pending order reference
       const paymentResponse = await fetch('/api/payments/create-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: quote.deposit_amount,
+          amount: discountedDeposit,
           pendingOrderId: pendingOrder.id,
           customerEmail: store.email,
           customerName: store.customerName,

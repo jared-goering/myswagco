@@ -16,6 +16,9 @@ interface FileUploadCardProps {
   onFileRemove: () => void
   showVectorized?: boolean
   onToggleVectorized?: () => void
+  onEditWithAI?: () => void
+  onRemoveBackground?: () => void
+  isRemovingBackground?: boolean
 }
 
 export default function FileUploadCard({
@@ -27,13 +30,18 @@ export default function FileUploadCard({
   onFileSelect,
   onFileRemove,
   showVectorized = true,
-  onToggleVectorized
+  onToggleVectorized,
+  onEditWithAI,
+  onRemoveBackground,
+  isRemovingBackground = false
 }: FileUploadCardProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [originalPreview, setOriginalPreview] = useState<string | null>(null)
   const [showFullPreview, setShowFullPreview] = useState(false)
+  const [showEditDropdown, setShowEditDropdown] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const editDropdownRef = useRef<HTMLDivElement>(null)
   
   // Check if vectorization is available for this file
   const hasVectorized = artworkFileRecord?.vectorization_status === 'completed' && !!artworkFileRecord?.vectorized_file_url
@@ -93,6 +101,19 @@ export default function FileUploadCard({
       setPreview(artworkFileRecord?.vectorized_file_url || originalPreview)
     }
   }, [hasVectorized, showVectorized, artworkFileRecord?.vectorized_file_url, originalPreview, hasOriginalAccess])
+
+  // Close edit dropdown when clicking outside
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (editDropdownRef.current && !editDropdownRef.current.contains(event.target as Node)) {
+        setShowEditDropdown(false)
+      }
+    }
+    if (showEditDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showEditDropdown])
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
@@ -317,7 +338,7 @@ export default function FileUploadCard({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-2 mt-4">
+                  <div className="flex flex-wrap gap-2 mt-4">
                     <button
                       onClick={handleReplaceClick}
                       className="text-xs font-bold text-primary-700 hover:text-primary-800 px-4 py-2 rounded-xl hover:bg-white transition-all hover:shadow-sm"
@@ -331,6 +352,72 @@ export default function FileUploadCard({
                       >
                         View Full
                       </button>
+                    )}
+                    {(onEditWithAI || onRemoveBackground) && (
+                      <div className="relative" ref={editDropdownRef}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowEditDropdown(!showEditDropdown)
+                          }}
+                          disabled={isRemovingBackground}
+                          className="text-xs font-bold text-violet-700 hover:text-violet-800 px-4 py-2 rounded-xl hover:bg-violet-100 transition-all hover:shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isRemovingBackground ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Removing...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </>
+                          )}
+                        </button>
+                        {showEditDropdown && (
+                          <div className="absolute top-full left-0 mt-1 bg-white rounded-xl shadow-lg border border-surface-200 py-1 z-20 min-w-[160px]">
+                            {onEditWithAI && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setShowEditDropdown(false)
+                                  onEditWithAI()
+                                }}
+                                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-charcoal-700 hover:bg-violet-50 hover:text-violet-700 flex items-center gap-2 transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                </svg>
+                                Edit with AI
+                              </button>
+                            )}
+                            {onRemoveBackground && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setShowEditDropdown(false)
+                                  onRemoveBackground()
+                                }}
+                                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-charcoal-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2 transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                                </svg>
+                                Remove Background
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                     <button
                       onClick={handleRemoveClick}

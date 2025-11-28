@@ -700,7 +700,7 @@ export default function ConfigurationWizard() {
                   </div>
                   <div className="border-t border-white/20 pt-4 space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-white/70 font-semibold">Deposit (50%)</span>
+                      <span className="text-white/70 font-semibold">Deposit ({Math.round((quote.deposit_amount / quote.total) * 100)}%)</span>
                       <span className="font-black text-data-green">${quote.deposit_amount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">

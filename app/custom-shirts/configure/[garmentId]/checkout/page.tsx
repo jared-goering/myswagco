@@ -335,7 +335,7 @@ function OrderSummary({ garment }: { garment: Garment }) {
           </div>
           <div className="bg-white/10 rounded-bento-lg p-4 mt-4">
             <div className="flex justify-between mb-2">
-              <span className="font-bold">Deposit (50%)</span>
+              <span className="font-bold">Deposit ({Math.round((store.quote.deposit_amount / store.quote.total) * 100)}%)</span>
               <span className="font-black text-data-green text-xl">${store.quote.deposit_amount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-white/70">

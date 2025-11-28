@@ -10,6 +10,9 @@ interface AIDesignGeneratorProps {
   onClose: () => void
   onDesignGenerated: (imageDataUrl: string, location: PrintLocation) => void
   availableLocations?: PrintLocation[]
+  // Props for opening in edit mode with an existing image
+  initialEditImage?: string
+  initialEditPrompt?: string
 }
 
 const LOCATION_LABELS: Record<PrintLocation, string> = {
@@ -58,7 +61,7 @@ interface SavedDesign {
   createdAt: number
 }
 
-export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, availableLocations = ['front'] }: AIDesignGeneratorProps) {
+export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, availableLocations = ['front'], initialEditImage, initialEditPrompt }: AIDesignGeneratorProps) {
   // Auth hook for gating AI generation
   const { isAuthenticated, openAuthModal, customer } = useCustomerAuth()
   
@@ -109,7 +112,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
       }
     }
   }, [isOpen])
-  
+
   // Save a design to localStorage
   const saveDesignToHistory = useCallback((image: string, designPrompt: string) => {
     const newDesign: SavedDesign = {
@@ -269,33 +272,45 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
   // Compress and resize image to reduce API payload size
   const compressImage = useCallback((dataUrl: string, maxSize: number = 1024): Promise<string> => {
     return new Promise((resolve) => {
+      // For SVG data URLs, return as-is since they can't be reliably compressed
+      if (dataUrl.startsWith('data:image/svg')) {
+        resolve(dataUrl)
+        return
+      }
+      
       const img = new Image()
+      img.crossOrigin = 'anonymous'
       img.onload = () => {
-        const canvas = document.createElement('canvas')
-        let { width, height } = img
-        
-        // Scale down if larger than maxSize
-        if (width > maxSize || height > maxSize) {
-          if (width > height) {
-            height = (height / width) * maxSize
-            width = maxSize
-          } else {
-            width = (width / height) * maxSize
-            height = maxSize
+        try {
+          const canvas = document.createElement('canvas')
+          let { width, height } = img
+          
+          // Scale down if larger than maxSize
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = (height / width) * maxSize
+              width = maxSize
+            } else {
+              width = (width / height) * maxSize
+              height = maxSize
+            }
           }
-        }
-        
-        canvas.width = width
-        canvas.height = height
-        
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height)
-          // Compress to JPEG at 80% quality for smaller file size
-          const compressed = canvas.toDataURL('image/jpeg', 0.8)
-          console.log(`Compressed image: ${Math.round(dataUrl.length / 1024)}KB -> ${Math.round(compressed.length / 1024)}KB`)
-          resolve(compressed)
-        } else {
+          
+          canvas.width = width
+          canvas.height = height
+          
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height)
+            // Compress to JPEG at 80% quality for smaller file size
+            const compressed = canvas.toDataURL('image/jpeg', 0.8)
+            console.log(`Compressed image: ${Math.round(dataUrl.length / 1024)}KB -> ${Math.round(compressed.length / 1024)}KB`)
+            resolve(compressed)
+          } else {
+            resolve(dataUrl)
+          }
+        } catch (e) {
+          console.error('Image compression failed:', e)
           resolve(dataUrl)
         }
       }
@@ -303,6 +318,25 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
       img.src = dataUrl
     })
   }, [])
+
+  // Initialize edit mode when opened with an initial image
+  useEffect(() => {
+    if (isOpen && initialEditImage) {
+      // Set edit mode states immediately so UI updates
+      setGeneratedImage(initialEditImage)
+      setIsEditMode(true)
+      setBackgroundRemoved(false)
+      setPrompt('')
+      
+      // Compress the image for the edit request (async, but UI is already shown)
+      compressImage(initialEditImage, 1024).then((compressed) => {
+        setEditingImage(compressed)
+      }).catch(() => {
+        // If compression fails, use the original image
+        setEditingImage(initialEditImage)
+      })
+    }
+  }, [isOpen, initialEditImage, compressImage])
 
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files) return
@@ -1472,8 +1506,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
                                 </svg>
-                                <span className="hidden sm:inline">Remove BG</span>
-                                <span className="sm:hidden">BG</span>
+                                Remove Background
                               </>
                             )}
                           </span>
@@ -1483,8 +1516,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>
-                          <span className="hidden sm:inline">BG Removed</span>
-                          <span className="sm:hidden">Done</span>
+                          Background Removed
                         </div>
                       )}
                     </div>

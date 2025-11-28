@@ -53,6 +53,9 @@ export default function MultiGarmentArtworkPage() {
   const [detectedColors, setDetectedColors] = useState<{ [location: string]: number }>({})
   const [showAIGenerator, setShowAIGenerator] = useState(false)
   const [isAISectionExpanded, setIsAISectionExpanded] = useState(false)
+  const [aiEditImage, setAiEditImage] = useState<string | null>(null)
+  const [aiEditLocation, setAiEditLocation] = useState<PrintLocation | null>(null)
+  const [removingBgLocation, setRemovingBgLocation] = useState<PrintLocation | null>(null)
   const [showAccountDropdown, setShowAccountDropdown] = useState(false)
   const [showSavedArtworkBrowser, setShowSavedArtworkBrowser] = useState(false)
   const [savedArtworkList, setSavedArtworkList] = useState<any[]>([])
@@ -305,23 +308,145 @@ export default function MultiGarmentArtworkPage() {
     })
   }
 
+  async function handleEditWithAI(location: PrintLocation) {
+    // Get the image URL to edit - prefer vectorized if available, otherwise original
+    const record = artworkFileRecords[location]
+    const file = artworkFiles[location]
+    
+    let imageUrl: string | null = null
+    
+    // Try to get image URL from record first
+    if (record?.vectorized_file_url) {
+      imageUrl = record.vectorized_file_url
+    } else if (record?.file_url) {
+      imageUrl = record.file_url
+    } else if (file) {
+      // Create a data URL from the file
+      imageUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsDataURL(file)
+      })
+    }
+    
+    if (imageUrl) {
+      setAiEditImage(imageUrl)
+      setAiEditLocation(location)
+      setShowAIGenerator(true)
+    } else {
+      setToast({
+        message: 'Could not load image for editing',
+        type: 'error',
+        show: true,
+      })
+    }
+  }
+
+  function handleCloseAIGenerator() {
+    setShowAIGenerator(false)
+    // Clear edit state after a short delay to allow modal animation
+    setTimeout(() => {
+      setAiEditImage(null)
+      setAiEditLocation(null)
+    }, 300)
+  }
+
+  async function handleRemoveBackground(location: PrintLocation) {
+    // Get the image to process
+    const record = artworkFileRecords[location]
+    const file = artworkFiles[location]
+    
+    let imageBase64: string | null = null
+    
+    // Get the image as base64
+    if (record?.file_url && (record.file_url.startsWith('data:') || record.file_url.startsWith('http'))) {
+      imageBase64 = record.file_url
+    } else if (record?.vectorized_file_url) {
+      imageBase64 = record.vectorized_file_url
+    } else if (file) {
+      imageBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsDataURL(file)
+      })
+    }
+    
+    if (!imageBase64) {
+      setToast({
+        message: 'Could not load image for background removal',
+        type: 'error',
+        show: true,
+      })
+      return
+    }
+    
+    setRemovingBgLocation(location)
+    
+    try {
+      const response = await fetch('/api/artwork/remove-background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64 }),
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to remove background')
+      }
+      
+      if (data.success && data.image) {
+        // Convert the result to a file and update the artwork
+        const fetchResponse = await fetch(data.image)
+        const blob = await fetchResponse.blob()
+        const fileName = `bg-removed-${Date.now()}.png`
+        const newFile = new File([blob], fileName, { type: 'image/png' })
+        
+        await handleFileSelect(location, newFile)
+        
+        setToast({
+          message: `Background removed from ${getLocationLabel(location)}!`,
+          type: 'success',
+          show: true,
+        })
+      }
+    } catch (error) {
+      console.error('Background removal error:', error)
+      setToast({
+        message: error instanceof Error ? error.message : 'Failed to remove background',
+        type: 'error',
+        show: true,
+      })
+    } finally {
+      setRemovingBgLocation(null)
+    }
+  }
+
   async function handleAIDesignGenerated(imageDataUrl: string, location: PrintLocation) {
     try {
+      // Use the edit location if we're editing an existing design, otherwise use the provided location
+      const targetLocation = aiEditLocation || location
+      
       const response = await fetch(imageDataUrl)
       const blob = await response.blob()
       const fileName = `ai-generated-design-${Date.now()}.png`
       const file = new File([blob], fileName, { type: 'image/png' })
       
-      await handleFileSelect(location, file)
+      await handleFileSelect(targetLocation, file)
       
+      const actionVerb = aiEditLocation ? 'Updated' : 'Added'
       setToast({
-        message: `AI-generated design added to ${getLocationLabel(location)}!`,
+        message: `${actionVerb} AI design for ${getLocationLabel(targetLocation)}!`,
         type: 'success',
         show: true,
         confetti: true,
       })
       
-      setActiveTab(location)
+      setActiveTab(targetLocation)
+      
+      // Clear the edit state
+      setAiEditImage(null)
+      setAiEditLocation(null)
     } catch (error) {
       console.error('Error processing AI design:', error)
       setToast({
@@ -382,6 +507,40 @@ export default function MultiGarmentArtworkPage() {
               type: 'success',
               show: true,
             })
+          }
+          
+          // Auto-save vectorized file to user's account if authenticated
+          if (isAuthenticated && user && result.svg_data_url) {
+            try {
+              const originalName = file.name.replace(/\.[^/.]+$/, '') // Remove extension
+              const vectorName = `${originalName}_vectorized`
+              
+              const saveResponse = await fetch('/api/saved-artwork', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  name: vectorName,
+                  image_data: result.svg_data_url,
+                  is_ai_generated: false,
+                  metadata: {
+                    original_filename: `${originalName}.svg`,
+                    is_vector: true,
+                    location: location,
+                    color_count: colorCount,
+                    auto_vectorized: true
+                  }
+                })
+              })
+              
+              if (saveResponse.ok) {
+                console.log(`Vectorized artwork "${vectorName}" saved to user's account`)
+              } else {
+                console.error('Failed to save vectorized artwork to account:', await saveResponse.text())
+              }
+            } catch (saveError) {
+              console.error('Error saving vectorized artwork to account:', saveError)
+            }
           }
         }
       } else {
@@ -748,6 +907,9 @@ export default function MultiGarmentArtworkPage() {
                         artworkFileRecord={artworkFileRecords[location] || null}
                         onFileSelect={(file) => handleFileSelect(location, file)}
                         onFileRemove={() => handleFileRemove(location)}
+                        onEditWithAI={() => handleEditWithAI(location)}
+                        onRemoveBackground={() => handleRemoveBackground(location)}
+                        isRemovingBackground={removingBgLocation === location}
                       />
                     </motion.div>
                   )
@@ -999,7 +1161,13 @@ export default function MultiGarmentArtworkPage() {
         )}
       </AnimatePresence>
 
-      <AIDesignGenerator isOpen={showAIGenerator} onClose={() => setShowAIGenerator(false)} onDesignGenerated={handleAIDesignGenerated} availableLocations={enabledLocations} />
+      <AIDesignGenerator 
+        isOpen={showAIGenerator} 
+        onClose={handleCloseAIGenerator} 
+        onDesignGenerated={handleAIDesignGenerated} 
+        availableLocations={aiEditLocation ? [aiEditLocation] : enabledLocations}
+        initialEditImage={aiEditImage || undefined}
+      />
     </div>
   )
 }

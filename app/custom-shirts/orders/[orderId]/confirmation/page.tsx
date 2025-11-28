@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Order, Garment } from '@/types'
 import { useOrderStore } from '@/lib/store/orderStore'
 
@@ -80,8 +81,8 @@ export default function OrderConfirmation() {
       {/* Header */}
       <header className="border-b border-surface-300 bg-white shadow-soft">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <Link href="/" className="text-2xl font-black text-primary-600 hover:text-primary-700 transition-colors">
-            My Swag Co
+          <Link href="/" className="inline-block hover:opacity-80 transition-opacity">
+            <Image src="/logo.png" alt="My Swag Co" width={150} height={40} className="h-10 w-auto" />
           </Link>
         </div>
       </header>

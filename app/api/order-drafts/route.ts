@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { OrderDraftInput } from '@/types'
 
+// Force dynamic rendering for routes using cookies/auth
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 // Helper to create Supabase client with auth
 function createAuthClient() {
   const cookieStore = cookies()

@@ -17,3 +17,5 @@ Future things:
         integerate with gusto / zenefits
 update checkout page look
 
+Bugs:
+not updating vectorized artwork

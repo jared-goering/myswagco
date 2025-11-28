@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
       color_size_quantities,
       selected_garments,
       print_config,
-      artwork_data
+      artwork_data,
+      discount_code_id,
+      discount_amount
     } = body
 
     // Create pending order
@@ -35,7 +37,9 @@ export async function POST(request: NextRequest) {
         color_size_quantities,
         selected_garments: selected_garments || null,
         print_config,
-        artwork_data: artwork_data || null
+        artwork_data: artwork_data || null,
+        discount_code_id: discount_code_id || null,
+        discount_amount: discount_amount || null
       })
       .select()
       .single()

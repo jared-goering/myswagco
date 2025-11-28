@@ -3,6 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+// Force dynamic rendering for routes using cookies/auth
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 // Helper to get authenticated user (optional - returns null if not logged in)
 async function getAuthenticatedUser() {
   try {

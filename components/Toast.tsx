@@ -102,7 +102,7 @@ export default function Toast({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.95 }}
           transition={{ type: 'spring', damping: 25 }}
-          className="fixed top-4 right-4 z-50 max-w-md"
+          className="fixed top-24 right-4 z-[60] max-w-md"
         >
           <div className={`flex items-center gap-4 px-6 py-4 rounded-bento-lg border-2 ${current.bgColor} ${current.borderColor} shadow-bento backdrop-blur-md`}>
             <div className={current.iconColor}>

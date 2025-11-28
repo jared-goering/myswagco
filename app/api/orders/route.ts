@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { orderCreationSchema } from '@/lib/schemas'
+
+// Force dynamic rendering for routes using cookies/auth
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 import { calculateQuote, calculateGarmentCost, calculatePrintCost, calculateTotalQuantity, calculateTotalQuantityFromColors, getDepositPercentage } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase/server'
 

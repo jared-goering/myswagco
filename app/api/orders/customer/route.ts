@@ -2,6 +2,10 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
+// Force dynamic rendering for routes using cookies/auth
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 // Helper to create Supabase client with auth
 function createAuthClient() {
   const cookieStore = cookies()
