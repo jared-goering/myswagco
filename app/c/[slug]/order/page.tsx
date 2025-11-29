@@ -36,10 +36,10 @@ export default function ParticipantOrderPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedGarmentIds, setSelectedGarmentIds] = useState<string[]>([])
   
-  // Current item being configured (for details step)
-  const [currentItemIndex, setCurrentItemIndex] = useState(0)
+  // Current garment being configured (for multi-garment details step)
+  const [currentGarmentIndex, setCurrentGarmentIndex] = useState(0)
   
-  // Legacy single-style state (for backwards compatibility)
+  // Current item config (used during item configuration)
   const [selectedSize, setSelectedSize] = useState('')
   const [selectedColor, setSelectedColor] = useState('')
   const [quantity, setQuantity] = useState(1)
@@ -138,23 +138,26 @@ export default function ParticipantOrderPage() {
     )
   }
   
-  // Initialize cart items from selected garments
+  // Initialize cart for multi-garment - start fresh, don't pre-create items
   const initializeCart = () => {
-    const newCart: CartItem[] = selectedGarmentIds.map(garmentId => {
-      const garment = garments.find(g => g.id === garmentId)!
-      const colors = getGarmentColors(garmentId)
-      return {
-        garmentId,
-        garment,
-        color: colors[0] || '',
-        size: '',
-        quantity: 1,
-        pricePerItem: getGarmentPrice(garmentId),
-      }
-    })
-    setCart(newCart)
-    setCurrentItemIndex(0)
+    // Clear cart and start with first garment
+    setCart([])
+    setCurrentGarmentIndex(0)
+    // Reset current selection
+    setSelectedSize('')
+    setSelectedColor('')
+    setQuantity(1)
   }
+  
+  // Get current garment being configured
+  const currentGarment = selectedGarmentIds.length > 0 
+    ? garments.find(g => g.id === selectedGarmentIds[currentGarmentIndex]) 
+    : null
+  
+  // Get items in cart for current garment
+  const currentGarmentCartItems = currentGarment 
+    ? cart.filter(item => item.garmentId === currentGarment.id) 
+    : []
   
   // Update cart item
   const updateCartItem = (index: number, updates: Partial<CartItem>) => {
@@ -175,21 +178,25 @@ export default function ParticipantOrderPage() {
     return garment?.size_range || ['S', 'M', 'L', 'XL', '2XL']
   }
   
-  // Check if current item is complete
-  const isCurrentItemComplete = (): boolean => {
-    if (isMultiGarment && cart[currentItemIndex]) {
-      const item = cart[currentItemIndex]
-      return !!item.size && !!item.color
-    }
+  // Check if current selection is complete (size + color selected)
+  const isCurrentSelectionComplete = (): boolean => {
     return !!selectedSize && !!selectedColor
   }
   
-  // Check if all items are configured
-  const allItemsConfigured = (): boolean => {
+  // Check if we can proceed (at least one item per selected garment)
+  const canProceedToInfo = (): boolean => {
     if (isMultiGarment) {
-      return cart.every(item => item.size && item.color)
+      // Each selected garment must have at least one item in cart
+      return selectedGarmentIds.every(garmentId => 
+        cart.some(item => item.garmentId === garmentId)
+      )
     }
-    return !!selectedSize && (campaign?.selected_colors?.length === 1 || !!selectedColor)
+    return cart.length > 0 || (!!selectedSize && (campaign?.selected_colors?.length === 1 || !!selectedColor))
+  }
+  
+  // Check if current garment has items
+  const currentGarmentHasItems = (): boolean => {
+    return currentGarmentCartItems.length > 0
   }
   
   // Handle style selection continue
@@ -199,24 +206,44 @@ export default function ParticipantOrderPage() {
     setStep('details')
   }
   
-  // Handle details continue
-  const handleDetailsContinue = () => {
-    if (isMultiGarment) {
-      // Move to next item or info step
-      if (currentItemIndex < cart.length - 1) {
-        setCurrentItemIndex(currentItemIndex + 1)
-      } else if (allItemsConfigured()) {
-        setStep('info')
-      }
-    } else {
+  // Add current selection to cart (for multi-garment)
+  const addCurrentSelectionToCart = () => {
+    if (!currentGarment || !selectedSize || !selectedColor) return
+    
+    const newItem: CartItem = {
+      garmentId: currentGarment.id,
+      garment: currentGarment,
+      color: selectedColor,
+      size: selectedSize,
+      quantity,
+      pricePerItem: getGarmentPrice(currentGarment.id),
+    }
+    setCart([...cart, newItem])
+    // Reset selection for next item
+    setSelectedSize('')
+    setQuantity(1)
+    // Keep color selected for convenience
+  }
+  
+  // Move to next garment
+  const handleNextGarment = () => {
+    if (currentGarmentIndex < selectedGarmentIds.length - 1) {
+      setCurrentGarmentIndex(currentGarmentIndex + 1)
+      setSelectedSize('')
+      setSelectedColor('')
+      setQuantity(1)
+    } else if (canProceedToInfo()) {
       setStep('info')
     }
   }
   
   // Handle going back in details
   const handleDetailsBack = () => {
-    if (isMultiGarment && currentItemIndex > 0) {
-      setCurrentItemIndex(currentItemIndex - 1)
+    if (isMultiGarment && currentGarmentIndex > 0) {
+      setCurrentGarmentIndex(currentGarmentIndex - 1)
+      setSelectedSize('')
+      setSelectedColor('')
+      setQuantity(1)
     } else if (isMultiGarment) {
       setStep('styles')
     }
@@ -506,23 +533,23 @@ export default function ParticipantOrderPage() {
               exit={{ opacity: 0, x: -20 }}
               className="bg-white rounded-2xl shadow-soft border border-surface-200/50 p-6"
             >
-              {isMultiGarment && cart.length > 0 ? (
+              {isMultiGarment && currentGarment ? (
                 <>
-                  {/* Multi-item configuration */}
-                  <div className="flex items-center justify-between mb-6">
+                  {/* Multi-garment configuration - add multiple items per style */}
+                  <div className="flex items-center justify-between mb-4">
                     <div>
                       <h2 className="text-xl font-black text-charcoal-700">
-                        Configure: {cart[currentItemIndex]?.garment.name}
+                        Configure: {currentGarment.name}
                       </h2>
                       <p className="text-sm text-charcoal-500">
-                        Item {currentItemIndex + 1} of {cart.length}
+                        Style {currentGarmentIndex + 1} of {selectedGarmentIds.length}
                       </p>
                     </div>
-                    {cart[currentItemIndex]?.garment.thumbnail_url && (
+                    {currentGarment.thumbnail_url && (
                       <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-surface-100">
                         <Image
-                          src={cart[currentItemIndex].garment.thumbnail_url}
-                          alt={cart[currentItemIndex].garment.name}
+                          src={currentGarment.thumbnail_url}
+                          alt={currentGarment.name}
                           fill
                           className="object-cover"
                         />
@@ -530,77 +557,141 @@ export default function ParticipantOrderPage() {
                     )}
                   </div>
                   
-                  {/* Color Selection */}
-                  <div className="mb-6">
-                    <label className="block text-sm font-bold text-charcoal-600 mb-3">Color</label>
-                    <div className="flex flex-wrap gap-2">
-                      {getGarmentColors(cart[currentItemIndex]?.garmentId).map(color => (
+                  {/* Show items already added for this garment */}
+                  {currentGarmentCartItems.length > 0 && (
+                    <div className="mb-6 space-y-2">
+                      <p className="text-sm font-bold text-charcoal-600">
+                        Items added for {currentGarment.name} ({currentGarmentCartItems.length})
+                      </p>
+                      {currentGarmentCartItems.map((item, index) => {
+                        const itemColorImage = item.garment.color_images?.[item.color] || item.garment.thumbnail_url
+                        const cartIndex = cart.findIndex(c => c === item)
+                        return (
+                          <div key={index} className="flex items-center justify-between p-3 bg-surface-50 rounded-xl">
+                            <div className="flex items-center gap-3">
+                              {itemColorImage && (
+                                <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-surface-100">
+                                  <Image
+                                    src={itemColorImage}
+                                    alt={item.garment.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-bold text-sm text-charcoal-700">
+                                  {item.color} / {item.size} <span className="text-charcoal-400">×{item.quantity}</span>
+                                </p>
+                                <p className="text-xs text-charcoal-500">${(item.pricePerItem * item.quantity).toFixed(2)}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setCart(cart.filter((_, i) => i !== cartIndex))}
+                              className="p-1.5 text-charcoal-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Add new item form */}
+                  <div className={`${currentGarmentCartItems.length > 0 ? 'p-4 bg-violet-50/50 rounded-xl border-2 border-violet-200' : ''}`}>
+                    {currentGarmentCartItems.length > 0 && (
+                      <p className="text-sm font-bold text-violet-700 mb-4">Add another {currentGarment.name}</p>
+                    )}
+                    
+                    {/* Color Selection */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Color</label>
+                      <div className="flex flex-wrap gap-2">
+                        {getGarmentColors(currentGarment.id).map(color => (
+                          <button
+                            key={color}
+                            onClick={() => setSelectedColor(color)}
+                            className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                              selectedColor === color
+                                ? 'bg-violet-500 text-white shadow-sm'
+                                : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                            }`}
+                          >
+                            {color}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Size Selection */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Size</label>
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        {currentGarment.size_range?.map(size => (
+                          <button
+                            key={size}
+                            onClick={() => setSelectedSize(size)}
+                            className={`py-3 rounded-xl font-bold text-sm transition-all ${
+                              selectedSize === size
+                                ? 'bg-violet-500 text-white shadow-sm'
+                                : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Quantity */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Quantity</label>
+                      <div className="flex items-center gap-3">
                         <button
-                          key={color}
-                          onClick={() => updateCartItem(currentItemIndex, { color })}
-                          className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                            cart[currentItemIndex]?.color === color
-                              ? 'bg-violet-500 text-white shadow-sm'
-                              : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
-                          }`}
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
                         >
-                          {color}
+                          -
                         </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Size Selection */}
-                  <div className="mb-6">
-                    <label className="block text-sm font-bold text-charcoal-600 mb-3">Size</label>
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {cart[currentItemIndex]?.garment.size_range?.map(size => (
+                        <span className="w-12 text-center text-xl font-black text-charcoal-700">
+                          {quantity}
+                        </span>
                         <button
-                          key={size}
-                          onClick={() => updateCartItem(currentItemIndex, { size })}
-                          className={`py-3 rounded-xl font-bold text-sm transition-all ${
-                            cart[currentItemIndex]?.size === size
-                              ? 'bg-violet-500 text-white shadow-sm'
-                              : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
-                          }`}
+                          onClick={() => setQuantity(quantity + 1)}
+                          className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
                         >
-                          {size}
+                          +
                         </button>
-                      ))}
+                      </div>
                     </div>
+                    
+                    {/* Add to order button */}
+                    <button
+                      onClick={addCurrentSelectionToCart}
+                      disabled={!isCurrentSelectionComplete()}
+                      className="w-full py-3 border-2 border-violet-500 text-violet-600 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-50 transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      {currentGarmentCartItems.length > 0 ? 'Add Another' : 'Add to Order'}
+                    </button>
                   </div>
                   
-                  {/* Quantity */}
-                  <div className="mb-8">
-                    <label className="block text-sm font-bold text-charcoal-600 mb-3">Quantity</label>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => updateCartItem(currentItemIndex, { quantity: Math.max(1, (cart[currentItemIndex]?.quantity || 1) - 1) })}
-                        className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
-                      >
-                        -
-                      </button>
-                      <span className="w-12 text-center text-xl font-black text-charcoal-700">
-                        {cart[currentItemIndex]?.quantity || 1}
-                      </span>
-                      <button
-                        onClick={() => updateCartItem(currentItemIndex, { quantity: (cart[currentItemIndex]?.quantity || 1) + 1 })}
-                        className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
-                      >
-                        +
-                      </button>
+                  {/* Cart total */}
+                  {cart.length > 0 && (
+                    <div className="bg-surface-50 rounded-xl p-4 mt-6 mb-6">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-charcoal-500">Order total ({cart.reduce((sum, i) => sum + i.quantity, 0)} items)</span>
+                        <span className="text-xl font-black text-charcoal-700">
+                          ${cart.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0).toFixed(2)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Item subtotal */}
-                  <div className="bg-surface-50 rounded-xl p-4 mb-6">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-charcoal-500">Item subtotal</span>
-                      <span className="text-xl font-black text-charcoal-700">
-                        ${((cart[currentItemIndex]?.pricePerItem || 0) * (cart[currentItemIndex]?.quantity || 1)).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                   
                   {/* Navigation */}
                   <div className="flex gap-3">
@@ -611,11 +702,11 @@ export default function ParticipantOrderPage() {
                       Back
                     </button>
                     <button
-                      onClick={handleDetailsContinue}
-                      disabled={!isCurrentItemComplete()}
+                      onClick={handleNextGarment}
+                      disabled={!currentGarmentHasItems()}
                       className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-600 hover:to-fuchsia-600 transition-all"
                     >
-                      {currentItemIndex < cart.length - 1 ? 'Next Item' : 'Continue'}
+                      {currentGarmentIndex < selectedGarmentIds.length - 1 ? 'Next Style' : 'Continue to Checkout'}
                     </button>
                   </div>
                 </>
