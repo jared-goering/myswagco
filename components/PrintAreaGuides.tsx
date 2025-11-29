@@ -34,7 +34,7 @@ export default function PrintAreaGuides({
   }
 
   return (
-    <Group>
+    <Group name="print-area-guides">
       {/* Grid Lines */}
       {showGrid && verticalLines.map((x, i) => (
         <Line

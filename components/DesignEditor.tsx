@@ -31,6 +31,8 @@ interface DesignEditorProps {
   onLocationChange?: (location: PrintLocation) => void
   hasArtworkForLocation?: (location: PrintLocation) => boolean
   getLocationLabel?: (location: PrintLocation) => string
+  // Capture callback - receives a function to capture the canvas as data URL
+  onCaptureReady?: (captureFunc: () => string | null) => void
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -379,7 +381,8 @@ export default function DesignEditor({
   activeLocation,
   onLocationChange,
   hasArtworkForLocation,
-  getLocationLabel
+  getLocationLabel,
+  onCaptureReady
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
@@ -420,6 +423,47 @@ export default function DesignEditor({
   // Load shirt image (either actual garment photo or SVG)
   const shirtImageUrl = getShirtImageUrl(printLocation, garment, activeColor)
   const [shirtImage] = useImage(shirtImageUrl || '', 'anonymous')
+
+  // Provide capture function to parent component
+  // IMPORTANT: Only signal ready when shirtImage is fully loaded
+  // Wait for requestAnimationFrame + small delay to ensure Konva has rendered the new image
+  useEffect(() => {
+    if (!onCaptureReady || !stageRef.current || !shirtImage) return
+    
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    
+    // Wait for next animation frame + additional delay to ensure Konva has fully rendered
+    const rafId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        // Double-check refs are still valid
+        if (!stageRef.current) return
+        
+        const captureFunc = () => {
+          if (stageRef.current) {
+            // Find and temporarily hide print area guides before capturing
+            const guidesNodes = stageRef.current.find('.print-area-guides')
+            guidesNodes.forEach((node: Konva.Node) => node.hide())
+            
+            // Get the stage as a data URL (PNG)
+            const dataUrl = stageRef.current.toDataURL({ pixelRatio: 2 })
+            
+            // Restore guides visibility
+            guidesNodes.forEach((node: Konva.Node) => node.show())
+            
+            return dataUrl
+          }
+          return null
+        }
+        
+        onCaptureReady(captureFunc)
+      }, 100) // Additional delay for Konva rendering
+    })
+    
+    return () => {
+      cancelAnimationFrame(rafId)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [onCaptureReady, shirtImage, image])
 
   const printArea = PRINT_AREAS[printLocation]
   const maxDimensions = MAX_PRINT_DIMENSIONS[printLocation]
@@ -1310,11 +1354,10 @@ export default function DesignEditor({
       )}
 
       {/* Canvas Section with Enhanced Styling */}
+      {/* Note: Removed key={activeColor} to prevent remounting during mockup capture - component stays mounted and updates shirt image */}
       <motion.div 
-        key={activeColor}
-        initial={{ opacity: 0.7 }}
+        initial={{ opacity: 1 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
         className="relative bg-gradient-to-br from-surface-50 to-surface-100 rounded-bento-lg border-2 border-surface-200 overflow-hidden shadow-soft hover:shadow-bento transition-shadow duration-300"
       >
         <Stage 

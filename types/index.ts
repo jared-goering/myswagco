@@ -2,6 +2,15 @@
 
 export type FitType = 'unisex' | 'womens' | 'mens' | 'youth'
 
+// Print area bounds for campaign mockup placement
+// Percentage-based bounds (0-1) relative to product photo dimensions
+export interface PrintAreaBounds {
+  x: number      // Left edge of print area (as % of photo width)
+  y: number      // Top edge of print area (as % of photo height)
+  width: number  // Width of print area (as % of photo width)
+  height: number // Height of print area (as % of photo height)
+}
+
 export interface Garment {
   id: string
   name: string
@@ -21,6 +30,8 @@ export interface Garment {
   ss_style_id?: string | null // S&S Activewear style ID for inventory lookups
   supplier_source?: string | null // Origin supplier: 'ssactivewear', 'ascolour', 'manual', etc.
   fit_type?: FitType // Fit type: unisex, womens, mens
+  front_print_bounds?: PrintAreaBounds // Where front print area maps to in product photo
+  back_print_bounds?: PrintAreaBounds  // Where back print area maps to in product photo
   created_at: string
   updated_at: string
 }
@@ -345,5 +356,140 @@ export interface OrderDraftInput {
   shipping_address?: ShippingAddress
   quote?: QuoteResponse | null
   text_description?: string
+}
+
+// =====================
+// Group Campaigns Types
+// =====================
+
+export type OrderMode = 'regular' | 'campaign'
+
+export type PaymentStyle = 'organizer_pays' | 'everyone_pays'
+
+export type CampaignStatus = 'draft' | 'active' | 'closed' | 'completed' | 'deleted'
+
+export type CampaignOrderStatus = 'pending' | 'paid' | 'confirmed' | 'cancelled'
+
+// Multi-garment campaign support
+// Maps garment_id to its configuration (price and available colors)
+export interface CampaignGarmentConfig {
+  price: number
+  colors: string[]
+}
+
+// Full config maps garment ID to its config
+export type CampaignGarmentConfigs = Record<string, CampaignGarmentConfig>
+
+export interface Campaign {
+  id: string
+  slug: string
+  organizer_id: string
+  
+  // Campaign details
+  name: string
+  deadline: string // ISO timestamp
+  payment_style: PaymentStyle
+  status: CampaignStatus
+  
+  // Design configuration (legacy single-garment - kept for backwards compatibility)
+  garment_id: string
+  selected_colors: string[]
+  print_config: PrintConfig
+  
+  // Multi-garment configuration
+  // Structure: { "garment_id": { price: 24.99, colors: ["Bay", "Navy"] }, ... }
+  garment_configs?: CampaignGarmentConfigs
+  
+  // Artwork (shared across all garment styles)
+  artwork_urls: { [location: string]: string } // { "front": "url", "back": "url" }
+  artwork_transforms: { [location: string]: ArtworkTransform }
+  
+  // Mockup preview images (captured from design editor)
+  // For multi-garment: structure is { "garmentId:colorName": "url" }
+  mockup_image_url?: string // Legacy: single mockup for backwards compatibility
+  mockup_image_urls?: Record<string, string> // Mockup per color (or garment:color combo)
+  
+  // Pricing (legacy single-garment - kept for backwards compatibility)
+  price_per_shirt: number
+  
+  // Organizer info
+  organizer_name?: string
+  organizer_email?: string
+  
+  // Final order (when campaign closes for organizer_pays)
+  final_order_id?: string
+  
+  // Timestamps
+  created_at: string
+  updated_at: string
+  
+  // Soft delete timestamp
+  deleted_at?: string
+  
+  // Joined data (from API)
+  garment?: Garment // Legacy single garment
+  garments?: Garment[] // Multi-garment: all garments in the campaign
+  order_count?: number
+  size_breakdown?: { [size: string]: number }
+  total_paid?: number // Total amount paid by participants (for refund calculation)
+  paid_order_count?: number // Number of orders with payments
+}
+
+export interface CampaignOrder {
+  id: string
+  campaign_id: string
+  
+  // Participant info
+  participant_name: string
+  participant_email: string
+  
+  // Order details
+  garment_id?: string // Which garment style (for multi-garment campaigns)
+  size: string
+  color: string
+  quantity: number
+  
+  // Payment (for everyone_pays)
+  amount_paid: number
+  stripe_payment_intent_id?: string
+  
+  // Status
+  status: CampaignOrderStatus
+  
+  // Timestamps
+  created_at: string
+  updated_at: string
+  
+  // Joined data (from API)
+  garment?: Garment
+}
+
+export interface CampaignCreateInput {
+  name: string
+  deadline: string
+  payment_style: PaymentStyle
+  
+  // Single-garment mode (legacy, still supported)
+  garment_id?: string
+  selected_colors?: string[]
+  price_per_shirt?: number
+  
+  // Multi-garment mode
+  garment_configs?: CampaignGarmentConfigs
+  
+  print_config: PrintConfig
+  artwork_urls: { [location: string]: string }
+  artwork_transforms: { [location: string]: ArtworkTransform }
+  organizer_name?: string
+  organizer_email?: string
+  mockup_image_url?: string
+  mockup_image_urls?: Record<string, string>
+}
+
+export interface CampaignStats {
+  order_count: number
+  size_breakdown: { [size: string]: number }
+  color_breakdown: { [color: string]: number }
+  total_revenue?: number // For everyone_pays campaigns
 }
 

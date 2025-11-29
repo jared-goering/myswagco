@@ -453,6 +453,136 @@ export default function Home() {
         </div>
       </section>
 
+      {/* How Are You Ordering? - Mode Selection */}
+      <section className="py-16 md:py-20 bg-gradient-to-b from-white to-surface-100">
+        <div className="max-w-5xl mx-auto px-6 sm:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-black text-charcoal-700 mb-4 tracking-tight">
+              How are you ordering?
+            </h2>
+            <p className="text-lg text-charcoal-500 max-w-2xl mx-auto">
+              Choose the option that works best for your order
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+            className="grid md:grid-cols-2 gap-6"
+          >
+            {/* Regular Order Card */}
+            <motion.div
+              variants={scaleIn}
+              className="relative bg-white rounded-2xl border-2 border-surface-200 p-8 hover:border-primary-300 hover:shadow-xl transition-all duration-300 group"
+            >
+              <div className="mb-6">
+                <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-primary-200 group-hover:scale-110 transition-transform">
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-black text-charcoal-700 mb-2">Regular Order</h3>
+                <p className="text-charcoal-500 mb-6">
+                  You're buying for everyone and just need a fast bulk order.
+                </p>
+              </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-3 text-charcoal-600">
+                  <div className="w-5 h-5 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">One person pays</span>
+                </li>
+                <li className="flex items-center gap-3 text-charcoal-600">
+                  <div className="w-5 h-5 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">You enter all sizes</span>
+                </li>
+              </ul>
+              
+              <Link
+                href="/custom-shirts/configure"
+                className="block w-full text-center bg-charcoal-800 hover:bg-charcoal-900 text-white font-bold py-4 rounded-xl transition-all group-hover:shadow-lg"
+              >
+                Start Regular Order
+              </Link>
+            </motion.div>
+
+            {/* Group Campaign Card */}
+            <motion.div
+              variants={scaleIn}
+              className="relative bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 rounded-2xl border-2 border-violet-200 p-8 hover:border-violet-400 hover:shadow-xl transition-all duration-300 group overflow-hidden"
+            >
+              {/* New badge */}
+              <div className="absolute top-4 right-4">
+                <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-black rounded-full shadow-lg">
+                  NEW
+                </span>
+              </div>
+              
+              <div className="mb-6">
+                <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-violet-200 group-hover:scale-110 transition-transform">
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-black text-charcoal-700 mb-2">Group Campaign</h3>
+                <p className="text-charcoal-500 mb-6">
+                  Share a link so everyone can pick their own size—and even pay their share.
+                </p>
+              </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-3 text-charcoal-600">
+                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">Shareable link</span>
+                </li>
+                <li className="flex items-center gap-3 text-charcoal-600">
+                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">Self-serve sizing</span>
+                </li>
+                <li className="flex items-center gap-3 text-charcoal-600">
+                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">Flexible payment</span>
+                </li>
+              </ul>
+              
+              <Link
+                href="/custom-shirts/configure?mode=campaign"
+                className="block w-full text-center bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-bold py-4 rounded-xl transition-all group-hover:shadow-lg"
+              >
+                Start Group Campaign
+              </Link>
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* How It Works */}
       <section id="how-it-works" className="py-20 md:py-28">
         <div className="max-w-7xl mx-auto px-6 sm:px-8">
@@ -1068,6 +1198,144 @@ export default function Home() {
               </motion.div>
             ))}
           </motion.div>
+        </div>
+      </section>
+
+      {/* Group Campaigns Feature Section */}
+      <section id="group-campaigns" className="py-20 md:py-28 bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 relative overflow-hidden">
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-96 h-96 bg-fuchsia-400/20 rounded-full blur-3xl" />
+        </div>
+        
+        {/* Grid overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.05]"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(255,255,255,0.5) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(255,255,255,0.5) 1px, transparent 1px)
+            `,
+            backgroundSize: '32px 32px'
+          }}
+        />
+
+        <div className="relative max-w-7xl mx-auto px-6 sm:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            {/* Left: Content */}
+            <motion.div
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full text-sm font-bold text-white mb-6">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                New Feature
+              </div>
+
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight leading-[1.1]">
+                Group Campaigns for<br />
+                <span className="text-white/90">
+                  Teams, Schools & Companies
+                </span>
+              </h2>
+
+              <p className="text-xl text-white/80 mb-8 leading-relaxed">
+                Skip the spreadsheets and Venmo chaos. Create a Group Campaign, share a link, 
+                and let everyone pick their own size—and even pay their share. We batch it into 
+                one print run and ship on schedule.
+              </p>
+
+              <ul className="space-y-4 mb-10">
+                {[
+                  "Shareable link for your whole group",
+                  "Self-serve sizing—no more size spreadsheets",
+                  "Flexible payment: you pay or everyone pays their share",
+                  "One production run, delivered together"
+                ].map((feature, i) => (
+                  <motion.li 
+                    key={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.1 }}
+                    className="flex items-center gap-3 text-white/90"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <span className="font-medium">{feature}</span>
+                  </motion.li>
+                ))}
+              </ul>
+
+              <Link
+                href="/custom-shirts/configure?mode=campaign"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-white hover:bg-white/90 text-violet-600 rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <span>Start a Group Campaign</span>
+                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </Link>
+            </motion.div>
+
+            {/* Right: Visual */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="relative"
+            >
+              <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl">
+                {/* Mock Campaign Page Preview */}
+                <div className="bg-white rounded-2xl p-6 mb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center text-white text-xl">
+                      👕
+                    </div>
+                    <div>
+                      <h4 className="font-black text-charcoal-700">Spring 2025 Soccer Uniforms</h4>
+                      <p className="text-sm text-charcoal-400">Order by March 15</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between mb-4 p-3 bg-violet-50 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">⏱</span>
+                      <span className="font-bold text-violet-700">12 days left</span>
+                    </div>
+                    <div className="text-sm font-bold text-charcoal-500">
+                      23 orders placed
+                    </div>
+                  </div>
+                  
+                  <button className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold py-3 rounded-xl">
+                    Order My Shirt
+                  </button>
+                </div>
+                
+                {/* Stats visualization */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+                    <div className="text-3xl font-black text-white mb-1">23</div>
+                    <div className="text-sm text-white/70 font-medium">Orders</div>
+                  </div>
+                  <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+                    <div className="text-3xl font-black text-white mb-1">5</div>
+                    <div className="text-sm text-white/70 font-medium">Sizes</div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 

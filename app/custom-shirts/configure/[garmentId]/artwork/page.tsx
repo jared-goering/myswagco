@@ -23,7 +23,7 @@ export default function ArtworkUpload() {
   const garmentId = params.garmentId as string
   const { isAuthenticated, customer, user, openAuthModal, signOut, isLoading: authLoading } = useCustomerAuth()
 
-  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription, saveDraft, draftId, setGarmentId, garmentId: storeGarmentId } = useOrderStore()
+  const { printConfig, artworkFiles, setArtworkFile, artworkFileRecords, setArtworkFileRecord, artworkTransforms, setArtworkTransform, setVectorizedFile, hasUnvectorizedRasterFiles, selectedColors, textDescription, setTextDescription, saveDraft, draftId, setGarmentId, garmentId: storeGarmentId, orderMode } = useOrderStore()
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
@@ -709,7 +709,7 @@ export default function ArtworkUpload() {
       return `Vectorize ${count} raster file${count > 1 ? 's' : ''} to continue`
     }
     
-    return 'Continue to Checkout →'
+    return orderMode === 'campaign' ? 'Continue to Campaign Details →' : 'Continue to Checkout →'
   }
 
   async function handleContinue() {
@@ -722,7 +722,12 @@ export default function ArtworkUpload() {
         }
         await saveDraft()
       }
-      router.push(`/custom-shirts/configure/${garmentId}/checkout`)
+      // Route to campaign details if in campaign mode, otherwise checkout
+      if (orderMode === 'campaign') {
+        router.push('/custom-shirts/configure/campaign-details')
+      } else {
+        router.push(`/custom-shirts/configure/${garmentId}/checkout`)
+      }
     }
   }
 
@@ -1287,7 +1292,9 @@ export default function ArtworkUpload() {
                 }
               `}
             >
-              {canContinue() ? 'Continue to Checkout →' : getContinueButtonMessage()}
+              {canContinue() 
+                ? (orderMode === 'campaign' ? 'Continue to Campaign Details →' : 'Continue to Checkout →')
+                : getContinueButtonMessage()}
             </motion.button>
             {hasAnyWarnings() && canContinue() && (
               <motion.p

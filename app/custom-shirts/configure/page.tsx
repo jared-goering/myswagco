@@ -11,6 +11,7 @@ import { useOrderStore } from '@/lib/store/orderStore'
 import StyleCart from '@/components/StyleCart'
 import GarmentChatAssistant from '@/components/GarmentChatAssistant'
 import GarmentQuickView from '@/components/GarmentQuickView'
+import OrderModeToggle from '@/components/OrderModeToggle'
 
 type SortOption = 'name-asc' | 'name-desc' | 'brand-asc' | 'price-asc' | 'price-desc'
 
@@ -487,6 +488,9 @@ export default function GarmentSelection() {
 
           {!loading && !error && (
             <>
+              {/* Order Mode Toggle */}
+              <OrderModeToggle />
+              
               {/* Unified Filter Toolbar */}
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}

@@ -36,9 +36,32 @@ export default function MultiGarmentArtworkPage() {
     textDescription, 
     setTextDescription, 
     saveDraft,
+    orderMode,
+    setMockupImageDataUrl,
+    clearMockupImages,
   } = useOrderStore()
 
   const [activeTab, setActiveTab] = useState<PrintLocation | null>(null)
+  
+  // State for capturing mockups for all garments and colors
+  // Each item is { garmentId, garmentIndex, color } to support multi-garment campaigns
+  interface CaptureQueueItem {
+    garmentId: string
+    garmentIndex: number
+    color: string
+  }
+  const [isCapturingMockups, setIsCapturingMockups] = useState(false)
+  const [captureQueue, setCaptureQueue] = useState<CaptureQueueItem[]>([])
+  const [navigateAfterCapture, setNavigateAfterCapture] = useState(false)
+  const [pendingCapture, setPendingCapture] = useState<CaptureQueueItem | null>(null)
+  const [canvasReadyForCapture, setCanvasReadyForCapture] = useState<string | null>(null) // garmentId:color
+  const lastCapturedKeyRef = useRef<string | null>(null)
+  const currentCaptureKeyRef = useRef<string | null>(null)
+  
+  // Keep ref in sync with pending capture for use in callbacks
+  useEffect(() => {
+    currentCaptureKeyRef.current = pendingCapture ? `${pendingCapture.garmentId}:${pendingCapture.color}` : null
+  }, [pendingCapture])
   const [showGallery, setShowGallery] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
   const [hasShownCompletionToast, setHasShownCompletionToast] = useState(false)
@@ -67,6 +90,7 @@ export default function MultiGarmentArtworkPage() {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitialized = useRef(false)
+  const captureCanvasRef = useRef<(() => string | null) | null>(null)
 
   const selectedIds = getSelectedGarmentIds()
 
@@ -195,6 +219,96 @@ export default function MultiGarmentArtworkPage() {
       setActiveColor(currentGarmentColors[0])
     }
   }, [activeGarmentIndex])
+  
+  // Handle mockup capture for all garments and colors (for campaigns)
+  // Step 1: When capturing starts or queue changes, set the pending capture item and switch garment/color
+  useEffect(() => {
+    if (!isCapturingMockups || captureQueue.length === 0) return
+    
+    const itemToCapture = captureQueue[0]
+    const captureKey = `${itemToCapture.garmentId}:${itemToCapture.color}`
+    
+    // Only set pending if we haven't already captured this item
+    if (lastCapturedKeyRef.current !== captureKey) {
+      // Update the ref synchronously BEFORE setting state, so it's available in callbacks
+      currentCaptureKeyRef.current = captureKey
+      
+      setPendingCapture(itemToCapture)
+      
+      // Switch garment if needed
+      if (activeGarmentIndex !== itemToCapture.garmentIndex) {
+        setActiveGarmentIndex(itemToCapture.garmentIndex)
+      }
+      
+      // Set active color to trigger canvas re-render
+      // The DesignEditor's onCaptureReady will signal when the new image is loaded
+      if (activeColor !== itemToCapture.color) {
+        setActiveColor(itemToCapture.color)
+      }
+      // Note: We don't manually set canvasReadyForCapture here anymore
+      // The DesignEditor will call onCaptureReady when the shirt image is loaded,
+      // which will set canvasReadyForCapture via the callback
+    }
+  }, [isCapturingMockups, captureQueue, activeGarmentIndex, activeColor])
+  
+  // Step 2: When canvas is ready for the pending capture, do the capture
+  useEffect(() => {
+    if (!isCapturingMockups || !pendingCapture) return
+    const captureKey = `${pendingCapture.garmentId}:${pendingCapture.color}`
+    if (canvasReadyForCapture !== captureKey) return
+    if (lastCapturedKeyRef.current === captureKey) return
+    
+    // Canvas is ready - capture after a small delay to ensure rendering is complete
+    const captureTimeout = setTimeout(() => {
+      if (captureCanvasRef.current) {
+        const mockupDataUrl = captureCanvasRef.current()
+        if (mockupDataUrl) {
+          // Store with garmentId:color key for multi-garment support
+          // Also store with just color for backwards compatibility (first garment)
+          setMockupImageDataUrl(captureKey, mockupDataUrl)
+          if (pendingCapture.garmentIndex === 0) {
+            // For the first garment, also store with just color key for backwards compat
+            setMockupImageDataUrl(pendingCapture.color, mockupDataUrl)
+          }
+          lastCapturedKeyRef.current = captureKey
+        }
+      }
+      
+      // Move to next item or finish
+      const remainingItems = captureQueue.slice(1)
+      setPendingCapture(null)
+      setCanvasReadyForCapture(null)
+      
+      if (remainingItems.length > 0) {
+        setCaptureQueue(remainingItems)
+      } else {
+        // Done capturing all items
+        setIsCapturingMockups(false)
+        setCaptureQueue([])
+        lastCapturedKeyRef.current = null
+        if (navigateAfterCapture) {
+          setNavigateAfterCapture(false)
+          router.push('/custom-shirts/configure/campaign-details')
+        }
+      }
+    }, 300) // Delay to ensure Konva has fully rendered the new shirt color
+    
+    return () => clearTimeout(captureTimeout)
+  }, [isCapturingMockups, pendingCapture, canvasReadyForCapture, captureQueue, navigateAfterCapture, router, setMockupImageDataUrl])
+  
+  // Fallback: if canvas doesn't signal ready within timeout, force capture anyway
+  useEffect(() => {
+    if (!isCapturingMockups || !pendingCapture) return
+    const captureKey = `${pendingCapture.garmentId}:${pendingCapture.color}`
+    if (canvasReadyForCapture === captureKey) return // Already ready
+    
+    const fallbackTimeout = setTimeout(() => {
+      // Force set canvas ready if it hasn't signaled yet
+      setCanvasReadyForCapture(captureKey)
+    }, 2000)
+    
+    return () => clearTimeout(fallbackTimeout)
+  }, [isCapturingMockups, pendingCapture, canvasReadyForCapture])
 
   // Helper to check if a location has artwork
   const hasArtworkForLocation = (location: PrintLocation): boolean => {
@@ -701,7 +815,44 @@ export default function MultiGarmentArtworkPage() {
         }
         await saveDraft()
       }
-      router.push('/custom-shirts/configure/checkout')
+      
+      // For campaigns, capture mockup images for ALL garments and ALL their colors
+      if (orderMode === 'campaign' && captureCanvasRef.current) {
+        // Build queue of all garment/color combinations to capture
+        const queue: CaptureQueueItem[] = []
+        
+        selectedGarmentData.forEach((garment, garmentIndex) => {
+          const garmentColors = selectedGarments[garment.id]?.selectedColors || []
+          garmentColors.forEach(color => {
+            queue.push({
+              garmentId: garment.id,
+              garmentIndex,
+              color,
+            })
+          })
+        })
+        
+        if (queue.length > 0) {
+          // Clear previous mockups and start capture for all combinations
+          clearMockupImages()
+          
+          // Start with the first garment and color
+          const firstItem = queue[0]
+          setActiveGarmentIndex(firstItem.garmentIndex)
+          setActiveColor(firstItem.color)
+          setCaptureQueue(queue)
+          setNavigateAfterCapture(true)
+          setIsCapturingMockups(true)
+          return // The useEffect will handle navigation after all captures
+        }
+      }
+      
+      // Route to campaign details if in campaign mode, otherwise checkout
+      if (orderMode === 'campaign') {
+        router.push('/custom-shirts/configure/campaign-details')
+      } else {
+        router.push('/custom-shirts/configure/checkout')
+      }
     }
   }
 
@@ -1050,6 +1201,14 @@ export default function MultiGarmentArtworkPage() {
                             onLocationChange={(loc) => setActiveTab(loc)}
                             hasArtworkForLocation={hasArtworkForLocation}
                             getLocationLabel={getLocationLabel}
+                            onCaptureReady={(captureFunc) => { 
+                              captureCanvasRef.current = captureFunc
+                              // Signal that canvas is ready for the pending capture (garmentId:color)
+                              // Use ref to get the most up-to-date value
+                              if (currentCaptureKeyRef.current) {
+                                setCanvasReadyForCapture(currentCaptureKeyRef.current)
+                              }
+                            }}
                           />
                         </motion.div>
                       </AnimatePresence>
@@ -1069,16 +1228,26 @@ export default function MultiGarmentArtworkPage() {
           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
             <motion.button
               onClick={handleContinue}
-              disabled={!canContinue()}
-              whileHover={canContinue() ? { scale: 1.02 } : {}}
-              whileTap={canContinue() ? { scale: 0.98 } : {}}
+              disabled={!canContinue() || isCapturingMockups}
+              whileHover={canContinue() && !isCapturingMockups ? { scale: 1.02 } : {}}
+              whileTap={canContinue() && !isCapturingMockups ? { scale: 0.98 } : {}}
               className={`w-full sm:w-auto px-8 py-4 rounded-bento font-black text-base transition-all ${
-                canContinue()
+                canContinue() && !isCapturingMockups
                   ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-soft hover:shadow-bento'
                   : 'bg-surface-300 text-charcoal-400 cursor-not-allowed'
               }`}
             >
-              {canContinue() ? 'Continue to Checkout →' : 'Complete artwork to continue'}
+              {isCapturingMockups ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Capturing mockups...
+                </span>
+              ) : canContinue() 
+                ? (orderMode === 'campaign' ? 'Continue to Campaign Details →' : 'Continue to Checkout →')
+                : 'Complete artwork to continue'}
             </motion.button>
             {!canContinue() && (
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-charcoal-500 font-semibold text-right">
