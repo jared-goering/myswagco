@@ -5,7 +5,7 @@ email notifications
     when they place an order 
     when artwork gets approved 
     when its completed
-email editor panel
+email editor panelc
 ability to charge card for missing amount
 live invetory for S&S
 SEO max

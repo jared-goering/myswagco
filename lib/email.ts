@@ -357,6 +357,64 @@ export async function sendArtRevisionNeededEmail(
   return sendEmail({ to: customerEmail, subject, html })
 }
 
+// Admin notification email address
+const ADMIN_EMAIL = 'jared@homeplaceapparel.com'
+
+export async function sendNewOrderAdminNotification(
+  orderId: string,
+  customerName: string,
+  customerEmail: string,
+  totalCost: number,
+  depositAmount: number,
+  totalQuantity: number
+) {
+  const orderIdShort = orderId.slice(0, 8).toUpperCase()
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://myswagco.co'
+  const adminOrderUrl = `${baseUrl}/admin/orders/${orderId}`
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #374151; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">🎉 New Order Received!</h1>
+      </div>
+      
+      <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+        <p style="font-size: 16px; margin-bottom: 20px;">A new order has been placed and is awaiting art review.</p>
+        
+        <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+          <p style="margin: 0 0 10px 0;"><strong>Order ID:</strong> ${orderIdShort}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Customer:</strong> ${customerName}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${customerEmail}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Total Quantity:</strong> ${totalQuantity} pieces</p>
+          <p style="margin: 0 0 10px 0;"><strong>Total Cost:</strong> $${totalCost.toFixed(2)}</p>
+          <p style="margin: 0;"><strong>Deposit Paid:</strong> $${depositAmount.toFixed(2)}</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${adminOrderUrl}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order in Admin</a>
+        </div>
+        
+        <p style="margin-top: 20px; color: #6b7280; font-size: 14px; text-align: center;">
+          This is an automated notification from My Swag Co.
+        </p>
+      </div>
+    </body>
+    </html>
+  `
+  
+  return sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `🎉 New Order #${orderIdShort} from ${customerName}`,
+    html
+  })
+}
+
 export async function sendShippingNotificationEmail(
   customerEmail: string,
   customerName: string,

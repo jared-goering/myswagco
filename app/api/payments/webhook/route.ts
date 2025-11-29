@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { sendOrderConfirmationEmail, sendBalancePaidEmail } from '@/lib/email'
+import { sendOrderConfirmationEmail, sendBalancePaidEmail, sendNewOrderAdminNotification } from '@/lib/email'
 import { calculateQuote, calculateTotalQuantityFromColors, calculateGarmentCost, calculatePrintCost } from '@/lib/pricing'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -222,13 +222,23 @@ export async function POST(request: NextRequest) {
                 metadata: { payment_intent_id: paymentIntent.id }
               })
             
-            // Send confirmation email
+            // Send confirmation email to customer
             await sendOrderConfirmationEmail(
               newOrder.email,
               newOrder.customer_name,
               newOrder.id,
               newOrder.total_cost,
               newOrder.deposit_amount
+            )
+            
+            // Send admin notification email
+            await sendNewOrderAdminNotification(
+              newOrder.id,
+              newOrder.customer_name,
+              newOrder.email,
+              newOrder.total_cost,
+              newOrder.deposit_amount,
+              newOrder.total_quantity
             )
             
             // Update payment intent metadata with the new order ID
@@ -274,13 +284,23 @@ export async function POST(request: NextRequest) {
                   metadata: { payment_intent_id: paymentIntent.id }
                 })
               
-              // Send confirmation email
+              // Send confirmation email to customer
               await sendOrderConfirmationEmail(
                 order.email,
                 order.customer_name,
                 order.id,
                 order.total_cost,
                 order.deposit_amount
+              )
+              
+              // Send admin notification email
+              await sendNewOrderAdminNotification(
+                order.id,
+                order.customer_name,
+                order.email,
+                order.total_cost,
+                order.deposit_amount,
+                order.total_quantity
               )
             }
           } else if (paymentType === 'balance') {
