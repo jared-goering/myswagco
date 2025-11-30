@@ -38,6 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link href="/admin/orders" className="text-charcoal-600 hover:text-primary-600 hover:bg-primary-50 font-bold px-4 py-2 rounded-xl transition-all">
                 Orders
               </Link>
+              <Link href="/admin/campaigns" className="text-charcoal-600 hover:text-primary-600 hover:bg-primary-50 font-bold px-4 py-2 rounded-xl transition-all">
+                Campaigns
+              </Link>
               <Link href="/admin/garments" className="text-charcoal-600 hover:text-primary-600 hover:bg-primary-50 font-bold px-4 py-2 rounded-xl transition-all">
                 Garments
               </Link>

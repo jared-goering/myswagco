@@ -535,179 +535,192 @@ export default function ParticipantOrderPage() {
             >
               {isMultiGarment && currentGarment ? (
                 <>
-                  {/* Multi-garment configuration - add multiple items per style */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-xl font-black text-charcoal-700">
-                        Configure: {currentGarment.name}
-                      </h2>
-                      <p className="text-sm text-charcoal-500">
-                        Style {currentGarmentIndex + 1} of {selectedGarmentIds.length}
-                      </p>
-                    </div>
+                  {/* Header with garment info */}
+                  <div className="flex items-center gap-4 mb-6 pb-4 border-b border-surface-200">
                     {currentGarment.thumbnail_url && (
-                      <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-surface-100">
+                      <div className="w-16 h-16 relative rounded-xl overflow-hidden bg-surface-100 flex-shrink-0">
                         <Image
-                          src={currentGarment.thumbnail_url}
+                          src={selectedColor ? (currentGarment.color_images?.[selectedColor] || currentGarment.thumbnail_url) : currentGarment.thumbnail_url}
                           alt={currentGarment.name}
                           fill
                           className="object-cover"
                         />
                       </div>
                     )}
+                    <div className="flex-1">
+                      <h2 className="text-lg font-black text-charcoal-700">{currentGarment.name}</h2>
+                      <p className="text-sm text-charcoal-500">{currentGarment.brand}</p>
+                      <p className="text-sm font-bold text-violet-600">${getGarmentPrice(currentGarment.id).toFixed(2)} each</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block px-3 py-1 bg-violet-100 text-violet-700 text-xs font-bold rounded-full">
+                        Style {currentGarmentIndex + 1} of {selectedGarmentIds.length}
+                      </span>
+                    </div>
                   </div>
                   
-                  {/* Show items already added for this garment */}
+                  {/* Color Selection */}
+                  <div className="mb-5">
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">Color</label>
+                    <div className="flex flex-wrap gap-2">
+                      {getGarmentColors(currentGarment.id).map(color => (
+                        <button
+                          key={color}
+                          onClick={() => setSelectedColor(color)}
+                          className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                            selectedColor === color
+                              ? 'bg-violet-500 text-white shadow-md'
+                              : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                          }`}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Size Selection */}
+                  <div className="mb-5">
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">Size</label>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {currentGarment.size_range?.map(size => (
+                        <button
+                          key={size}
+                          onClick={() => setSelectedSize(size)}
+                          className={`py-2.5 rounded-xl font-bold text-sm transition-all ${
+                            selectedSize === size
+                              ? 'bg-violet-500 text-white shadow-md'
+                              : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Quantity */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">Quantity</label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        className="w-10 h-10 rounded-xl bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
+                      >
+                        −
+                      </button>
+                      <span className="w-12 text-center text-xl font-black text-charcoal-700">
+                        {quantity}
+                      </span>
+                      <button
+                        onClick={() => setQuantity(quantity + 1)}
+                        className="w-10 h-10 rounded-xl bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Items already added for this style */}
                   {currentGarmentCartItems.length > 0 && (
-                    <div className="mb-6 space-y-2">
-                      <p className="text-sm font-bold text-charcoal-600">
-                        Items added for {currentGarment.name} ({currentGarmentCartItems.length})
+                    <div className="mb-5 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <p className="text-sm font-bold text-emerald-700 mb-3 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Added to order
                       </p>
-                      {currentGarmentCartItems.map((item, index) => {
-                        const itemColorImage = item.garment.color_images?.[item.color] || item.garment.thumbnail_url
-                        const cartIndex = cart.findIndex(c => c === item)
-                        return (
-                          <div key={index} className="flex items-center justify-between p-3 bg-surface-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              {itemColorImage && (
-                                <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-surface-100">
-                                  <Image
-                                    src={itemColorImage}
-                                    alt={item.garment.name}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                              )}
-                              <div>
-                                <p className="font-bold text-sm text-charcoal-700">
-                                  {item.color} / {item.size} <span className="text-charcoal-400">×{item.quantity}</span>
-                                </p>
-                                <p className="text-xs text-charcoal-500">${(item.pricePerItem * item.quantity).toFixed(2)}</p>
+                      <div className="space-y-2">
+                        {currentGarmentCartItems.map((item, index) => {
+                          const cartIndex = cart.findIndex(c => c === item)
+                          return (
+                            <div key={index} className="flex items-center justify-between text-sm">
+                              <span className="text-emerald-800">
+                                {item.color}, {item.size} × {item.quantity}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-emerald-700">${(item.pricePerItem * item.quantity).toFixed(2)}</span>
+                                <button
+                                  onClick={() => setCart(cart.filter((_, i) => i !== cartIndex))}
+                                  className="p-1 text-emerald-600 hover:text-rose-500 rounded transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
                               </div>
                             </div>
-                            <button
-                              onClick={() => setCart(cart.filter((_, i) => i !== cartIndex))}
-                              className="p-1.5 text-charcoal-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                   
-                  {/* Add new item form */}
-                  <div className={`${currentGarmentCartItems.length > 0 ? 'p-4 bg-violet-50/50 rounded-xl border-2 border-violet-200' : ''}`}>
-                    {currentGarmentCartItems.length > 0 && (
-                      <p className="text-sm font-bold text-violet-700 mb-4">Add another {currentGarment.name}</p>
+                  {/* Subtotal for current selection */}
+                  {isCurrentSelectionComplete() && (
+                    <div className="bg-surface-50 rounded-xl p-4 mb-5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-charcoal-500 text-sm">
+                          {selectedColor}, {selectedSize} × {quantity}
+                        </span>
+                        <span className="text-lg font-black text-charcoal-700">
+                          ${(getGarmentPrice(currentGarment.id) * quantity).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Actions */}
+                  <div className="space-y-3">
+                    {/* Add another color button - only show if valid selection */}
+                    {isCurrentSelectionComplete() && (
+                      <button
+                        onClick={() => {
+                          addCurrentSelectionToCart()
+                          // Pre-select a different color if available
+                          const colors = getGarmentColors(currentGarment.id)
+                          const otherColor = colors.find(c => c !== selectedColor)
+                          if (otherColor) setSelectedColor(otherColor)
+                        }}
+                        className="w-full py-3 border-2 border-surface-300 text-charcoal-600 font-bold rounded-xl hover:bg-surface-50 hover:border-surface-400 transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Another Color/Size
+                      </button>
                     )}
                     
-                    {/* Color Selection */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Color</label>
-                      <div className="flex flex-wrap gap-2">
-                        {getGarmentColors(currentGarment.id).map(color => (
-                          <button
-                            key={color}
-                            onClick={() => setSelectedColor(color)}
-                            className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                              selectedColor === color
-                                ? 'bg-violet-500 text-white shadow-sm'
-                                : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
-                            }`}
-                          >
-                            {color}
-                          </button>
-                        ))}
-                      </div>
+                    {/* Main navigation */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleDetailsBack}
+                        className="px-5 py-3 border-2 border-surface-300 rounded-xl font-bold text-charcoal-700 hover:bg-surface-50 transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Add current selection if complete
+                          if (isCurrentSelectionComplete()) {
+                            addCurrentSelectionToCart()
+                          }
+                          // Move to next garment or checkout
+                          if (currentGarmentIndex < selectedGarmentIds.length - 1) {
+                            setCurrentGarmentIndex(currentGarmentIndex + 1)
+                            setSelectedSize('')
+                            setSelectedColor('')
+                            setQuantity(1)
+                          } else {
+                            setStep('info')
+                          }
+                        }}
+                        disabled={!isCurrentSelectionComplete() && !currentGarmentHasItems()}
+                        className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-600 hover:to-fuchsia-600 transition-all"
+                      >
+                        {currentGarmentIndex < selectedGarmentIds.length - 1 ? 'Next Style →' : 'Continue to Checkout →'}
+                      </button>
                     </div>
-                    
-                    {/* Size Selection */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Size</label>
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                        {currentGarment.size_range?.map(size => (
-                          <button
-                            key={size}
-                            onClick={() => setSelectedSize(size)}
-                            className={`py-3 rounded-xl font-bold text-sm transition-all ${
-                              selectedSize === size
-                                ? 'bg-violet-500 text-white shadow-sm'
-                                : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
-                            }`}
-                          >
-                            {size}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Quantity */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-bold text-charcoal-600 mb-3">Quantity</label>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                          className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
-                        >
-                          -
-                        </button>
-                        <span className="w-12 text-center text-xl font-black text-charcoal-700">
-                          {quantity}
-                        </span>
-                        <button
-                          onClick={() => setQuantity(quantity + 1)}
-                          className="w-10 h-10 rounded-lg bg-surface-100 text-charcoal-600 font-bold hover:bg-surface-200 transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Add to order button */}
-                    <button
-                      onClick={addCurrentSelectionToCart}
-                      disabled={!isCurrentSelectionComplete()}
-                      className="w-full py-3 border-2 border-violet-500 text-violet-600 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-50 transition-all flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      {currentGarmentCartItems.length > 0 ? 'Add Another' : 'Add to Order'}
-                    </button>
-                  </div>
-                  
-                  {/* Cart total */}
-                  {cart.length > 0 && (
-                    <div className="bg-surface-50 rounded-xl p-4 mt-6 mb-6">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-charcoal-500">Order total ({cart.reduce((sum, i) => sum + i.quantity, 0)} items)</span>
-                        <span className="text-xl font-black text-charcoal-700">
-                          ${cart.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Navigation */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleDetailsBack}
-                      className="px-6 py-3 border-2 border-surface-300 rounded-xl font-bold text-charcoal-700 hover:bg-surface-50 transition-all"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handleNextGarment}
-                      disabled={!currentGarmentHasItems()}
-                      className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-600 hover:to-fuchsia-600 transition-all"
-                    >
-                      {currentGarmentIndex < selectedGarmentIds.length - 1 ? 'Next Style' : 'Continue to Checkout'}
-                    </button>
                   </div>
                 </>
               ) : (

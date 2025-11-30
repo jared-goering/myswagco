@@ -1,12 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Campaign, CampaignOrder, CampaignStats } from '@/types'
+
+// Grouped order type for displaying orders from the same checkout session
+interface GroupedOrder {
+  id: string
+  participant_name: string
+  participant_email: string
+  items: CampaignOrder[]
+  total_quantity: number
+  total_amount_paid: number
+  status: 'paid' | 'pending' | 'confirmed' | 'cancelled' | 'mixed'
+  created_at: string
+}
 
 export default function CampaignDashboardPage() {
   const params = useParams()
@@ -20,6 +32,71 @@ export default function CampaignDashboardPage() {
   const [campaignLoading, setCampaignLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+
+  // Group orders by participant email + close timestamps (within 5 seconds)
+  const groupedOrders = useMemo<GroupedOrder[]>(() => {
+    if (orders.length === 0) return []
+
+    const groups: Record<string, CampaignOrder[]> = {}
+
+    // Sort orders by created_at first to ensure proper grouping
+    const sortedOrders = [...orders].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+
+    sortedOrders.forEach(order => {
+      // Create a key based on email + timestamp bucket (5 second window)
+      const timestamp = new Date(order.created_at).getTime()
+      const bucket = Math.floor(timestamp / 5000) // 5 second buckets
+      const key = `${order.participant_email}-${bucket}`
+
+      if (!groups[key]) {
+        groups[key] = []
+      }
+      groups[key].push(order)
+    })
+
+    // Convert groups to GroupedOrder array
+    return Object.entries(groups).map(([key, items]) => {
+      const firstItem = items[0]
+      const total_quantity = items.reduce((sum, item) => sum + item.quantity, 0)
+      const total_amount_paid = items.reduce((sum, item) => sum + (item.amount_paid || 0), 0)
+      
+      // Determine overall status
+      const statuses = new Set(items.map(item => item.status))
+      let status: GroupedOrder['status'] = 'mixed'
+      if (statuses.size === 1) {
+        status = items[0].status
+      } else if (statuses.has('cancelled') && statuses.size === 1) {
+        status = 'cancelled'
+      }
+
+      return {
+        id: key,
+        participant_name: firstItem.participant_name,
+        participant_email: firstItem.participant_email,
+        items,
+        total_quantity,
+        total_amount_paid,
+        status,
+        created_at: firstItem.created_at,
+      }
+    }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }, [orders])
+
+  // Toggle expanded state for an order
+  const toggleOrderExpanded = (orderId: string) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev)
+      if (next.has(orderId)) {
+        next.delete(orderId)
+      } else {
+        next.add(orderId)
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -133,7 +210,7 @@ export default function CampaignDashboardPage() {
     year: 'numeric',
   })
 
-  // Format size breakdown for display
+  // Format size breakdown for display (from stats API - only paid orders for everyone_pays)
   const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
   const sortedSizes = stats?.size_breakdown 
     ? Object.entries(stats.size_breakdown).sort((a, b) => {
@@ -297,10 +374,17 @@ export default function CampaignDashboardPage() {
               transition={{ delay: 0.1 }}
               className="bg-white rounded-2xl shadow-soft border border-surface-200/50 p-6"
             >
-              <h2 className="text-lg font-black text-charcoal-700 mb-4">Size Breakdown</h2>
+              <div className="mb-4">
+                <h2 className="text-lg font-black text-charcoal-700">Size Breakdown</h2>
+                {campaign.payment_style === 'everyone_pays' && (
+                  <p className="text-sm text-charcoal-400 mt-0.5">Paid orders only</p>
+                )}
+              </div>
               
               {sortedSizes.length === 0 ? (
-                <p className="text-charcoal-400 text-center py-8">No orders yet</p>
+                <p className="text-charcoal-400 text-center py-8">
+                  {campaign.payment_style === 'everyone_pays' ? 'No paid orders yet' : 'No orders yet'}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {sortedSizes.map(([size, count]) => {
@@ -331,61 +415,171 @@ export default function CampaignDashboardPage() {
               transition={{ delay: 0.2 }}
               className="bg-white rounded-2xl shadow-soft border border-surface-200/50 p-6"
             >
-              <h2 className="text-lg font-black text-charcoal-700 mb-4">
-                Orders {orders.length > 0 && <span className="text-charcoal-400 font-medium">({orders.length})</span>}
-              </h2>
+              <div className="mb-5">
+                <h2 className="text-lg font-black text-charcoal-700">
+                  {campaign.payment_style === 'everyone_pays' ? 'Activity' : 'Orders'} {groupedOrders.length > 0 && <span className="text-charcoal-400 font-medium">({groupedOrders.length})</span>}
+                </h2>
+                {campaign.payment_style === 'everyone_pays' && groupedOrders.length > 0 && (
+                  <p className="text-sm text-charcoal-400 mt-1">
+                    {(() => {
+                      const paidCount = groupedOrders.filter(g => g.status === 'paid').length
+                      const pendingCount = groupedOrders.filter(g => g.status === 'pending').length
+                      const parts = []
+                      if (paidCount > 0) parts.push(`${paidCount} paid`)
+                      if (pendingCount > 0) parts.push(`${pendingCount} awaiting payment`)
+                      return parts.join(', ')
+                    })()}
+                  </p>
+                )}
+                {campaign.payment_style !== 'everyone_pays' && orders.length > 0 && orders.length !== groupedOrders.length && (
+                  <p className="text-sm text-charcoal-400 mt-1">
+                    {orders.length} items from {groupedOrders.length} participant{groupedOrders.length !== 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
               
-              {orders.length === 0 ? (
-                <p className="text-charcoal-400 text-center py-8">No orders yet</p>
+              {groupedOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-100 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-charcoal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                  </div>
+                  <p className="text-charcoal-500 font-medium">No orders yet</p>
+                  <p className="text-charcoal-400 text-sm mt-1">Share your campaign link to start collecting orders</p>
+                </div>
               ) : (
-                <div className="divide-y divide-surface-200">
-                  {orders.map((order) => (
-                    <div key={order.id} className="py-4 first:pt-0 last:pb-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <div className="font-bold text-charcoal-700">{order.participant_name}</div>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                              order.status === 'paid' 
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : order.status === 'confirmed'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : order.status === 'cancelled'
-                                    ? 'bg-rose-100 text-rose-700'
-                                    : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {order.status === 'paid' ? 'Paid' : 
-                               order.status === 'confirmed' ? 'Confirmed' :
-                               order.status === 'cancelled' ? 'Cancelled' : 'Pending'}
-                            </span>
+                <div className="space-y-3">
+                  {groupedOrders.map((group, index) => {
+                    const isExpanded = expandedOrders.has(group.id)
+                    const hasMultipleItems = group.items.length > 1
+                    const showAllItems = isExpanded || group.items.length <= 3
+                    const displayItems = showAllItems ? group.items : group.items.slice(0, 2)
+                    const hiddenCount = group.items.length - displayItems.length
+                    
+                    // Format date
+                    const orderDate = new Date(group.created_at)
+                    const isToday = new Date().toDateString() === orderDate.toDateString()
+                    const formattedDate = isToday 
+                      ? `Today at ${orderDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                      : orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+                    return (
+                      <motion.div
+                        key={group.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.03 }}
+                        className="group relative bg-surface-50 hover:bg-surface-100/80 rounded-xl p-4 transition-all duration-200 border border-transparent hover:border-surface-200"
+                      >
+                        {/* Header Row */}
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm">
+                            {group.participant_name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="text-sm text-charcoal-500 mt-1">
-                            {order.participant_email}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="flex items-center gap-2">
-                            <span className="px-3 py-1 bg-surface-100 rounded-lg font-bold text-charcoal-700">
-                              {order.size}
-                            </span>
-                            {order.color && (
-                              <span className="px-3 py-1 bg-surface-100 rounded-lg font-medium text-charcoal-600 text-sm">
-                                {order.color}
+                          
+                          {/* Main Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-charcoal-700 truncate">
+                                {group.participant_name}
                               </span>
-                            )}
-                            {order.quantity > 1 && (
-                              <span className="text-charcoal-500 text-sm">×{order.quantity}</span>
+                              <span className="relative group/status">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 inline-flex items-center gap-1 cursor-help ${
+                                  group.status === 'paid' 
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : group.status === 'confirmed'
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : group.status === 'cancelled'
+                                        ? 'bg-rose-100 text-rose-700'
+                                        : group.status === 'mixed'
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {group.status === 'paid' ? 'Paid' : 
+                                   group.status === 'confirmed' ? 'Confirmed' :
+                                   group.status === 'cancelled' ? 'Cancelled' :
+                                   group.status === 'mixed' ? 'Mixed' : 'Awaiting Payment'}
+                                  {group.status === 'pending' && (
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  )}
+                                </span>
+                                {group.status === 'pending' && (
+                                  <div className="absolute left-0 top-full mt-1 z-10 invisible group-hover/status:visible opacity-0 group-hover/status:opacity-100 transition-all duration-150">
+                                    <div className="bg-charcoal-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg">
+                                      Order placed but not yet paid
+                                      <div className="absolute -top-1 left-3 w-2 h-2 bg-charcoal-800 rotate-45"></div>
+                                    </div>
+                                  </div>
+                                )}
+                              </span>
+                            </div>
+                            <div className="text-sm text-charcoal-400 truncate">
+                              {group.participant_email}
+                            </div>
+                            
+                            {/* Items */}
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {displayItems.map((item, itemIndex) => (
+                                <span 
+                                  key={item.id} 
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-lg text-xs font-medium text-charcoal-600 border border-surface-200 shadow-sm"
+                                >
+                                  <span className="font-bold text-charcoal-700">{item.size}</span>
+                                  <span className="text-charcoal-300">·</span>
+                                  <span>{item.color}</span>
+                                  {item.quantity > 1 && (
+                                    <>
+                                      <span className="text-charcoal-300">·</span>
+                                      <span className="text-violet-600 font-bold">×{item.quantity}</span>
+                                    </>
+                                  )}
+                                </span>
+                              ))}
+                              {hiddenCount > 0 && !isExpanded && (
+                                <button
+                                  onClick={() => toggleOrderExpanded(group.id)}
+                                  className="inline-flex items-center px-2.5 py-1 bg-violet-50 hover:bg-violet-100 rounded-lg text-xs font-bold text-violet-600 transition-colors"
+                                >
+                                  +{hiddenCount} more
+                                </button>
+                              )}
+                            </div>
+                            
+                            {/* Expanded toggle for many items */}
+                            {hasMultipleItems && group.items.length > 3 && isExpanded && (
+                              <button
+                                onClick={() => toggleOrderExpanded(group.id)}
+                                className="mt-2 text-xs font-medium text-charcoal-400 hover:text-charcoal-600 transition-colors"
+                              >
+                                Show less
+                              </button>
                             )}
                           </div>
-                          {campaign.payment_style === 'everyone_pays' && order.amount_paid > 0 && (
-                            <div className="text-sm text-emerald-600 font-medium mt-1">
-                              ${order.amount_paid.toFixed(2)} paid
+                          
+                          {/* Right Side - Stats */}
+                          <div className="text-right flex-shrink-0">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className="text-xs font-medium text-charcoal-400">
+                                {group.total_quantity} item{group.total_quantity !== 1 ? 's' : ''}
+                              </span>
                             </div>
-                          )}
+                            {campaign.payment_style === 'everyone_pays' && group.total_amount_paid > 0 && (
+                              <div className="text-sm text-emerald-600 font-bold mt-1">
+                                ${group.total_amount_paid.toFixed(2)}
+                              </div>
+                            )}
+                            <div className="text-xs text-charcoal-400 mt-1">
+                              {formattedDate}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      </motion.div>
+                    )
+                  })}
                 </div>
               )}
             </motion.div>
@@ -405,11 +599,15 @@ export default function CampaignDashboardPage() {
               <div className="space-y-4">
                 <div>
                   <div className="text-4xl font-black">{stats?.order_count || 0}</div>
-                  <div className="text-white/80 font-medium">Orders placed</div>
+                  <div className="text-white/80 font-medium">
+                    {campaign.payment_style === 'everyone_pays' ? 'Paid orders' : 'Orders placed'}
+                  </div>
                 </div>
                 <div>
                   <div className="text-4xl font-black">{stats?.total_quantity || 0}</div>
-                  <div className="text-white/80 font-medium">Total shirts</div>
+                  <div className="text-white/80 font-medium">
+                    {campaign.payment_style === 'everyone_pays' ? 'Shirts ordered' : 'Total shirts'}
+                  </div>
                 </div>
                 {campaign.payment_style === 'everyone_pays' && stats?.total_revenue !== undefined && (
                   <div>

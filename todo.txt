@@ -9,6 +9,7 @@ email editor panelc
 ability to charge card for missing amount
 live invetory for S&S
 SEO max
+not updating vectorized artwork
 
 
 Future things:
@@ -18,4 +19,5 @@ Future things:
 update checkout page look
 
 Bugs:
-not updating vectorized artwork
+design editor needs help
+can't move past page until colors are selected
