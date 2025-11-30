@@ -15,6 +15,7 @@ interface CampaignGarmentPrice {
   pricePerShirt: number
   garmentCostPerShirt: number
   printCostPerShirt: number
+  garmentName: string
 }
 
 export default function CampaignDetailsPage() {
@@ -523,17 +524,14 @@ export default function CampaignDetailsPage() {
                       <span className="text-charcoal-600 font-medium">Price per shirt by style</span>
                     </div>
                     <div className="space-y-2 mb-4">
-                      {Object.entries(campaignPrices).map(([garmentId, pricing]) => {
-                        const garmentName = store.garments?.find(g => g.id === garmentId)?.name || 'Garment'
-                        return (
-                          <div key={garmentId} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg">
-                            <span className="text-sm font-medium text-charcoal-600">{garmentName}</span>
-                            <span className="text-lg font-black text-charcoal-700">
-                              ${pricing.pricePerShirt.toFixed(2)}
-                            </span>
-                          </div>
-                        )
-                      })}
+                      {Object.entries(campaignPrices).map(([garmentId, pricing]) => (
+                        <div key={garmentId} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg">
+                          <span className="text-sm font-medium text-charcoal-600">{pricing.garmentName}</span>
+                          <span className="text-lg font-black text-charcoal-700">
+                            ${pricing.pricePerShirt.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                     <p className="text-xs text-charcoal-400 mb-4">
                       Prices include garment cost + print cost (no setup fee)

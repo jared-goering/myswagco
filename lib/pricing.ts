@@ -299,17 +299,32 @@ export async function calculateCampaignPricePerShirt(
 
 /**
  * Calculate campaign prices for multiple garments
- * Returns a map of garment ID to price per shirt
+ * Returns a map of garment ID to price per shirt with garment name
  */
 export async function calculateCampaignPricesForGarments(
   garmentIds: string[],
   printConfig: PrintConfig
-): Promise<Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }>> {
-  const prices: Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }> = {}
+): Promise<Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number; garmentName: string }>> {
+  const prices: Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number; garmentName: string }> = {}
+  
+  // Fetch garment names in batch
+  const { data: garments } = await supabaseAdmin
+    .from('garments')
+    .select('id, name')
+    .in('id', garmentIds)
+  
+  const garmentNameMap: Record<string, string> = {}
+  garments?.forEach(g => {
+    garmentNameMap[g.id] = g.name
+  })
   
   for (const garmentId of garmentIds) {
     try {
-      prices[garmentId] = await calculateCampaignPricePerShirt(garmentId, printConfig)
+      const pricing = await calculateCampaignPricePerShirt(garmentId, printConfig)
+      prices[garmentId] = {
+        ...pricing,
+        garmentName: garmentNameMap[garmentId] || 'Garment'
+      }
     } catch (error) {
       console.error(`Error calculating price for garment ${garmentId}:`, error)
       // Skip garments that fail

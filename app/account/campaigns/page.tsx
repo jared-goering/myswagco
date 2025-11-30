@@ -35,7 +35,7 @@ export default function CampaignsListPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       openAuthModal({
-        feature: 'campaigns',
+        feature: 'campaign',
         title: 'Sign in to view your campaigns',
         message: 'Manage your group campaigns and track orders.',
       })

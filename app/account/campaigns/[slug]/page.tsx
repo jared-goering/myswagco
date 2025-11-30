@@ -113,7 +113,7 @@ export default function CampaignDashboardPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       openAuthModal({
-        feature: 'campaigns',
+        feature: 'campaign',
         title: 'Sign in to view your campaign',
       })
       router.push('/')

@@ -488,6 +488,7 @@ export interface CampaignCreateInput {
 
 export interface CampaignStats {
   order_count: number
+  total_quantity: number
   size_breakdown: { [size: string]: number }
   color_breakdown: { [color: string]: number }
   total_revenue?: number // For everyone_pays campaigns

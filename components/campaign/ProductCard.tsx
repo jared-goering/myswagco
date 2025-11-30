@@ -78,6 +78,7 @@ export default function ProductCard({
       setSelectedSize('')
       setQuantity(1)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExpanded])
 
   const handleAddToCart = () => {
