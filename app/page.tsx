@@ -252,7 +252,7 @@ export default function Home() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -524,17 +524,17 @@ export default function Home() {
             {/* Group Campaign Card */}
             <motion.div
               variants={scaleIn}
-              className="relative bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 rounded-2xl border-2 border-violet-200 p-8 hover:border-violet-400 hover:shadow-xl transition-all duration-300 group overflow-hidden"
+              className="relative bg-gradient-to-br from-teal-50 via-cyan-50 to-teal-50 rounded-2xl border-2 border-teal-200 p-8 hover:border-teal-400 hover:shadow-xl transition-all duration-300 group overflow-hidden"
             >
               {/* New badge */}
               <div className="absolute top-4 right-4">
-                <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-black rounded-full shadow-lg">
+                <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-teal-500 to-cyan-500 text-white text-xs font-black rounded-full shadow-lg">
                   NEW
                 </span>
               </div>
               
               <div className="mb-6">
-                <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-violet-200 group-hover:scale-110 transition-transform">
+                <div className="w-14 h-14 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-teal-200 group-hover:scale-110 transition-transform">
                   <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
@@ -547,24 +547,24 @@ export default function Home() {
               
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-3 text-charcoal-600">
-                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <span className="font-medium">Shareable link</span>
                 </li>
                 <li className="flex items-center gap-3 text-charcoal-600">
-                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <span className="font-medium">Self-serve sizing</span>
                 </li>
                 <li className="flex items-center gap-3 text-charcoal-600">
-                  <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-3 h-3 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </div>
@@ -574,7 +574,7 @@ export default function Home() {
               
               <Link
                 href="/custom-shirts/configure?mode=campaign"
-                className="block w-full text-center bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-bold py-4 rounded-xl transition-all group-hover:shadow-lg"
+                className="block w-full text-center bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-bold py-4 rounded-xl transition-all group-hover:shadow-lg"
               >
                 Start Group Campaign
               </Link>
@@ -653,8 +653,8 @@ export default function Home() {
       <section id="ai-generator" className="py-20 md:py-28 bg-gradient-to-br from-charcoal-800 via-charcoal-900 to-black relative overflow-hidden">
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-violet-500/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-fuchsia-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-500/20 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-500/10 rounded-full blur-3xl" />
         </div>
         
@@ -679,7 +679,7 @@ export default function Home() {
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 backdrop-blur-sm border border-violet-400/30 rounded-full text-sm font-bold text-violet-300 mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 backdrop-blur-sm border border-teal-400/30 rounded-full text-sm font-bold text-teal-300 mb-6">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
                 </svg>
@@ -688,7 +688,7 @@ export default function Home() {
 
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight leading-[1.1]">
                 No Artwork?<br />
-                <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-teal-400 via-cyan-400 to-teal-300 bg-clip-text text-transparent">
                   No Problem.
                 </span>
               </h2>
@@ -713,7 +713,7 @@ export default function Home() {
                     transition={{ delay: i * 0.1 }}
                     className="flex items-center gap-3 text-white/80"
                   >
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
                       <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
@@ -725,7 +725,7 @@ export default function Home() {
 
               <Link
                 href="/custom-shirts/configure"
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 <span>Try AI Design Generator</span>
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -754,11 +754,11 @@ export default function Home() {
                     <input
                       type="text"
                       placeholder="Describe your design idea..."
-                      className="w-full bg-charcoal-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-violet-500/50"
+                      className="w-full bg-charcoal-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-500/50"
                       value={aiExamples[activeExample].prompt}
                       readOnly
                     />
-                    <button className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-lg">
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-lg">
                       <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                       </svg>
@@ -776,26 +776,26 @@ export default function Home() {
                       transition={{ duration: 0.5 }}
                       className="text-center"
                     >
-                      <div className="w-32 h-32 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/30 border-2 border-dashed border-violet-400/50 flex items-center justify-center">
-                        <svg className="w-12 h-12 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-32 h-32 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500/30 to-cyan-500/30 border-2 border-dashed border-teal-400/50 flex items-center justify-center">
+                        <svg className="w-12 h-12 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                       </div>
                       <div className="text-white/60 text-sm font-medium">AI-Generated Design Preview</div>
-                      <div className="text-violet-400 text-xs font-bold mt-1">{aiExamples[activeExample].style} Style</div>
+                      <div className="text-teal-400 text-xs font-bold mt-1">{aiExamples[activeExample].style} Style</div>
                     </motion.div>
                   </div>
                   
                   {/* Sparkle effects */}
                   <motion.div 
-                    className="absolute top-4 right-4 text-violet-400"
+                    className="absolute top-4 right-4 text-teal-400"
                     animate={{ rotate: 360 }}
                     transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
                   >
                     ✦
                   </motion.div>
                   <motion.div 
-                    className="absolute bottom-8 left-8 text-fuchsia-400 text-lg"
+                    className="absolute bottom-8 left-8 text-cyan-400 text-lg"
                     animate={{ scale: [1, 1.2, 1] }}
                     transition={{ duration: 2, repeat: Infinity }}
                   >
@@ -811,7 +811,7 @@ export default function Home() {
                       onClick={() => setActiveExample(i)}
                       className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                         activeExample === i 
-                          ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white' 
+                          ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white' 
                           : 'bg-white/10 text-white/60 hover:bg-white/20'
                       }`}
                     >
@@ -855,7 +855,7 @@ export default function Home() {
             {/* AI Generator - Hero Card */}
             <motion.div 
               variants={scaleIn}
-              className="col-span-12 lg:col-span-7 row-span-2 rounded-[2rem] bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500 text-white relative overflow-hidden group p-8 shadow-2xl"
+              className="col-span-12 lg:col-span-7 row-span-2 rounded-[2rem] bg-gradient-to-br from-teal-600 via-cyan-500 to-teal-400 text-white relative overflow-hidden group p-8 shadow-2xl"
             >
               {/* Animated background orbs */}
               <div className="absolute inset-0 overflow-hidden">
@@ -1004,7 +1004,7 @@ export default function Home() {
             {/* Auto-Vectorization - Wide Card */}
             <motion.div 
               variants={scaleIn}
-              className="col-span-12 sm:col-span-6 lg:col-span-4 row-span-1 rounded-[2rem] bg-gradient-to-br from-violet-50 via-purple-100 to-fuchsia-100 border-2 border-purple-200/50 p-6 relative overflow-hidden group hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+              className="col-span-12 sm:col-span-6 lg:col-span-4 row-span-1 rounded-[2rem] bg-gradient-to-br from-teal-50 via-cyan-100 to-teal-100 border-2 border-teal-200/50 p-6 relative overflow-hidden group hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
             >
               {/* PNG to SVG visualization */}
               <div className="absolute right-4 bottom-4 opacity-30 group-hover:opacity-50 transition-opacity flex items-center gap-2">
@@ -1023,7 +1023,7 @@ export default function Home() {
               </div>
               
               <div className="relative z-10">
-                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-fuchsia-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-200 mb-5">
+                <div className="w-14 h-14 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-teal-200 mb-5">
                   <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                   </svg>
@@ -1202,11 +1202,11 @@ export default function Home() {
       </section>
 
       {/* Group Campaigns Feature Section */}
-      <section id="group-campaigns" className="py-20 md:py-28 bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 relative overflow-hidden">
+      <section id="group-campaigns" className="py-20 md:py-28 bg-gradient-to-br from-teal-600 via-teal-500 to-cyan-600 relative overflow-hidden">
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 left-10 w-96 h-96 bg-fuchsia-400/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl" />
         </div>
         
         {/* Grid overlay */}
@@ -1277,7 +1277,7 @@ export default function Home() {
 
               <Link
                 href="/custom-shirts/configure?mode=campaign"
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-white hover:bg-white/90 text-violet-600 rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-white hover:bg-white/90 text-teal-600 rounded-bento-lg font-black text-lg shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 <span>Start a Group Campaign</span>
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1298,7 +1298,7 @@ export default function Home() {
                 {/* Mock Campaign Page Preview */}
                 <div className="bg-white rounded-2xl p-6 mb-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center text-white text-xl">
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center text-white text-xl">
                       👕
                     </div>
                     <div>
@@ -1307,17 +1307,17 @@ export default function Home() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between mb-4 p-3 bg-violet-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-4 p-3 bg-teal-50 rounded-xl">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">⏱</span>
-                      <span className="font-bold text-violet-700">12 days left</span>
+                      <span className="font-bold text-teal-700">12 days left</span>
                     </div>
                     <div className="text-sm font-bold text-charcoal-500">
                       23 orders placed
                     </div>
                   </div>
                   
-                  <button className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold py-3 rounded-xl">
+                  <button className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-bold py-3 rounded-xl">
                     Order My Shirt
                   </button>
                 </div>
@@ -1585,7 +1585,7 @@ export default function Home() {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Decorative gradient header */}
-              <div className="h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-fuchsia-500" />
+              <div className="h-2 bg-gradient-to-r from-primary-500 via-teal-500 to-cyan-500" />
               
               {/* Close button */}
               <button
@@ -1634,8 +1634,8 @@ export default function Home() {
                               />
                             </div>
                           ) : (
-                            <div className="w-20 h-20 flex-shrink-0 bg-gradient-to-br from-violet-100 to-purple-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-20 h-20 flex-shrink-0 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-lg flex items-center justify-center">
+                              <svg className="w-10 h-10 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                               </svg>
                             </div>

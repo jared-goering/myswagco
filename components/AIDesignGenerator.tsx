@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PrintLocation } from '@/types'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
+import { trackAIDesignStarted, trackAIDesignCompleted, event } from '@/lib/analytics'
 
 interface AIDesignGeneratorProps {
   isOpen: boolean
@@ -409,6 +410,10 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
     setIsGenerating(true)
     setError(null)
     setLoadingStep(0)
+    
+    // Track AI design generation started
+    const startTime = Date.now()
+    trackAIDesignStarted(prompt.trim())
 
     try {
       const response = await fetch('/api/artwork/generate', {
@@ -431,6 +436,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
       }
 
       if (data.success && data.image) {
+        // Track successful generation
+        trackAIDesignCompleted(true, Date.now() - startTime)
         // Add to session history (keep max 8 items)
         setDesignHistory((prev) => [data.image, ...prev].slice(0, 8))
         setGeneratedImage(data.image)
@@ -444,6 +451,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
         throw new Error('No image was generated')
       }
     } catch (err) {
+      // Track failed generation
+      trackAIDesignCompleted(false, Date.now() - startTime)
       setError(err instanceof Error ? err.message : 'Failed to generate design')
     } finally {
       setIsGenerating(false)
@@ -496,6 +505,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
 
   const handleUseDesign = () => {
     if (generatedImage) {
+      // Track design usage
+      event('ai_design_used', { has_multiple_locations: availableLocations.length > 1 })
       // If multiple locations available, show picker
       if (availableLocations.length > 1) {
         setShowLocationPicker(true)
@@ -729,9 +740,9 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 md:p-6 border-b border-surface-200 bg-gradient-to-r from-violet-50 to-fuchsia-50">
+          <div className="flex items-center justify-between p-4 md:p-6 border-b border-surface-200 bg-gradient-to-r from-teal-50 to-cyan-50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-bento bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-soft">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-bento bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center shadow-soft">
                 <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
@@ -762,8 +773,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
           {!isAuthenticated ? (
             <div className="flex flex-col items-center justify-center p-8 md:p-12 text-center min-h-[400px]">
               {/* Lock Icon */}
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-fuchsia-100 flex items-center justify-center mb-6">
-                <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
@@ -781,23 +792,23 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
               
               {/* Benefits */}
               <div className="flex flex-wrap justify-center gap-4 mb-8">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
-                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 rounded-full">
+                  <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  <span className="text-sm font-semibold text-violet-700">Unlimited generations</span>
+                  <span className="text-sm font-semibold text-teal-700">Unlimited generations</span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
-                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 rounded-full">
+                  <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  <span className="text-sm font-semibold text-violet-700">Save to your account</span>
+                  <span className="text-sm font-semibold text-teal-700">Save to your account</span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-full">
-                  <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 rounded-full">
+                  <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  <span className="text-sm font-semibold text-violet-700">Screen print optimized</span>
+                  <span className="text-sm font-semibold text-teal-700">Screen print optimized</span>
                 </div>
               </div>
               
@@ -808,7 +819,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                     title: 'Sign in to use AI Design Generator',
                     message: 'Create and save unlimited AI-generated designs for your custom shirts.'
                   })}
-                  className="px-8 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento font-bold shadow-soft hover:shadow-bento transition-all"
+                  className="px-8 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento font-bold shadow-soft hover:shadow-bento transition-all"
                 >
                   Sign In or Create Account
                 </button>
@@ -861,7 +872,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                     className={`w-full px-4 py-3 border-2 rounded-bento focus:ring-4 transition-all outline-none resize-none text-sm font-medium text-charcoal-700 placeholder:text-charcoal-400 ${
                       isEditMode 
                         ? 'border-blue-300 focus:border-blue-500 focus:ring-blue-100' 
-                        : 'border-surface-300 focus:border-violet-500 focus:ring-violet-100'
+                        : 'border-surface-300 focus:border-teal-500 focus:ring-teal-100'
                     }`}
                     disabled={isGenerating}
                     aria-describedby="prompt-help"
@@ -907,7 +918,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                             onMouseEnter={() => setExpandedPromptIndex(idx)}
                             onMouseLeave={() => setExpandedPromptIndex(null)}
                             disabled={isGenerating}
-                            className="relative px-3 py-1.5 text-xs font-semibold bg-surface-100 hover:bg-violet-100 text-charcoal-600 hover:text-violet-700 rounded-full transition-all border border-surface-200 hover:border-violet-300 disabled:opacity-50 hover:scale-105"
+                            className="relative px-3 py-1.5 text-xs font-semibold bg-surface-100 hover:bg-teal-100 text-charcoal-600 hover:text-teal-700 rounded-full transition-all border border-surface-200 hover:border-teal-300 disabled:opacity-50 hover:scale-105"
                           >
                             {example.length > 30 ? `${example.slice(0, 30)}...` : example}
                             {/* Expanded tooltip on hover */}
@@ -953,8 +964,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                       className={`
                         relative border-2 border-dashed rounded-bento p-4 md:p-6 text-center cursor-pointer transition-all
                         ${isDragging 
-                          ? 'border-violet-500 bg-violet-50 scale-[1.02]' 
-                          : 'border-surface-300 hover:border-violet-400 hover:bg-violet-50/50'
+                          ? 'border-teal-500 bg-teal-50 scale-[1.02]' 
+                          : 'border-surface-300 hover:border-teal-400 hover:bg-teal-50/50'
                         }
                         ${isGenerating ? 'opacity-50 pointer-events-none' : ''}
                       `}
@@ -997,7 +1008,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                             <img
                               src={img}
                               alt={`Reference ${idx + 1}`}
-                              className="w-16 h-16 md:w-20 md:h-20 object-cover rounded-bento border-2 border-surface-200 hover:border-violet-400 transition-all hover:scale-105"
+                              className="w-16 h-16 md:w-20 md:h-20 object-cover rounded-bento border-2 border-surface-200 hover:border-teal-400 transition-all hover:scale-105"
                             />
                             <button
                               onClick={(e) => {
@@ -1027,7 +1038,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                       className="w-full flex items-center justify-between text-left"
                     >
                       <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                         <span className="text-sm font-bold text-charcoal-700">
@@ -1058,7 +1069,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                               <div key={design.id} className="relative group">
                                 <button
                                   onClick={() => applySavedDesign(design)}
-                                  className="w-full aspect-square rounded-lg border-2 border-surface-200 hover:border-violet-400 overflow-hidden transition-all hover:scale-105 bg-white"
+                                  className="w-full aspect-square rounded-lg border-2 border-surface-200 hover:border-teal-400 overflow-hidden transition-all hover:scale-105 bg-white"
                                   style={{
                                     background: 'repeating-conic-gradient(#f0f0f0 0% 25%, transparent 0% 50%) 50% / 10px 10px'
                                   }}
@@ -1170,7 +1181,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                         {/* Animated loading indicator */}
                         <div className="relative w-20 h-20 mx-auto mb-4">
                           {/* Outer ring */}
-                          <div className="absolute inset-0 rounded-full border-4 border-violet-100"></div>
+                          <div className="absolute inset-0 rounded-full border-4 border-teal-100"></div>
                           {/* Progress ring */}
                           <svg className="absolute inset-0 w-20 h-20 -rotate-90">
                             <circle
@@ -1193,7 +1204,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                             </defs>
                           </svg>
                           {/* Center icon */}
-                          <div className="absolute inset-0 flex items-center justify-center text-violet-500">
+                          <div className="absolute inset-0 flex items-center justify-center text-teal-500">
                             <motion.div
                               key={currentLoadingStep.icon}
                               initial={{ scale: 0.5, opacity: 0 }}
@@ -1222,7 +1233,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                             <div
                               key={idx}
                               className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                                idx <= loadingStep ? 'bg-violet-500' : 'bg-violet-200'
+                                idx <= loadingStep ? 'bg-teal-500' : 'bg-teal-200'
                               }`}
                             />
                           ))}
@@ -1347,14 +1358,14 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                               repeat: Infinity,
                               ease: "easeInOut"
                             }}
-                            className="absolute inset-0 bg-gradient-to-br from-violet-100 to-fuchsia-100 rounded-2xl"
+                            className="absolute inset-0 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-2xl"
                           />
                           <motion.div
                             animate={{ y: [0, -3, 0] }}
                             transition={{ duration: 2, repeat: Infinity }}
                             className="absolute inset-0 flex items-center justify-center"
                           >
-                            <svg className="w-12 h-12 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-12 h-12 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                             </svg>
                           </motion.div>
@@ -1362,12 +1373,12 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                           <motion.div
                             animate={{ scale: [0, 1, 0], opacity: [0, 1, 0] }}
                             transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                            className="absolute -top-1 -right-1 w-3 h-3 bg-fuchsia-400 rounded-full"
+                            className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full"
                           />
                           <motion.div
                             animate={{ scale: [0, 1, 0], opacity: [0, 1, 0] }}
                             transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                            className="absolute bottom-2 -left-2 w-2 h-2 bg-violet-400 rounded-full"
+                            className="absolute bottom-2 -left-2 w-2 h-2 bg-teal-400 rounded-full"
                           />
                         </div>
                         <p className="text-charcoal-600 font-semibold">Your AI design will appear here</p>
@@ -1405,8 +1416,8 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                           onClick={() => selectFromHistory(img)}
                           className={`flex-shrink-0 w-14 h-14 rounded-lg border-2 overflow-hidden transition-all hover:scale-105 ${
                             generatedImage === img 
-                              ? 'border-violet-500 ring-2 ring-violet-200' 
-                              : 'border-surface-200 hover:border-violet-300'
+                              ? 'border-teal-500 ring-2 ring-teal-200' 
+                              : 'border-surface-200 hover:border-teal-300'
                           }`}
                           style={{
                             background: 'repeating-conic-gradient(#e5e7eb 0% 25%, transparent 0% 50%) 50% / 10px 10px'
@@ -1463,7 +1474,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                       <button
                         onClick={handleRegenerate}
                         disabled={isGenerating || isRemovingBackground}
-                        className="flex-1 px-3 py-2.5 md:px-4 md:py-3 border-2 border-surface-300 hover:border-violet-400 rounded-bento font-bold text-sm text-charcoal-700 hover:text-violet-700 hover:bg-violet-50 transition-all disabled:opacity-50 hover:scale-[1.02]"
+                        className="flex-1 px-3 py-2.5 md:px-4 md:py-3 border-2 border-surface-300 hover:border-teal-400 rounded-bento font-bold text-sm text-charcoal-700 hover:text-teal-700 hover:bg-teal-50 transition-all disabled:opacity-50 hover:scale-[1.02]"
                       >
                         <span className="flex items-center justify-center gap-2">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1562,7 +1573,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                     <button
                       onClick={handleUseDesign}
                       disabled={isRemovingBackground}
-                      className="w-full px-6 py-3.5 md:py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento font-black text-base md:text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 hover:scale-[1.02]"
+                      className="w-full px-6 py-3.5 md:py-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento font-black text-base md:text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 hover:scale-[1.02]"
                     >
                       <span className="flex items-center justify-center gap-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1617,7 +1628,7 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                     <button
                       onClick={handleGenerate}
                       disabled={isGenerating || !prompt.trim()}
-                      className="w-full px-6 py-3.5 md:py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento font-black text-base md:text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+                      className="w-full px-6 py-3.5 md:py-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento font-black text-base md:text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
                     >
                       {isGenerating ? (
                         <span className="flex items-center justify-center gap-2">
@@ -1686,39 +1697,39 @@ export default function AIDesignGenerator({ isOpen, onClose, onDesignGenerated, 
                       <button
                         key={location}
                         onClick={() => handleSelectLocation(location)}
-                        className="w-full flex items-center gap-4 p-4 rounded-bento border-2 border-surface-200 hover:border-violet-400 hover:bg-violet-50 transition-all group"
+                        className="w-full flex items-center gap-4 p-4 rounded-bento border-2 border-surface-200 hover:border-teal-400 hover:bg-teal-50 transition-all group"
                       >
-                        <div className="w-12 h-12 rounded-bento bg-gradient-to-br from-violet-100 to-fuchsia-100 flex items-center justify-center group-hover:from-violet-200 group-hover:to-fuchsia-200 transition-all">
+                        <div className="w-12 h-12 rounded-bento bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center group-hover:from-teal-200 group-hover:to-cyan-200 transition-all">
                           {location === 'front' && (
-                            <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                             </svg>
                           )}
                           {(location === 'back' || location === 'full_back') && (
-                            <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                             </svg>
                           )}
                           {location === 'left_chest' && (
-                            <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                             </svg>
                           )}
                           {location === 'right_chest' && (
-                            <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                             </svg>
                           )}
                         </div>
                         <div className="flex-1 text-left">
-                          <span className="font-bold text-charcoal-700 group-hover:text-violet-700 transition-colors">
+                          <span className="font-bold text-charcoal-700 group-hover:text-teal-700 transition-colors">
                             {LOCATION_LABELS[location]}
                           </span>
                           <p className="text-xs text-charcoal-400 mt-0.5">
                             Add design to the {LOCATION_LABELS[location].toLowerCase()}
                           </p>
                         </div>
-                        <svg className="w-5 h-5 text-charcoal-300 group-hover:text-violet-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-charcoal-300 group-hover:text-teal-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </button>

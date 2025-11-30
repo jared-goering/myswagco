@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 import Providers from '@/components/Providers'
+import GoogleAnalytics from '@/components/GoogleAnalytics'
+import { GA_MEASUREMENT_ID } from '@/lib/analytics'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -130,21 +132,23 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Google Ads (gtag.js) */}
+        {/* Google Tag Manager (gtag.js) - shared by GA4 and Google Ads */}
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=AW-17766992287"
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID || 'AW-17766992287'}`}
           strategy="afterInteractive"
         />
-        <Script id="google-ads" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
+            ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
             gtag('config', 'AW-17766992287');
           `}
         </Script>
       </head>
       <body className={inter.className}>
+        <GoogleAnalytics />
         <Providers>
           {children}
         </Providers>

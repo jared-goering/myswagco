@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import AdminLayout from '@/components/AdminLayout'
+import GarmentPickerModal from '@/components/admin/GarmentPickerModal'
 import { Campaign, Garment, ArtworkTransform, CampaignGarmentConfig, PrintLocation } from '@/types'
 
 // Dynamically import the Konva-based renderer (no SSR since Konva needs window)
@@ -61,6 +62,13 @@ export default function AdminCampaignEdit() {
   
   // Multi-garment form state (used when multiple styles)
   const [editableGarmentConfigs, setEditableGarmentConfigs] = useState<Record<string, EditableGarmentConfig>>({})
+  
+  // Garment picker modal state
+  const [showGarmentPicker, setShowGarmentPicker] = useState(false)
+  const [garmentToDelete, setGarmentToDelete] = useState<string | null>(null)
+  
+  // Track locally added garments (not yet fetched from API)
+  const [localGarments, setLocalGarments] = useState<Garment[]>([])
 
   useEffect(() => {
     fetchCampaign()
@@ -97,6 +105,9 @@ export default function AdminCampaignEdit() {
           })
           setEditableGarmentConfigs(editable)
         }
+        
+        // Clear local garments since we're re-fetching
+        setLocalGarments([])
         
         // Set initial selected garment
         if (data.garments && data.garments.length > 0) {
@@ -142,39 +153,43 @@ export default function AdminCampaignEdit() {
         payment_style: paymentStyle,
       }
       
-      // For multi-garment campaigns, send the full garment_configs
-      if (isMultiGarment) {
-        const configs: Record<string, { price: number; colors: string[] }> = {}
+      // Build garment_configs from either multi-garment state or single-garment state
+      const configs: Record<string, { price: number; colors: string[] }> = {}
+      
+      if (isMultiGarment || Object.keys(editableGarmentConfigs).length > 1) {
+        // Multi-garment: use editableGarmentConfigs
         Object.entries(editableGarmentConfigs).forEach(([garmentId, config]) => {
           configs[garmentId] = {
             price: parseFloat(config.price) || 0,
             colors: config.colors
           }
         })
-        updates.garment_configs = configs
-        
-        // Also update selected_colors to be the union of all colors
-        updates.selected_colors = [...new Set(Object.values(editableGarmentConfigs).flatMap(c => c.colors))]
-        
-        // Update price_per_shirt to first garment's price for backwards compat
-        const firstGarmentId = Object.keys(configs)[0]
-        if (firstGarmentId) {
-          updates.price_per_shirt = configs[firstGarmentId].price
-        }
       } else {
-        // Single garment - use the simple fields
-        updates.price_per_shirt = parseFloat(pricePerShirt)
-        updates.selected_colors = selectedColors
-        
-        // Also update garment_configs for consistency
-        if (campaign?.garment_id) {
-          updates.garment_configs = {
-            [campaign.garment_id]: {
-              price: parseFloat(pricePerShirt) || 0,
-              colors: selectedColors
-            }
+        // Single garment: use pricePerShirt and selectedColors
+        const garmentId = campaign?.garment_id || Object.keys(editableGarmentConfigs)[0]
+        if (garmentId) {
+          configs[garmentId] = {
+            price: parseFloat(pricePerShirt) || 0,
+            colors: selectedColors
           }
         }
+      }
+      
+      updates.garment_configs = configs
+      
+      // Update garment_id to the first garment in configs (for backwards compatibility)
+      const configIds = Object.keys(configs)
+      if (configIds.length > 0) {
+        updates.garment_id = configIds[0]
+      }
+      
+      // Also update selected_colors to be the union of all colors
+      updates.selected_colors = [...new Set(Object.values(configs).flatMap(c => c.colors))]
+      
+      // Update price_per_shirt to first garment's price for backwards compat
+      const firstGarmentId = configIds[0]
+      if (firstGarmentId) {
+        updates.price_per_shirt = configs[firstGarmentId].price
       }
       
       const response = await fetch(`/api/admin/campaigns/${id}`, {
@@ -230,9 +245,64 @@ export default function AdminCampaignEdit() {
       [garmentId]: { ...prev[garmentId], price }
     }))
   }
+  
+  // Add new garments to the campaign
+  function handleAddGarments(newGarments: Garment[]) {
+    // Add to local garments for display
+    setLocalGarments(prev => [...prev, ...newGarments])
+    
+    // Initialize configs for new garments with default values
+    setEditableGarmentConfigs(prev => {
+      const newConfigs = { ...prev }
+      newGarments.forEach(garment => {
+        const defaultPrice = garment.customer_price || garment.base_cost * 1.5
+        newConfigs[garment.id] = {
+          price: defaultPrice.toFixed(2),
+          colors: [] // Start with no colors selected
+        }
+      })
+      return newConfigs
+    })
+    
+    // Select the first newly added garment for preview
+    if (newGarments.length > 0) {
+      setSelectedGarmentId(newGarments[0].id)
+    }
+  }
+  
+  // Remove a garment from the campaign
+  function handleRemoveGarment(garmentId: string) {
+    // Remove from local garments
+    setLocalGarments(prev => prev.filter(g => g.id !== garmentId))
+    
+    // Remove from configs and handle selection change
+    setEditableGarmentConfigs(prev => {
+      const newConfigs = { ...prev }
+      delete newConfigs[garmentId]
+      
+      // If the deleted garment was selected, select another one
+      if (selectedGarmentId === garmentId) {
+        const remainingIds = Object.keys(newConfigs)
+        setSelectedGarmentId(remainingIds[0] || null)
+      }
+      
+      return newConfigs
+    })
+    
+    // Clear delete confirmation
+    setGarmentToDelete(null)
+  }
+  
+  // Check if we can delete a garment (need at least one remaining)
+  const canDeleteGarment = Object.keys(editableGarmentConfigs).length > 1
 
-  // Get garments list
-  const garments = campaign?.garments || (campaign?.garment ? [campaign.garment] : [])
+  // Get garments list - only show garments that are in editableGarmentConfigs
+  const apiGarments = campaign?.garments || (campaign?.garment ? [campaign.garment] : [])
+  const allAvailableGarments = [...apiGarments, ...localGarments.filter(lg => !apiGarments.find(ag => ag.id === lg.id))]
+  
+  // Filter to only show garments that are still in the configs (handles deletions)
+  const existingGarmentIds = Object.keys(editableGarmentConfigs)
+  const garments = allAvailableGarments.filter(g => existingGarmentIds.includes(g.id))
   const isMultiGarment = garments.length > 1
   
   // Get currently selected garment for mockup preview
@@ -571,7 +641,7 @@ export default function AdminCampaignEdit() {
                 {isMultiGarment ? `Garment Styles (${garments.length})` : 'Garment Style'}
               </h2>
               
-              {isMultiGarment ? (
+              {(isMultiGarment || Object.keys(editableGarmentConfigs).length > 1) ? (
                 // Multi-garment: show per-style editor
                 <div className="space-y-6">
                   {garments.map((garment, index) => {
@@ -609,6 +679,17 @@ export default function AdminCampaignEdit() {
                           >
                             Preview
                           </button>
+                          {canDeleteGarment && (
+                            <button
+                              onClick={() => setGarmentToDelete(garment.id)}
+                              className="p-1.5 rounded-lg text-charcoal-400 hover:text-error-600 hover:bg-error-50 transition-colors"
+                              title="Remove style"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                         
                         {/* Price for this style */}
@@ -737,6 +818,17 @@ export default function AdminCampaignEdit() {
                   )}
                 </>
               )}
+              
+              {/* Add Style Button */}
+              <button
+                onClick={() => setShowGarmentPicker(true)}
+                className="mt-6 w-full py-3 border-2 border-dashed border-surface-300 rounded-xl text-charcoal-500 font-bold hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Another Style
+              </button>
             </div>
 
             {/* Actions */}
@@ -770,6 +862,54 @@ export default function AdminCampaignEdit() {
           </div>
         </div>
       </div>
+      
+      {/* Garment Picker Modal */}
+      <GarmentPickerModal
+        isOpen={showGarmentPicker}
+        onClose={() => setShowGarmentPicker(false)}
+        onSelect={handleAddGarments}
+        excludeGarmentIds={existingGarmentIds}
+      />
+      
+      {/* Delete Confirmation Dialog */}
+      {garmentToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-full bg-error-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-error-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-charcoal-700">Remove Style?</h3>
+                <p className="text-sm text-charcoal-500">
+                  This will remove this garment style from the campaign.
+                </p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-charcoal-600 mb-6 bg-surface-50 p-3 rounded-lg">
+              Note: If participants have already ordered this style, their orders will need to be updated.
+            </p>
+            
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                onClick={() => setGarmentToDelete(null)}
+                className="px-4 py-2 text-charcoal-600 font-bold hover:bg-surface-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemoveGarment(garmentToDelete)}
+                className="px-4 py-2 bg-error-600 hover:bg-error-700 text-white font-bold rounded-lg transition-colors"
+              >
+                Remove Style
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }

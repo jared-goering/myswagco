@@ -22,3 +22,4 @@ COMMENT ON COLUMN orders.pricing_breakdown IS 'Stores detailed pricing breakdown
 --   ]
 -- }
 
+

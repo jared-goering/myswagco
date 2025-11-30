@@ -816,7 +816,7 @@ export default function ArtworkUpload() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -1046,7 +1046,7 @@ export default function ArtworkUpload() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-bento bg-gradient-to-r from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-bento bg-gradient-to-r from-teal-500 to-cyan-500 flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
@@ -1081,7 +1081,7 @@ export default function ArtworkUpload() {
                         {/* AI Design Generator Button */}
                         <button
                           onClick={() => setShowAIGenerator(true)}
-                          className="w-full mb-4 p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group"
+                          className="w-full mb-4 p-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group"
                         >
                           <div className="flex items-center justify-center gap-3">
                             <div className="w-10 h-10 rounded-bento bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -1534,7 +1534,7 @@ export default function ArtworkUpload() {
                         {/* Badges */}
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
                           {artwork.is_ai_generated && (
-                            <span className="px-2 py-0.5 bg-violet-500 text-white text-xs font-bold rounded-full">
+                            <span className="px-2 py-0.5 bg-teal-500 text-white text-xs font-bold rounded-full">
                               AI
                             </span>
                           )}

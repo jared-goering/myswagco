@@ -957,7 +957,7 @@ export default function MultiGarmentArtworkPage() {
                   {customer?.avatar_url ? (
                     <img src={customer.avatar_url} alt={customer?.name || 'Avatar'} className="w-8 h-8 rounded-full" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -1073,7 +1073,7 @@ export default function MultiGarmentArtworkPage() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mt-6 rounded-bento-lg border-2 border-surface-300 overflow-hidden">
                 <button onClick={() => setIsAISectionExpanded(!isAISectionExpanded)} className={`w-full p-4 flex items-center justify-between transition-colors ${isAISectionExpanded ? 'bg-gradient-to-br from-surface-50 to-surface-100' : 'bg-white hover:bg-surface-50'}`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-bento bg-gradient-to-r from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-bento bg-gradient-to-r from-teal-500 to-cyan-500 flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                     </div>
                     <div className="text-left">
@@ -1087,7 +1087,7 @@ export default function MultiGarmentArtworkPage() {
                   {isAISectionExpanded && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                       <div className="p-6 pt-2 bg-gradient-to-br from-surface-50 to-surface-100 border-t border-surface-200">
-                        <button onClick={() => setShowAIGenerator(true)} className="w-full mb-4 p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group">
+                        <button onClick={() => setShowAIGenerator(true)} className="w-full mb-4 p-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-bento-lg font-bold shadow-soft hover:shadow-bento transition-all group">
                           <div className="flex items-center justify-center gap-3">
                             <div className="w-10 h-10 rounded-bento bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
@@ -1311,7 +1311,7 @@ export default function MultiGarmentArtworkPage() {
                           <img src={artwork.image_url} alt={artwork.name} className="max-w-full max-h-full object-contain" />
                         </div>
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
-                          {artwork.is_ai_generated && (<span className="px-2 py-0.5 bg-violet-500 text-white text-xs font-bold rounded-full">AI</span>)}
+                          {artwork.is_ai_generated && (<span className="px-2 py-0.5 bg-teal-500 text-white text-xs font-bold rounded-full">AI</span>)}
                           {artwork.metadata?.is_vector ? (<span className="px-2 py-0.5 bg-emerald-500 text-white text-xs font-bold rounded-full">Vector</span>) : (<span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded-full">Raster</span>)}
                         </div>
                         <div className="absolute inset-0 bg-primary-500/90 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">

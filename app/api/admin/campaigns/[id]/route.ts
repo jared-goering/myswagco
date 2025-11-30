@@ -128,6 +128,7 @@ export async function PATCH(
       'selected_colors',
       'payment_style',
       'garment_configs', // Allow direct update of garment_configs for multi-garment campaigns
+      'garment_id', // Allow updating primary garment when styles change
     ]
     
     // Build update object with only allowed fields
@@ -138,8 +139,16 @@ export async function PATCH(
       }
     }
     
-    // If garment_configs is provided directly, use it as-is (for multi-garment edits)
-    // Otherwise, sync garment_configs with single-garment fields
+    // If garment_configs is provided, ensure garment_id is in sync
+    if (body.garment_configs && !body.garment_id) {
+      // Set garment_id to the first garment in configs for backwards compatibility
+      const configIds = Object.keys(body.garment_configs)
+      if (configIds.length > 0) {
+        updates.garment_id = configIds[0]
+      }
+    }
+    
+    // If garment_configs is not provided, sync it with single-garment fields
     if (!body.garment_configs) {
       // Also update garment_configs if selected_colors changed and we have a garment_id
       if (body.selected_colors && body.garment_id) {

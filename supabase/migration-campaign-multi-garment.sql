@@ -40,3 +40,4 @@ WHERE co.campaign_id = c.id
 COMMENT ON COLUMN campaigns.garment_configs IS 'Multi-garment support: maps garment_id to { price: number, colors: string[] }. For backwards compatibility, garment_id field is kept for single-style campaigns.';
 COMMENT ON COLUMN campaign_orders.garment_id IS 'The specific garment style ordered by the participant (for multi-garment campaigns)';
 
+

@@ -102,3 +102,4 @@ export interface EmailTemplate {
   updated_at?: string
 }
 
+

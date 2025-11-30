@@ -94,6 +94,10 @@ export default function ColorsQuantitiesPage() {
   // Inventory state for S&S products
   const [inventoryData, setInventoryData] = useState<Record<string, GarmentInventory>>({})
   const [inventoryLoading, setInventoryLoading] = useState<Set<string>>(new Set())
+  
+  // Campaign pricing state (per-garment prices)
+  const [campaignPrices, setCampaignPrices] = useState<Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }>>({})
+  const [campaignPricesLoading, setCampaignPricesLoading] = useState(false)
 
   const selectedIds = getSelectedGarmentIds()
 
@@ -170,6 +174,38 @@ export default function ColorsQuantitiesPage() {
       fetchMultiGarmentQuote()
     }
   }, [selectedGarments, printConfig, isCampaignMode])
+  
+  // Fetch campaign-specific per-garment pricing when in campaign mode
+  useEffect(() => {
+    if (isCampaignMode && selectedIds.length > 0 && hasPrintLocations) {
+      fetchCampaignPrices()
+    }
+  }, [selectedIds.join(','), JSON.stringify(printConfig), isCampaignMode])
+  
+  async function fetchCampaignPrices() {
+    if (selectedIds.length === 0) return
+    
+    setCampaignPricesLoading(true)
+    try {
+      const response = await fetch('/api/campaigns/calculate-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          garment_ids: selectedIds,
+          print_config: printConfig
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCampaignPrices(data.prices || {})
+      }
+    } catch (error) {
+      console.error('Error fetching campaign prices:', error)
+    } finally {
+      setCampaignPricesLoading(false)
+    }
+  }
 
   async function fetchGarments() {
     try {
@@ -420,7 +456,7 @@ export default function ColorsQuantitiesPage() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -1083,7 +1119,13 @@ export default function ColorsQuantitiesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-white text-sm truncate">{garment.name}</p>
                         <p className="text-white/50 text-xs">
-                          {garmentColors.length} color{garmentColors.length !== 1 ? 's' : ''} • {garmentQty} pcs
+                          {isCampaignMode ? (
+                            garmentColors.length > 0 
+                              ? garmentColors.slice(0, 2).join(', ') + (garmentColors.length > 2 ? ` +${garmentColors.length - 2}` : '')
+                              : 'No colors selected'
+                          ) : (
+                            `${garmentColors.length} color${garmentColors.length !== 1 ? 's' : ''} • ${garmentQty} pcs`
+                          )}
                         </p>
                       </div>
                     </div>
@@ -1094,14 +1136,14 @@ export default function ColorsQuantitiesPage() {
               {/* Quantity Progress Ring - or Campaign Mode indicator */}
               <div className="border-t border-white/10 pt-6 mb-4">
                 {isCampaignMode ? (
-                  <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 rounded-xl border border-violet-400/30">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-xl border border-teal-400/30">
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0">
                       <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                     </div>
                     <div>
-                      <p className="text-violet-300 font-bold text-sm">Group Campaign</p>
+                      <p className="text-teal-300 font-bold text-sm">Group Campaign</p>
                       <p className="text-white/50 text-xs">Participants will choose their sizes</p>
                     </div>
                   </div>
@@ -1182,24 +1224,49 @@ export default function ColorsQuantitiesPage() {
 
               {/* Quote */}
               {isCampaignMode ? (
-                // Campaign mode: Show per-shirt price prominently
-                multiGarmentQuote ? (
+                // Campaign mode: Show per-garment pricing
+                Object.keys(campaignPrices).length > 0 ? (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="pt-4 border-t border-white/10"
                   >
-                    <div className="text-center">
-                      <p className="text-white/60 text-sm font-medium mb-2">Estimated price per shirt</p>
-                      <p className="text-4xl font-black text-violet-400">
-                        ${multiGarmentQuote.per_shirt_price.toFixed(2)}
-                      </p>
-                      <p className="text-white/40 text-xs mt-2">
-                        Final price depends on total orders
-                      </p>
-                    </div>
+                    {selectedIds.length > 1 ? (
+                      // Multiple garments: show per-garment breakdown
+                      <div>
+                        <p className="text-white/60 text-sm font-medium mb-3">Price per shirt by style</p>
+                        <div className="space-y-2 mb-3">
+                          {selectedGarmentData.map((garment) => {
+                            const price = campaignPrices[garment.id]?.pricePerShirt
+                            if (!price) return null
+                            return (
+                              <div key={garment.id} className="flex items-center justify-between py-2 px-3 bg-white/5 rounded-lg">
+                                <span className="text-sm font-medium text-white/80 truncate mr-2">{garment.name}</span>
+                                <span className="text-lg font-black text-teal-400">
+                                  ${price.toFixed(2)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <p className="text-white/40 text-xs text-center">
+                          Includes garment + print cost
+                        </p>
+                      </div>
+                    ) : (
+                      // Single garment: show single price
+                      <div className="text-center">
+                        <p className="text-white/60 text-sm font-medium mb-2">Price per shirt</p>
+                        <p className="text-4xl font-black text-teal-400">
+                          ${(Object.values(campaignPrices)[0]?.pricePerShirt || 0).toFixed(2)}
+                        </p>
+                        <p className="text-white/40 text-xs mt-2">
+                          Includes garment + print cost
+                        </p>
+                      </div>
+                    )}
                   </motion.div>
-                ) : hasColors && hasPrintLocations ? (
+                ) : campaignPricesLoading || (hasColors && hasPrintLocations) ? (
                   <div className="py-6 border-t border-white/10">
                     <div className="flex items-center justify-center gap-3">
                       <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

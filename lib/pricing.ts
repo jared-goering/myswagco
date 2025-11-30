@@ -215,6 +215,111 @@ export function calculateTotalQuantity(sizeQuantities: Record<string, number>): 
 }
 
 /**
+ * Calculate campaign price per shirt for a specific garment
+ * Uses the lowest quantity tier (24-47) for consistent pricing
+ * Price = garment cost with markup + print cost per shirt (NO setup fees)
+ */
+export async function calculateCampaignPricePerShirt(
+  garmentId: string,
+  printConfig: PrintConfig
+): Promise<{ pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }> {
+  // Use the minimum quantity (24) to get Tier 1 pricing
+  const CAMPAIGN_REFERENCE_QUANTITY = 24
+  
+  // Fetch garment
+  const { data: garment, error: garmentError } = await supabaseAdmin
+    .from('garments')
+    .select('base_cost, pricing_tier_id')
+    .eq('id', garmentId)
+    .single()
+
+  if (garmentError || !garment) {
+    throw new Error('Garment not found')
+  }
+
+  // Get the lowest tier (Tier 1: 24-47)
+  const { data: tier, error: tierError } = await supabaseAdmin
+    .from('pricing_tiers')
+    .select('id, garment_markup_percentage')
+    .order('min_qty', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (tierError || !tier) {
+    // Fallback to default markup if no tier found
+    const garmentCostPerShirt = garment.base_cost * 1.5 // 50% markup
+    return {
+      pricePerShirt: garmentCostPerShirt,
+      garmentCostPerShirt,
+      printCostPerShirt: 0
+    }
+  }
+
+  // Calculate garment cost with markup
+  const markupMultiplier = 1 + (tier.garment_markup_percentage / 100)
+  const garmentCostPerShirt = garment.base_cost * markupMultiplier
+
+  // Calculate print cost per shirt (if there's a print config)
+  let printCostPerShirt = 0
+  const totalScreens = calculateTotalScreens(printConfig)
+  const activeLocations = calculateActiveLocations(printConfig)
+
+  if (totalScreens > 0) {
+    // Get max colors to determine pricing
+    const maxColors = Math.max(
+      ...Object.values(printConfig.locations)
+        .filter(loc => loc && loc.enabled)
+        .map(loc => loc!.num_colors)
+    )
+
+    // Fetch print pricing for Tier 1 and the color count
+    const { data: printPricing, error: printError } = await supabaseAdmin
+      .from('print_pricing')
+      .select('cost_per_shirt')
+      .eq('tier_id', tier.id)
+      .eq('num_colors', maxColors)
+      .single()
+
+    if (printPricing && !printError) {
+      printCostPerShirt = printPricing.cost_per_shirt * activeLocations
+    } else {
+      // Fallback pricing
+      printCostPerShirt = maxColors * 0.5 * activeLocations
+    }
+  }
+
+  const pricePerShirt = garmentCostPerShirt + printCostPerShirt
+
+  return {
+    pricePerShirt: Math.round(pricePerShirt * 100) / 100, // Round to 2 decimal places
+    garmentCostPerShirt: Math.round(garmentCostPerShirt * 100) / 100,
+    printCostPerShirt: Math.round(printCostPerShirt * 100) / 100
+  }
+}
+
+/**
+ * Calculate campaign prices for multiple garments
+ * Returns a map of garment ID to price per shirt
+ */
+export async function calculateCampaignPricesForGarments(
+  garmentIds: string[],
+  printConfig: PrintConfig
+): Promise<Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }>> {
+  const prices: Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }> = {}
+  
+  for (const garmentId of garmentIds) {
+    try {
+      prices[garmentId] = await calculateCampaignPricePerShirt(garmentId, printConfig)
+    } catch (error) {
+      console.error(`Error calculating price for garment ${garmentId}:`, error)
+      // Skip garments that fail
+    }
+  }
+  
+  return prices
+}
+
+/**
  * Helper to calculate total quantity from color-size quantities
  */
 export function calculateTotalQuantityFromColors(colorSizeQuantities: Record<string, Record<string, number>>): number {

@@ -12,12 +12,12 @@ export default function SignInPromptCard({ onOpenAuthModal }: SignInPromptCardPr
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="bento-card bg-gradient-to-br from-violet-50/50 to-fuchsia-50/50 border-2 border-violet-200 mb-6"
+      className="bento-card bg-gradient-to-br from-teal-50/50 to-cyan-50/50 border-2 border-teal-200 mb-6"
     >
       <div className="flex flex-col sm:flex-row gap-6 items-start">
         {/* Icon Section */}
         <div className="flex-shrink-0">
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-500 to-violet-500 flex items-center justify-center shadow-lg">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-500 to-teal-500 flex items-center justify-center shadow-lg">
             <svg 
               className="w-7 h-7 text-white" 
               fill="none" 
@@ -73,7 +73,7 @@ export default function SignInPromptCard({ onOpenAuthModal }: SignInPromptCardPr
             </button>
             <button
               onClick={() => onOpenAuthModal('login')}
-              className="px-6 py-3 border-2 border-violet-300 hover:border-violet-400 bg-white hover:bg-violet-50 text-charcoal-700 rounded-xl font-black transition-all"
+              className="px-6 py-3 border-2 border-teal-300 hover:border-teal-400 bg-white hover:bg-teal-50 text-charcoal-700 rounded-xl font-black transition-all"
             >
               Sign In
             </button>

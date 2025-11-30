@@ -367,7 +367,7 @@ export default function GarmentSelection() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -640,7 +640,7 @@ export default function GarmentSelection() {
                                 onClick={() => setSelectedFitType(fit)}
                                 className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${
                                   selectedFitType === fit
-                                    ? 'bg-violet-500 text-white shadow-sm'
+                                    ? 'bg-teal-500 text-white shadow-sm'
                                     : 'bg-surface-100 text-charcoal-600 hover:bg-surface-200'
                                 }`}
                               >

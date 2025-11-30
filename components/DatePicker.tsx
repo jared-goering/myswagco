@@ -102,11 +102,11 @@ export default function DatePicker({ value, onChange, minDate, placeholder = 'Se
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full border-2 rounded-xl px-4 py-3 text-left font-bold transition-all outline-none flex items-center justify-between ${
           isOpen 
-            ? 'border-violet-500 ring-4 ring-violet-100' 
+            ? 'border-teal-500 ring-4 ring-teal-100' 
             : value 
               ? 'border-surface-300 text-charcoal-700' 
               : 'border-surface-300 text-charcoal-400'
-        } hover:border-violet-400`}
+        } hover:border-teal-400`}
       >
         <span>{displayValue || placeholder}</span>
         <svg 
@@ -185,14 +185,14 @@ export default function DatePicker({ value, onChange, minDate, placeholder = 'Se
                     className={`
                       w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all
                       ${isSelected 
-                        ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-md' 
+                        ? 'bg-gradient-to-br from-teal-500 to-cyan-500 text-white shadow-md' 
                         : isDisabled
                           ? 'text-charcoal-200 cursor-not-allowed'
                           : isCurrentMonth
-                            ? 'text-charcoal-700 hover:bg-violet-50 hover:text-violet-600'
+                            ? 'text-charcoal-700 hover:bg-teal-50 hover:text-teal-600'
                             : 'text-charcoal-300'
                       }
-                      ${isToday && !isSelected ? 'ring-1 ring-violet-300 ring-inset' : ''}
+                      ${isToday && !isSelected ? 'ring-1 ring-teal-300 ring-inset' : ''}
                     `}
                   >
                     {date.getDate()}
@@ -221,7 +221,7 @@ export default function DatePicker({ value, onChange, minDate, placeholder = 'Se
                     nextWeek.setDate(nextWeek.getDate() + 7)
                     handleDateSelect(nextWeek)
                   }}
-                  className="px-2 py-1 text-[10px] font-bold text-violet-600 bg-violet-50 rounded hover:bg-violet-100 transition-colors"
+                  className="px-2 py-1 text-[10px] font-bold text-teal-600 bg-teal-50 rounded hover:bg-teal-100 transition-colors"
                 >
                   +1w
                 </button>
@@ -232,7 +232,7 @@ export default function DatePicker({ value, onChange, minDate, placeholder = 'Se
                     twoWeeks.setDate(twoWeeks.getDate() + 14)
                     handleDateSelect(twoWeeks)
                   }}
-                  className="px-2 py-1 text-[10px] font-bold text-violet-600 bg-violet-50 rounded hover:bg-violet-100 transition-colors"
+                  className="px-2 py-1 text-[10px] font-bold text-teal-600 bg-teal-50 rounded hover:bg-teal-100 transition-colors"
                 >
                   +2w
                 </button>
@@ -243,7 +243,7 @@ export default function DatePicker({ value, onChange, minDate, placeholder = 'Se
                     oneMonth.setMonth(oneMonth.getMonth() + 1)
                     handleDateSelect(oneMonth)
                   }}
-                  className="px-2 py-1 text-[10px] font-bold text-violet-600 bg-violet-50 rounded hover:bg-violet-100 transition-colors"
+                  className="px-2 py-1 text-[10px] font-bold text-teal-600 bg-teal-50 rounded hover:bg-teal-100 transition-colors"
                 >
                   +1m
                 </button>

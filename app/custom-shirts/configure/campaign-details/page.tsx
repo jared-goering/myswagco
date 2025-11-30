@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -9,6 +9,13 @@ import { useOrderStore } from '@/lib/store/orderStore'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { PaymentStyle } from '@/types'
 import DatePicker from '@/components/DatePicker'
+
+// Type for per-garment campaign pricing
+interface CampaignGarmentPrice {
+  pricePerShirt: number
+  garmentCostPerShirt: number
+  printCostPerShirt: number
+}
 
 export default function CampaignDetailsPage() {
   const router = useRouter()
@@ -21,10 +28,49 @@ export default function CampaignDetailsPage() {
   const [error, setError] = useState<string | null>(null)
   const hasSubmittedRef = useRef(false)
   
+  // Per-garment campaign pricing state
+  const [campaignPrices, setCampaignPrices] = useState<Record<string, CampaignGarmentPrice>>({})
+  const [isPricingLoading, setIsPricingLoading] = useState(false)
+  
   // Form state
   const [campaignName, setCampaignName] = useState(store.campaignName || '')
   const [deadline, setDeadline] = useState(store.campaignDeadline || '')
   const [paymentStyle, setPaymentStyle] = useState<PaymentStyle>(store.paymentStyle || 'everyone_pays')
+  
+  // Get garment IDs for pricing calculation
+  const garmentIdsForPricing = store.getSelectedGarmentIds()
+  const fallbackGarmentId = store.garmentId
+  const allGarmentIds = garmentIdsForPricing.length > 0 ? garmentIdsForPricing : (fallbackGarmentId ? [fallbackGarmentId] : [])
+  
+  // Fetch per-garment campaign prices when component loads or garments/print config changes
+  const fetchCampaignPrices = useCallback(async () => {
+    if (allGarmentIds.length === 0) return
+    
+    setIsPricingLoading(true)
+    try {
+      const response = await fetch('/api/campaigns/calculate-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          garment_ids: allGarmentIds,
+          print_config: store.printConfig
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCampaignPrices(data.prices || {})
+      }
+    } catch (err) {
+      console.error('Error fetching campaign prices:', err)
+    } finally {
+      setIsPricingLoading(false)
+    }
+  }, [allGarmentIds.join(','), JSON.stringify(store.printConfig)])
+  
+  useEffect(() => {
+    fetchCampaignPrices()
+  }, [fetchCampaignPrices])
   
   // Check if in campaign mode (skip if we just submitted)
   useEffect(() => {
@@ -123,6 +169,7 @@ export default function CampaignDetailsPage() {
       
       // Build garment_configs for multi-garment campaigns
       // Maps each garment ID to { price, colors }
+      // Uses per-garment campaign pricing (garment cost + print cost, no setup fees)
       const isMultiGarment = garmentIds.length > 1
       let garmentConfigs: Record<string, { price: number; colors: string[] }> | undefined
       let selectedColors: string[] = []
@@ -130,23 +177,26 @@ export default function CampaignDetailsPage() {
       if (garmentIds.length > 0) {
         // Build garment_configs with per-garment prices and colors
         garmentConfigs = {}
-        const basePrice = store.multiGarmentQuote?.per_shirt_price || store.quote?.per_shirt_price || 0
         
         garmentIds.forEach(id => {
           const colors = store.getGarmentColors(id)
           selectedColors = [...selectedColors, ...colors]
           
-          // Try to get per-garment price from quote breakdown, or use base price
-          const garmentBreakdown = store.multiGarmentQuote?.garment_breakdown?.find(g => g.garment_id === id)
-          const price = garmentBreakdown?.garment_cost_per_shirt 
-            ? basePrice // Use overall price for now (could be refined)
-            : basePrice
+          // Use the calculated campaign price per shirt for this garment
+          // Falls back to the quote price if campaign pricing isn't available
+          const campaignPrice = campaignPrices[id]?.pricePerShirt
+          const fallbackPrice = store.multiGarmentQuote?.per_shirt_price || store.quote?.per_shirt_price || 0
+          const price = campaignPrice || fallbackPrice
           
           garmentConfigs![id] = { price, colors }
         })
       } else if (store.selectedColors.length > 0) {
         selectedColors = store.selectedColors
       }
+      
+      // Calculate legacy price_per_shirt (first garment's price for backwards compatibility)
+      const firstGarmentPrice = garmentId && campaignPrices[garmentId]?.pricePerShirt
+      const legacyPricePerShirt = firstGarmentPrice || store.multiGarmentQuote?.per_shirt_price || store.quote?.per_shirt_price || 0
       
       // Create campaign via API
       const response = await fetch('/api/campaigns', {
@@ -159,12 +209,12 @@ export default function CampaignDetailsPage() {
           // For multi-garment, send garment_configs; for single, send garment_id
           ...(isMultiGarment && garmentConfigs 
             ? { garment_configs: garmentConfigs }
-            : { garment_id: garmentId, selected_colors: selectedColors, price_per_shirt: store.quote?.per_shirt_price || 0 }
+            : { garment_id: garmentId, selected_colors: selectedColors, price_per_shirt: legacyPricePerShirt }
           ),
           print_config: store.printConfig,
           artwork_urls: artworkUrls,
           artwork_transforms: store.artworkTransforms,
-          price_per_shirt: store.multiGarmentQuote?.per_shirt_price || store.quote?.per_shirt_price || 0,
+          price_per_shirt: legacyPricePerShirt,
           organizer_name: customer?.name || store.customerName,
           organizer_email: customer?.email || user?.email || store.email,
           mockup_image_url: mockupImageUrl, // Legacy field for backwards compatibility
@@ -222,13 +272,13 @@ export default function CampaignDetailsPage() {
           <nav className="flex items-center gap-3">
             {/* Step indicators */}
             <div className="flex items-center gap-1.5">
-              <span className="w-6 h-6 bg-violet-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
-              <div className="w-4 h-0.5 bg-violet-300 rounded-full" />
-              <span className="w-6 h-6 bg-violet-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
-              <div className="w-4 h-0.5 bg-violet-300 rounded-full" />
-              <span className="w-6 h-6 bg-violet-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
-              <div className="w-4 h-0.5 bg-violet-300 rounded-full" />
-              <span className="w-8 h-8 bg-violet-500 text-white rounded-full flex items-center justify-center text-sm font-black">4</span>
+              <span className="w-6 h-6 bg-teal-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
+              <div className="w-4 h-0.5 bg-teal-300 rounded-full" />
+              <span className="w-6 h-6 bg-teal-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
+              <div className="w-4 h-0.5 bg-teal-300 rounded-full" />
+              <span className="w-6 h-6 bg-teal-500 text-white rounded-full flex items-center justify-center text-xs font-bold">✓</span>
+              <div className="w-4 h-0.5 bg-teal-300 rounded-full" />
+              <span className="w-8 h-8 bg-teal-500 text-white rounded-full flex items-center justify-center text-sm font-black">4</span>
             </div>
             <span className="text-sm font-bold text-charcoal-700 whitespace-nowrap ml-1">Campaign Details</span>
           </nav>
@@ -250,7 +300,7 @@ export default function CampaignDetailsPage() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -318,7 +368,7 @@ export default function CampaignDetailsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-10"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-100 to-fuchsia-100 text-violet-700 rounded-full text-sm font-bold mb-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700 rounded-full text-sm font-bold mb-4">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -337,9 +387,9 @@ export default function CampaignDetailsPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-violet-50 to-fuchsia-50 border-2 border-violet-200 rounded-2xl p-6 mb-8 text-center"
+              className="bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-200 rounded-2xl p-6 mb-8 text-center"
             >
-              <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
@@ -350,7 +400,7 @@ export default function CampaignDetailsPage() {
               </p>
               <button
                 onClick={() => openAuthModal({ feature: 'campaign' })}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold rounded-xl hover:from-violet-600 hover:to-fuchsia-600 transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-bold rounded-xl hover:from-teal-600 hover:to-cyan-600 transition-all"
               >
                 Sign In or Create Account
               </button>
@@ -375,7 +425,7 @@ export default function CampaignDetailsPage() {
                 value={campaignName}
                 onChange={(e) => setCampaignName(e.target.value)}
                 placeholder="Spring 2025 Youth Soccer Uniforms"
-                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-violet-500 focus:ring-4 focus:ring-violet-100 transition-all outline-none"
+                className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 font-bold text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
                 required
               />
             </div>
@@ -406,7 +456,7 @@ export default function CampaignDetailsPage() {
                 <label
                   className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
                     paymentStyle === 'organizer_pays'
-                      ? 'border-violet-500 bg-violet-50'
+                      ? 'border-teal-500 bg-teal-50'
                       : 'border-surface-200 hover:border-surface-300'
                   }`}
                 >
@@ -431,7 +481,7 @@ export default function CampaignDetailsPage() {
                 <label
                   className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
                     paymentStyle === 'everyone_pays'
-                      ? 'border-violet-500 bg-violet-50'
+                      ? 'border-teal-500 bg-teal-50'
                       : 'border-surface-200 hover:border-surface-300'
                   }`}
                 >
@@ -456,14 +506,48 @@ export default function CampaignDetailsPage() {
             </div>
 
             {/* Payment Summary Preview */}
-            {store.quote?.per_shirt_price && (
+            {(Object.keys(campaignPrices).length > 0 || store.quote?.per_shirt_price) && (
               <div className="mb-8 p-6 bg-surface-50 rounded-xl border border-surface-200">
-                <div className="flex items-baseline justify-between mb-4">
-                  <span className="text-charcoal-600 font-medium">Estimated price per shirt</span>
-                  <span className="text-2xl font-black text-charcoal-700">
-                    ${store.quote.per_shirt_price.toFixed(2)}
-                  </span>
-                </div>
+                {isPricingLoading ? (
+                  <div className="flex items-center gap-3 text-charcoal-500">
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Calculating prices...
+                  </div>
+                ) : Object.keys(campaignPrices).length > 1 ? (
+                  // Multiple garments - show per-garment pricing
+                  <>
+                    <div className="mb-4">
+                      <span className="text-charcoal-600 font-medium">Price per shirt by style</span>
+                    </div>
+                    <div className="space-y-2 mb-4">
+                      {Object.entries(campaignPrices).map(([garmentId, pricing]) => {
+                        const garmentName = store.garments?.find(g => g.id === garmentId)?.name || 'Garment'
+                        return (
+                          <div key={garmentId} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg">
+                            <span className="text-sm font-medium text-charcoal-600">{garmentName}</span>
+                            <span className="text-lg font-black text-charcoal-700">
+                              ${pricing.pricePerShirt.toFixed(2)}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-charcoal-400 mb-4">
+                      Prices include garment cost + print cost (no setup fee)
+                    </p>
+                  </>
+                ) : (
+                  // Single garment - show single price
+                  <div className="flex items-baseline justify-between mb-4">
+                    <span className="text-charcoal-600 font-medium">Price per shirt</span>
+                    <span className="text-2xl font-black text-charcoal-700">
+                      ${(Object.values(campaignPrices)[0]?.pricePerShirt || store.quote?.per_shirt_price || 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 
                 {paymentStyle === 'organizer_pays' ? (
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
@@ -478,9 +562,9 @@ export default function CampaignDetailsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl">
-                    <p className="text-sm text-violet-700">
-                      Each participant pays <span className="font-bold">${store.quote.per_shirt_price.toFixed(2)}</span> at checkout.
+                  <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl">
+                    <p className="text-sm text-teal-700">
+                      Each participant pays the price for their selected style at checkout.
                     </p>
                   </div>
                 )}
@@ -505,7 +589,7 @@ export default function CampaignDetailsPage() {
               <button
                 type="submit"
                 disabled={!isValid || isSubmitting || !isAuthenticated}
-                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">

@@ -51,7 +51,7 @@ export default function CampaignCreatedPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#f8f9fb] via-[#f2f4f7] to-[#eef0f4] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
       </div>
     )
   }
@@ -61,7 +61,7 @@ export default function CampaignCreatedPage() {
       <div className="min-h-screen bg-gradient-to-b from-[#f8f9fb] via-[#f2f4f7] to-[#eef0f4] flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-black text-charcoal-700 mb-4">Campaign not found</h1>
-          <Link href="/" className="text-violet-600 font-bold hover:underline">
+          <Link href="/" className="text-teal-600 font-bold hover:underline">
             Go home
           </Link>
         </div>
@@ -92,7 +92,7 @@ export default function CampaignCreatedPage() {
           </Link>
           <Link
             href="/account/campaigns"
-            className="text-sm font-bold text-violet-600 hover:text-violet-700 transition-colors"
+            className="text-sm font-bold text-teal-600 hover:text-teal-700 transition-colors"
           >
             My Campaigns
           </Link>
@@ -106,7 +106,7 @@ export default function CampaignCreatedPage() {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-          className="w-24 h-24 mx-auto mb-8 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center shadow-xl"
+          className="w-24 h-24 mx-auto mb-8 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-full flex items-center justify-center shadow-xl"
         >
           <motion.svg
             initial={{ opacity: 0, pathLength: 0 }}
@@ -157,7 +157,7 @@ export default function CampaignCreatedPage() {
               className={`px-6 py-3 font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
                 copied
                   ? 'bg-emerald-500 text-white'
-                  : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600'
+                  : 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white hover:from-teal-600 hover:to-cyan-600'
               }`}
             >
               {copied ? (
@@ -184,10 +184,10 @@ export default function CampaignCreatedPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-gradient-to-r from-violet-50 to-fuchsia-50 rounded-2xl border border-violet-100 p-6 mb-8"
+          className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-2xl border border-teal-100 p-6 mb-8"
         >
           <h2 className="text-lg font-black text-charcoal-700 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
             Campaign Overview
@@ -230,7 +230,7 @@ export default function CampaignCreatedPage() {
           </Link>
           <Link
             href={`/account/campaigns/${slug}`}
-            className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold rounded-xl hover:from-violet-600 hover:to-fuchsia-600 shadow-lg transition-all text-center"
+            className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-bold rounded-xl hover:from-teal-600 hover:to-cyan-600 shadow-lg transition-all text-center"
           >
             Go to Organizer Dashboard
           </Link>
@@ -246,19 +246,19 @@ export default function CampaignCreatedPage() {
           <h3 className="font-bold text-charcoal-700 mb-4">What's next?</h3>
           <ul className="space-y-3 text-charcoal-600">
             <li className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">1</span>
+              <span className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm flex-shrink-0">1</span>
               <span>Share the campaign link with your group via email, text, or social media</span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">2</span>
+              <span className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm flex-shrink-0">2</span>
               <span>Each person visits the link and picks their size</span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">3</span>
+              <span className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm flex-shrink-0">3</span>
               <span>Track orders on your dashboard until the deadline</span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">4</span>
+              <span className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm flex-shrink-0">4</span>
               <span>We'll batch everything into one production run and ship together</span>
             </li>
           </ul>

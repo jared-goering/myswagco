@@ -5,8 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
 import { Campaign, CampaignOrder, CampaignStats } from '@/types'
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
 // Grouped order type for displaying orders from the same checkout session
 interface GroupedOrder {
@@ -33,6 +37,14 @@ export default function CampaignDashboardPage() {
   const [copied, setCopied] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+  const [showEndCampaignModal, setShowEndCampaignModal] = useState(false)
+  const [endingCampaign, setEndingCampaign] = useState(false)
+  
+  // Payment modal state for organizer_pays campaigns
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null)
+  const [paymentData, setPaymentData] = useState<{ amount: number; totalQuantity: number; orderCount: number } | null>(null)
+  const [initializingPayment, setInitializingPayment] = useState(false)
 
   // Group orders by participant email + close timestamps (within 5 seconds)
   const groupedOrders = useMemo<GroupedOrder[]>(() => {
@@ -177,10 +189,104 @@ export default function CampaignDashboardPage() {
     }
   }
 
+  async function endCampaignEarly() {
+    // For organizer_pays campaigns with orders, show payment modal
+    if (campaign?.payment_style === 'organizer_pays' && (stats?.total_quantity || 0) > 0) {
+      setShowEndCampaignModal(false)
+      await initializeOrganizerPayment()
+      return
+    }
+    
+    // For everyone_pays campaigns or campaigns with no orders, just close
+    setEndingCampaign(true)
+    try {
+      const response = await fetch(`/api/campaigns/${slug}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'closed' }),
+      })
+      
+      if (response.ok) {
+        // Refresh campaign data
+        await fetchCampaign()
+        setShowEndCampaignModal(false)
+      } else {
+        const data = await response.json()
+        console.error('Failed to end campaign:', data.error)
+        alert('Failed to end campaign. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error ending campaign:', error)
+      alert('Failed to end campaign. Please try again.')
+    } finally {
+      setEndingCampaign(false)
+    }
+  }
+
+  async function initializeOrganizerPayment() {
+    setInitializingPayment(true)
+    try {
+      const response = await fetch(`/api/campaigns/${slug}/pay`, {
+        method: 'POST',
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setPaymentClientSecret(data.clientSecret)
+        setPaymentData({
+          amount: data.amount,
+          totalQuantity: data.totalQuantity,
+          orderCount: data.orderCount,
+        })
+        setShowPaymentModal(true)
+      } else {
+        const data = await response.json()
+        console.error('Failed to initialize payment:', data.error)
+        alert(data.error || 'Failed to initialize payment. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error initializing payment:', error)
+      alert('Failed to initialize payment. Please try again.')
+    } finally {
+      setInitializingPayment(false)
+    }
+  }
+
+  async function handlePaymentSuccess(paymentIntentId: string) {
+    try {
+      // Confirm payment and close campaign
+      const response = await fetch(`/api/campaigns/${slug}/pay`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ paymentIntentId }),
+      })
+      
+      if (response.ok) {
+        setShowPaymentModal(false)
+        setPaymentClientSecret(null)
+        setPaymentData(null)
+        // Refresh campaign data
+        await fetchCampaign()
+        await fetchStats()
+      } else {
+        const data = await response.json()
+        console.error('Failed to confirm payment:', data.error)
+        alert('Payment succeeded but failed to close campaign. Please contact support.')
+      }
+    } catch (error) {
+      console.error('Error confirming payment:', error)
+      alert('Payment succeeded but failed to close campaign. Please contact support.')
+    }
+  }
+
   if (isLoading || campaignLoading) {
     return (
       <div className="min-h-screen bg-surface-200 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
       </div>
     )
   }
@@ -190,7 +296,7 @@ export default function CampaignDashboardPage() {
       <div className="min-h-screen bg-surface-200 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-black text-charcoal-700 mb-4">Campaign not found</h1>
-          <Link href="/account/campaigns" className="text-violet-600 font-bold hover:underline">
+          <Link href="/account/campaigns" className="text-teal-600 font-bold hover:underline">
             View all campaigns
           </Link>
         </div>
@@ -259,7 +365,7 @@ export default function CampaignDashboardPage() {
                     className="w-8 h-8 rounded-full"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
                     {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                   </div>
                 )}
@@ -333,7 +439,7 @@ export default function CampaignDashboardPage() {
                   className={`px-6 py-3 font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
                     copied
                       ? 'bg-emerald-500 text-white'
-                      : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600'
+                      : 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white hover:from-teal-600 hover:to-cyan-600'
                   }`}
                 >
                   {copied ? (
@@ -357,7 +463,7 @@ export default function CampaignDashboardPage() {
                 <Link
                   href={`/c/${slug}`}
                   target="_blank"
-                  className="inline-flex items-center gap-2 text-violet-600 font-bold text-sm hover:underline"
+                  className="inline-flex items-center gap-2 text-teal-600 font-bold text-sm hover:underline"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -396,7 +502,7 @@ export default function CampaignDashboardPage() {
                         <div className="w-12 font-bold text-charcoal-700 text-right">{size}</div>
                         <div className="flex-1 h-8 bg-surface-100 rounded-lg overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-lg transition-all duration-500"
+                            className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 rounded-lg transition-all duration-500"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -475,7 +581,7 @@ export default function CampaignDashboardPage() {
                         {/* Header Row */}
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm">
                             {group.participant_name.charAt(0).toUpperCase()}
                           </div>
                           
@@ -534,7 +640,7 @@ export default function CampaignDashboardPage() {
                                   {item.quantity > 1 && (
                                     <>
                                       <span className="text-charcoal-300">·</span>
-                                      <span className="text-violet-600 font-bold">×{item.quantity}</span>
+                                      <span className="text-teal-600 font-bold">×{item.quantity}</span>
                                     </>
                                   )}
                                 </span>
@@ -542,7 +648,7 @@ export default function CampaignDashboardPage() {
                               {hiddenCount > 0 && !isExpanded && (
                                 <button
                                   onClick={() => toggleOrderExpanded(group.id)}
-                                  className="inline-flex items-center px-2.5 py-1 bg-violet-50 hover:bg-violet-100 rounded-lg text-xs font-bold text-violet-600 transition-colors"
+                                  className="inline-flex items-center px-2.5 py-1 bg-teal-50 hover:bg-teal-100 rounded-lg text-xs font-bold text-teal-600 transition-colors"
                                 >
                                   +{hiddenCount} more
                                 </button>
@@ -592,7 +698,7 @@ export default function CampaignDashboardPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
-              className="bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl shadow-xl p-6 text-white"
+              className="bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl shadow-xl p-6 text-white"
             >
               <h2 className="text-lg font-bold text-white/90 mb-4">Campaign Stats</h2>
               
@@ -638,16 +744,265 @@ export default function CampaignDashboardPage() {
                   <span className="text-charcoal-500">Price/shirt</span>
                   <span className="font-bold text-charcoal-700">${campaign.price_per_shirt?.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-charcoal-500">Colors</span>
-                  <span className="font-bold text-charcoal-700">{campaign.selected_colors?.length || 0}</span>
-                </div>
               </div>
+              
+              {/* End Campaign Button - only show for active campaigns */}
+              {isActive && (
+                <button
+                  onClick={() => setShowEndCampaignModal(true)}
+                  className="mt-6 w-full py-2.5 px-4 text-sm font-semibold text-charcoal-500 hover:text-charcoal-700 bg-surface-100 hover:bg-surface-200 rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                  </svg>
+                  End Campaign Early
+                </button>
+              )}
             </motion.div>
           </div>
         </div>
       </div>
+
+      {/* End Campaign Confirmation Modal */}
+      <AnimatePresence>
+        {showEndCampaignModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => !endingCampaign && !initializingPayment && setShowEndCampaignModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-charcoal-700">End Campaign Early?</h3>
+                  <p className="text-sm text-charcoal-500">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              {campaign?.payment_style === 'organizer_pays' && (stats?.total_quantity || 0) > 0 ? (
+                <div className="mb-6">
+                  <p className="text-charcoal-600 mb-4">
+                    This will close the campaign and prevent new orders. You'll need to pay for the {stats?.total_quantity} shirt{(stats?.total_quantity || 0) !== 1 ? 's' : ''} ordered.
+                  </p>
+                  <div className="bg-teal-50 rounded-xl p-4 border border-teal-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-charcoal-600 font-medium">Total to pay</span>
+                      <span className="text-2xl font-black text-charcoal-800">
+                        ${((campaign?.price_per_shirt || 0) * (stats?.total_quantity || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-charcoal-500 mt-1">
+                      {stats?.total_quantity} shirts × ${campaign?.price_per_shirt?.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-charcoal-600 mb-6">
+                  This will close the campaign and prevent new orders. Existing orders will remain intact.
+                </p>
+              )}
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEndCampaignModal(false)}
+                  disabled={endingCampaign || initializingPayment}
+                  className="flex-1 py-3 px-4 font-bold text-charcoal-600 bg-surface-100 hover:bg-surface-200 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={endCampaignEarly}
+                  disabled={endingCampaign || initializingPayment}
+                  className={`flex-1 py-3 px-4 font-bold text-white rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
+                    campaign?.payment_style === 'organizer_pays' && (stats?.total_quantity || 0) > 0
+                      ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600'
+                      : 'bg-amber-500 hover:bg-amber-600'
+                  }`}
+                >
+                  {endingCampaign || initializingPayment ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      {initializingPayment ? 'Loading...' : 'Ending...'}
+                    </>
+                  ) : campaign?.payment_style === 'organizer_pays' && (stats?.total_quantity || 0) > 0 ? (
+                    'Continue to Payment'
+                  ) : (
+                    'End Campaign'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Organizer Payment Modal */}
+      <AnimatePresence>
+        {showPaymentModal && paymentClientSecret && paymentData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-teal-500/30">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-black text-charcoal-700">Complete Payment</h3>
+                <p className="text-charcoal-500 mt-1">Pay for your campaign orders</p>
+              </div>
+              
+              {/* Order Summary */}
+              <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl p-4 mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-charcoal-600 font-medium">Campaign</span>
+                  <span className="font-bold text-charcoal-700">{campaign?.name}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-charcoal-600 font-medium">Orders</span>
+                  <span className="font-bold text-charcoal-700">{paymentData.orderCount}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-charcoal-600 font-medium">Total shirts</span>
+                  <span className="font-bold text-charcoal-700">{paymentData.totalQuantity}</span>
+                </div>
+                <div className="border-t border-teal-200 mt-3 pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-charcoal-700 font-bold">Total</span>
+                    <span className="text-3xl font-black text-charcoal-800">${paymentData.amount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Stripe Payment Form */}
+              <Elements stripe={stripePromise} options={{ clientSecret: paymentClientSecret }}>
+                <OrganizerPaymentForm
+                  slug={slug}
+                  onSuccess={handlePaymentSuccess}
+                  onCancel={() => {
+                    setShowPaymentModal(false)
+                    setPaymentClientSecret(null)
+                    setPaymentData(null)
+                  }}
+                  amount={paymentData.amount}
+                />
+              </Elements>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+// Payment form component for organizer payment
+function OrganizerPaymentForm({ 
+  slug, 
+  onSuccess, 
+  onCancel,
+  amount 
+}: { 
+  slug: string
+  onSuccess: (paymentIntentId: string) => void
+  onCancel: () => void
+  amount: number 
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!stripe || !elements) {
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+
+    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+    })
+
+    if (submitError) {
+      setError(submitError.message || 'Payment failed')
+      setSubmitting(false)
+    } else if (paymentIntent?.status === 'succeeded') {
+      onSuccess(paymentIntent.id)
+    } else {
+      setError('Payment was not completed. Please try again.')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="mb-6">
+        <PaymentElement />
+      </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-sm font-semibold">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="flex-1 py-3 px-4 font-bold text-charcoal-600 bg-surface-100 hover:bg-surface-200 rounded-xl transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={!stripe || submitting}
+          className="flex-1 py-3 px-4 font-bold text-white bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {submitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              Processing...
+            </>
+          ) : (
+            `Pay $${amount.toFixed(2)}`
+          )}
+        </button>
+      </div>
+
+      <p className="text-center text-xs text-charcoal-400 mt-4">
+        Your payment is secure and encrypted via Stripe.
+      </p>
+    </form>
   )
 }
 

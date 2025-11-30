@@ -126,3 +126,4 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 -- Storage bucket for saved artwork (run this separately if needed)
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('saved-artwork', 'saved-artwork', true);
 
+

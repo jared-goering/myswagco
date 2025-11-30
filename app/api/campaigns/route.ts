@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { CampaignCreateInput } from '@/types'
+import { CampaignCreateInput, PrintConfig } from '@/types'
+import { calculateCampaignPricePerShirt } from '@/lib/pricing'
 
 // Force dynamic rendering for routes using cookies/auth
 export const dynamic = 'force-dynamic'
@@ -95,6 +96,28 @@ export async function POST(request: NextRequest) {
       // Aggregate all colors across all garments for the selected_colors field
       selectedColors = [...new Set(garmentIds.flatMap(id => garmentConfigs[id].colors))]
       
+      // Check if we need to recalculate prices (if prices are 0 or all the same old-style averaged price)
+      const prices = garmentIds.map(id => garmentConfigs[id].price)
+      const allZero = prices.every(p => p === 0)
+      const allSame = prices.length > 1 && prices.every(p => p === prices[0])
+      
+      if (allZero || allSame) {
+        // Recalculate per-garment prices server-side using campaign pricing
+        console.log('Recalculating campaign prices for garments:', garmentIds)
+        for (const garmentId of garmentIds) {
+          try {
+            const { pricePerShirt: calculatedPrice } = await calculateCampaignPricePerShirt(
+              garmentId,
+              body.print_config
+            )
+            garmentConfigs[garmentId].price = calculatedPrice
+          } catch (err) {
+            console.error(`Failed to calculate price for garment ${garmentId}:`, err)
+            // Keep the original price if calculation fails
+          }
+        }
+      }
+      
       // Use the first garment's price as the legacy price_per_shirt
       pricePerShirt = garmentConfigs[primaryGarmentId].price
     } else {
@@ -102,6 +125,20 @@ export async function POST(request: NextRequest) {
       primaryGarmentId = body.garment_id!
       selectedColors = body.selected_colors || []
       pricePerShirt = body.price_per_shirt || 0
+      
+      // If price is 0 or not provided, calculate it server-side
+      if (pricePerShirt === 0) {
+        try {
+          const { pricePerShirt: calculatedPrice } = await calculateCampaignPricePerShirt(
+            primaryGarmentId,
+            body.print_config
+          )
+          pricePerShirt = calculatedPrice
+        } catch (err) {
+          console.error(`Failed to calculate price for garment ${primaryGarmentId}:`, err)
+          // Keep 0 if calculation fails
+        }
+      }
       
       garmentConfigs = {
         [primaryGarmentId]: {

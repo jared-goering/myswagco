@@ -1493,53 +1493,6 @@ export default function DesignEditor({
           )}
         </AnimatePresence>
 
-        {/* Keyboard shortcuts hint - Enhanced */}
-        {isSelected && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="absolute top-4 right-4 bg-charcoal-800/95 backdrop-blur-md text-white rounded-bento-lg shadow-bento border border-charcoal-600 overflow-hidden"
-          >
-            <div className="px-4 py-2.5 bg-charcoal-700/50 border-b border-charcoal-600">
-              <div className="font-black text-xs uppercase tracking-wide flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
-                  <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
-                </svg>
-                Keyboard Shortcuts
-              </div>
-            </div>
-            <div className="px-4 py-3 space-y-2 text-xs">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-charcoal-300 font-medium">Nudge design</span>
-                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
-                  ← → ↑ ↓
-                </kbd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-charcoal-300 font-medium">Nudge 10px</span>
-                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
-                  Shift + Arrows
-                </kbd>
-              </div>
-              <div className="border-t border-charcoal-700 my-2"></div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-charcoal-300 font-medium">Undo</span>
-                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
-                  ⌘Z
-                </kbd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-charcoal-300 font-medium">Redo</span>
-                <kbd className="px-2 py-0.5 bg-charcoal-700 rounded border border-charcoal-500 font-mono text-xs">
-                  ⌘⇧Z
-                </kbd>
-              </div>
-            </div>
-          </motion.div>
-        )}
       </motion.div>
 
       {/* File Type Badge & Status - Enhanced with better spacing */}
@@ -1648,7 +1601,7 @@ export default function DesignEditor({
           <div className="bg-gradient-to-br from-primary-50 via-primary-100 to-primary-50 border-2 border-primary-300 rounded-bento-lg p-6 shadow-bento overflow-hidden">
             {/* Decorative gradient orbs */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary-200 rounded-full blur-3xl opacity-30 -mr-16 -mt-16"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-violet-200 rounded-full blur-3xl opacity-20 -ml-16 -mb-16"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-200 rounded-full blur-3xl opacity-20 -ml-16 -mb-16"></div>
             
             <div className="relative flex items-start gap-4">
               <motion.div 

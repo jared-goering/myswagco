@@ -80,7 +80,7 @@ export default function PublicCampaignPage() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#f8f9fb] via-[#f2f4f7] to-[#eef0f4] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
           <p className="text-charcoal-500 font-medium">Loading campaign...</p>
         </div>
       </div>
@@ -98,7 +98,7 @@ export default function PublicCampaignPage() {
           </div>
           <h1 className="text-2xl font-black text-charcoal-700 mb-2">{error || 'Campaign not found'}</h1>
           <p className="text-charcoal-500 mb-6">This campaign may have been removed or the link is incorrect.</p>
-          <Link href="/" className="text-violet-600 font-bold hover:underline">
+          <Link href="/" className="text-teal-600 font-bold hover:underline">
             Go to homepage
           </Link>
         </div>
@@ -209,7 +209,7 @@ export default function PublicCampaignPage() {
                     onClick={() => setSelectedView('front')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
                       selectedView === 'front'
-                        ? 'bg-white text-charcoal-700 shadow-md ring-2 ring-violet-200'
+                        ? 'bg-white text-charcoal-700 shadow-md ring-2 ring-teal-200'
                         : 'text-charcoal-500 hover:bg-white/50'
                     }`}
                   >
@@ -223,7 +223,7 @@ export default function PublicCampaignPage() {
                     onClick={() => setSelectedView('back')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
                       selectedView === 'back'
-                        ? 'bg-white text-charcoal-700 shadow-md ring-2 ring-violet-200'
+                        ? 'bg-white text-charcoal-700 shadow-md ring-2 ring-teal-200'
                         : 'text-charcoal-500 hover:bg-white/50'
                     }`}
                   >
@@ -261,7 +261,7 @@ export default function PublicCampaignPage() {
                           onClick={() => setSelectedGarmentId(garment.id)}
                           className={`p-3 rounded-xl text-left transition-all ${
                             isSelected
-                              ? 'bg-gradient-to-br from-violet-50 to-fuchsia-50 border-2 border-violet-400 ring-2 ring-violet-200'
+                              ? 'bg-gradient-to-br from-teal-50 to-cyan-50 border-2 border-teal-400 ring-2 ring-teal-200'
                               : 'bg-surface-50 border-2 border-transparent hover:border-surface-300'
                           }`}
                         >
@@ -277,10 +277,10 @@ export default function PublicCampaignPage() {
                               </div>
                             )}
                             <div className="min-w-0">
-                              <p className={`font-bold text-sm truncate ${isSelected ? 'text-violet-700' : 'text-charcoal-700'}`}>
+                              <p className={`font-bold text-sm truncate ${isSelected ? 'text-teal-700' : 'text-charcoal-700'}`}>
                                 {garment.name}
                               </p>
-                              <p className={`text-xs ${isSelected ? 'text-violet-600' : 'text-charcoal-500'}`}>
+                              <p className={`text-xs ${isSelected ? 'text-teal-600' : 'text-charcoal-500'}`}>
                                 ${config?.price?.toFixed(2) || campaign.price_per_shirt?.toFixed(2)}
                               </p>
                             </div>
@@ -307,7 +307,7 @@ export default function PublicCampaignPage() {
                           onClick={() => setSelectedColor(color)}
                           className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
                             isActive
-                              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white ring-2 ring-violet-300 ring-offset-2'
+                              ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white ring-2 ring-teal-300 ring-offset-2'
                               : 'bg-surface-100 text-charcoal-700 hover:bg-surface-200'
                           }`}
                         >
@@ -353,15 +353,15 @@ export default function PublicCampaignPage() {
                 </div>
               </div>
             ) : (
-              <div className="bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200 rounded-2xl p-4 mb-6">
+              <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 rounded-2xl p-4 mb-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-white">
+                    <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-full flex items-center justify-center text-white">
                       <span className="text-lg">⏱</span>
                     </div>
                     <div>
-                      <p className="font-black text-violet-700 text-lg">{daysLeft} days left to order</p>
-                      <p className="text-sm text-violet-600">Deadline: {formattedDeadline}</p>
+                      <p className="font-black text-teal-700 text-lg">{daysLeft} days left to order</p>
+                      <p className="text-sm text-teal-600">Deadline: {formattedDeadline}</p>
                     </div>
                   </div>
                 </div>
@@ -372,7 +372,7 @@ export default function PublicCampaignPage() {
             <div className="flex items-center gap-2 mb-8">
               <div className="flex -space-x-2">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="w-8 h-8 bg-gradient-to-br from-violet-400 to-fuchsia-400 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">
+                  <div key={i} className="w-8 h-8 bg-gradient-to-br from-teal-400 to-cyan-400 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">
                     {i}
                   </div>
                 ))}
@@ -429,7 +429,7 @@ export default function PublicCampaignPage() {
             {!isExpired && (
               <Link
                 href={`/c/${slug}/order`}
-                className="block w-full py-5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white text-xl font-black rounded-2xl text-center shadow-xl hover:shadow-2xl transition-all"
+                className="block w-full py-5 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white text-xl font-black rounded-2xl text-center shadow-xl hover:shadow-2xl transition-all"
               >
                 {isMultiGarment 
                   ? 'Choose Your Style' 
@@ -465,7 +465,7 @@ export default function PublicCampaignPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-charcoal-400">
             Powered by{' '}
-            <Link href="/" className="font-bold text-charcoal-600 hover:text-violet-600 transition-colors">
+            <Link href="/" className="font-bold text-charcoal-600 hover:text-teal-600 transition-colors">
               My Swag Co
             </Link>
             {' '}— Custom screen printing made easy

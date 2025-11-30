@@ -21,3 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_garments_supplier_source ON garments(supplier_sou
 COMMENT ON COLUMN garments.ss_style_id IS 'S&S Activewear style ID for inventory API lookups (e.g., "12345" or style number)';
 COMMENT ON COLUMN garments.supplier_source IS 'Origin supplier of the garment: ssactivewear, ascolour, manual, etc.';
 
+
