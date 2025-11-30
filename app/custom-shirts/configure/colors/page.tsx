@@ -74,8 +74,11 @@ export default function ColorsQuantitiesPage() {
     multiGarmentQuote,
     setMultiGarmentQuote,
     saveDraft,
-    draftId
+    draftId,
+    orderMode,
   } = useOrderStore()
+  
+  const isCampaignMode = orderMode === 'campaign'
 
   const [garments, setGarments] = useState<Garment[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,6 +94,10 @@ export default function ColorsQuantitiesPage() {
   // Inventory state for S&S products
   const [inventoryData, setInventoryData] = useState<Record<string, GarmentInventory>>({})
   const [inventoryLoading, setInventoryLoading] = useState<Set<string>>(new Set())
+  
+  // Campaign pricing state (per-garment prices)
+  const [campaignPrices, setCampaignPrices] = useState<Record<string, { pricePerShirt: number; garmentCostPerShirt: number; printCostPerShirt: number }>>({})
+  const [campaignPricesLoading, setCampaignPricesLoading] = useState(false)
 
   const selectedIds = getSelectedGarmentIds()
 
@@ -160,10 +167,45 @@ export default function ColorsQuantitiesPage() {
   // Fetch quote when configuration changes
   useEffect(() => {
     const totalQty = getTotalQuantity()
-    if (totalQty >= 24 && selectedIds.length > 0) {
+    // In campaign mode, fetch quote even without quantities (to show per-shirt price)
+    // In regular mode, only fetch when minimum is met
+    if ((isCampaignMode && selectedIds.length > 0 && hasColors && hasPrintLocations) || 
+        (totalQty >= 24 && selectedIds.length > 0)) {
       fetchMultiGarmentQuote()
     }
-  }, [selectedGarments, printConfig])
+  }, [selectedGarments, printConfig, isCampaignMode])
+  
+  // Fetch campaign-specific per-garment pricing when in campaign mode
+  useEffect(() => {
+    if (isCampaignMode && selectedIds.length > 0 && hasPrintLocations) {
+      fetchCampaignPrices()
+    }
+  }, [selectedIds.join(','), JSON.stringify(printConfig), isCampaignMode])
+  
+  async function fetchCampaignPrices() {
+    if (selectedIds.length === 0) return
+    
+    setCampaignPricesLoading(true)
+    try {
+      const response = await fetch('/api/campaigns/calculate-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          garment_ids: selectedIds,
+          print_config: printConfig
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCampaignPrices(data.prices || {})
+      }
+    } catch (error) {
+      console.error('Error fetching campaign prices:', error)
+    } finally {
+      setCampaignPricesLoading(false)
+    }
+  }
 
   async function fetchGarments() {
     try {
@@ -235,9 +277,10 @@ export default function ColorsQuantitiesPage() {
   async function fetchMultiGarmentQuote() {
     try {
       // Build request with per-garment quantities
+      // In campaign mode, use placeholder quantity of 24 per garment to estimate per-shirt price
       const garmentQuantities = selectedIds.map(id => ({
         garment_id: id,
-        quantity: getGarmentQuantity(id)
+        quantity: isCampaignMode ? 24 : getGarmentQuantity(id)
       })).filter(g => g.quantity > 0)
       
       if (garmentQuantities.length === 0) return
@@ -303,7 +346,7 @@ export default function ColorsQuantitiesPage() {
 
   // Validation
   const totalQty = getTotalQuantity()
-  const meetsMinimum = totalQty >= 24
+  const meetsMinimum = isCampaignMode ? true : totalQty >= 24
   const hasColors = selectedIds.some(id => getGarmentColors(id).length > 0)
   const hasPrintLocations = Object.values(printConfig.locations).some(loc => loc?.enabled)
   const canContinue = meetsMinimum && hasColors && hasPrintLocations
@@ -413,7 +456,7 @@ export default function ColorsQuantitiesPage() {
                       className="w-8 h-8 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -724,8 +767,8 @@ export default function ColorsQuantitiesPage() {
                               </AnimatePresence>
                             </div>
 
-                            {/* Size/Quantity Inputs per Color */}
-                            {garmentColors.length > 0 && (
+                            {/* Size/Quantity Inputs per Color - Hidden in campaign mode */}
+                            {garmentColors.length > 0 && !isCampaignMode && (
                               <div className="space-y-4">
                                 <h4 className="text-lg font-black text-charcoal-700">Enter quantities</h4>
                                 {garmentColors.map((color, colorIdx) => {
@@ -1076,7 +1119,13 @@ export default function ColorsQuantitiesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-white text-sm truncate">{garment.name}</p>
                         <p className="text-white/50 text-xs">
-                          {garmentColors.length} color{garmentColors.length !== 1 ? 's' : ''} • {garmentQty} pcs
+                          {isCampaignMode ? (
+                            garmentColors.length > 0 
+                              ? garmentColors.slice(0, 2).join(', ') + (garmentColors.length > 2 ? ` +${garmentColors.length - 2}` : '')
+                              : 'No colors selected'
+                          ) : (
+                            `${garmentColors.length} color${garmentColors.length !== 1 ? 's' : ''} • ${garmentQty} pcs`
+                          )}
                         </p>
                       </div>
                     </div>
@@ -1084,139 +1133,218 @@ export default function ColorsQuantitiesPage() {
                 })}
               </div>
 
-              {/* Quantity Progress Ring */}
+              {/* Quantity Progress Ring - or Campaign Mode indicator */}
               <div className="border-t border-white/10 pt-6 mb-4">
-                <div className="flex items-center gap-5">
-                  {/* Progress Ring */}
-                  <div className="relative w-20 h-20 flex-shrink-0">
-                    <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-                      {/* Background ring */}
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="32"
-                        stroke="currentColor"
-                        strokeWidth="6"
-                        fill="none"
-                        className="text-white/10"
-                      />
-                      {/* Progress ring */}
-                      <motion.circle
-                        cx="40"
-                        cy="40"
-                        r="32"
-                        stroke="currentColor"
-                        strokeWidth="6"
-                        fill="none"
-                        strokeLinecap="round"
-                        className={meetsMinimum ? 'text-success-400' : 'text-primary-400'}
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: Math.min(totalQty / 24, 1) }}
-                        transition={{ duration: 0.5, ease: 'easeOut' }}
-                        style={{
-                          strokeDasharray: '201',
-                          strokeDashoffset: '0'
-                        }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <motion.span 
-                        key={totalQty}
-                        initial={{ scale: 1.2, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className={`text-2xl font-black ${meetsMinimum ? 'text-success-400' : totalQty > 0 ? 'text-primary-400' : 'text-white/40'}`}
-                      >
-                        {totalQty}
-                      </motion.span>
+                {isCampaignMode ? (
+                  <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-xl border border-teal-400/30">
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-teal-300 font-bold text-sm">Group Campaign</p>
+                      <p className="text-white/50 text-xs">Participants will choose their sizes</p>
                     </div>
                   </div>
-                  
-                  <div className="flex-1">
-                    <p className="text-white/60 text-sm font-medium mb-1">Total Quantity</p>
-                    {meetsMinimum ? (
-                      <div className="flex items-center gap-2">
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                ) : (
+                  <div className="flex items-center gap-5">
+                    {/* Progress Ring */}
+                    <div className="relative w-20 h-20 flex-shrink-0">
+                      <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                        {/* Background ring */}
+                        <circle
+                          cx="40"
+                          cy="40"
+                          r="32"
+                          stroke="currentColor"
+                          strokeWidth="6"
+                          fill="none"
+                          className="text-white/10"
+                        />
+                        {/* Progress ring */}
+                        <motion.circle
+                          cx="40"
+                          cy="40"
+                          r="32"
+                          stroke="currentColor"
+                          strokeWidth="6"
+                          fill="none"
+                          strokeLinecap="round"
+                          className={meetsMinimum ? 'text-success-400' : 'text-primary-400'}
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: Math.min(totalQty / 24, 1) }}
+                          transition={{ duration: 0.5, ease: 'easeOut' }}
+                          style={{
+                            strokeDasharray: '201',
+                            strokeDashoffset: '0'
+                          }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <motion.span 
+                          key={totalQty}
+                          initial={{ scale: 1.2, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className={`text-2xl font-black ${meetsMinimum ? 'text-success-400' : totalQty > 0 ? 'text-primary-400' : 'text-white/40'}`}
                         >
-                          <svg className="w-5 h-5 text-success-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        </motion.div>
-                        <span className="text-success-400 font-bold text-sm">Minimum met!</span>
+                          {totalQty}
+                        </motion.span>
                       </div>
-                    ) : totalQty > 0 ? (
-                      <p className="text-primary-300 font-bold text-sm">
-                        {24 - totalQty} more needed
-                      </p>
-                    ) : (
-                      <p className="text-white/40 font-medium text-sm">
-                        24 piece minimum
-                      </p>
-                    )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <p className="text-white/60 text-sm font-medium mb-1">Total Quantity</p>
+                      {meetsMinimum ? (
+                        <div className="flex items-center gap-2">
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                          >
+                            <svg className="w-5 h-5 text-success-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          </motion.div>
+                          <span className="text-success-400 font-bold text-sm">Minimum met!</span>
+                        </div>
+                      ) : totalQty > 0 ? (
+                        <p className="text-primary-300 font-bold text-sm">
+                          {24 - totalQty} more needed
+                        </p>
+                      ) : (
+                        <p className="text-white/40 font-medium text-sm">
+                          24 piece minimum
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Quote */}
-              {multiGarmentQuote && meetsMinimum ? (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-3 pt-4 border-t border-white/10"
-                >
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Garments</span>
-                    <span className="font-bold">${multiGarmentQuote.garment_cost.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Print Cost</span>
-                    <span className="font-bold">${multiGarmentQuote.print_cost.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Setup ({multiGarmentQuote.total_screens} screens)</span>
-                    <span className="font-bold">${multiGarmentQuote.setup_fees.toFixed(2)}</span>
-                  </div>
-                  <div className="border-t border-white/10 pt-4 mt-4">
-                    <div className="flex justify-between items-baseline mb-3">
-                      <span className="text-white/80 font-bold">Estimated Total</span>
-                      <span className="text-3xl font-black text-primary-400">${multiGarmentQuote.total.toFixed(2)}</span>
+              {isCampaignMode ? (
+                // Campaign mode: Show per-garment pricing
+                Object.keys(campaignPrices).length > 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="pt-4 border-t border-white/10"
+                  >
+                    {selectedIds.length > 1 ? (
+                      // Multiple garments: show per-garment breakdown
+                      <div>
+                        <p className="text-white/60 text-sm font-medium mb-3">Price per shirt by style</p>
+                        <div className="space-y-2 mb-3">
+                          {selectedGarmentData.map((garment) => {
+                            const price = campaignPrices[garment.id]?.pricePerShirt
+                            if (!price) return null
+                            return (
+                              <div key={garment.id} className="flex items-center justify-between py-2 px-3 bg-white/5 rounded-lg">
+                                <span className="text-sm font-medium text-white/80 truncate mr-2">{garment.name}</span>
+                                <span className="text-lg font-black text-teal-400">
+                                  ${price.toFixed(2)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <p className="text-white/40 text-xs text-center">
+                          Includes garment + print cost
+                        </p>
+                      </div>
+                    ) : (
+                      // Single garment: show single price
+                      <div className="text-center">
+                        <p className="text-white/60 text-sm font-medium mb-2">Price per shirt</p>
+                        <p className="text-4xl font-black text-teal-400">
+                          ${(Object.values(campaignPrices)[0]?.pricePerShirt || 0).toFixed(2)}
+                        </p>
+                        <p className="text-white/40 text-xs mt-2">
+                          Includes garment + print cost
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : campaignPricesLoading || (hasColors && hasPrintLocations) ? (
+                  <div className="py-6 border-t border-white/10">
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full">
-                      <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                      </svg>
-                      <p className="text-sm text-white/70 font-bold">
-                        ~${multiGarmentQuote.per_shirt_price.toFixed(2)} per shirt
-                      </p>
-                    </div>
+                    <p className="text-white/50 font-medium text-sm text-center mt-3">Calculating price...</p>
                   </div>
-                </motion.div>
-              ) : !meetsMinimum ? (
-                <div className="text-center py-4 border-t border-white/10">
-                  <p className="text-white/50 font-medium text-sm">
-                    Add at least 24 pieces to see pricing
-                  </p>
-                </div>
+                ) : (
+                  <div className="text-center py-4 border-t border-white/10">
+                    <p className="text-white/50 font-medium text-sm">
+                      Select colors and print location to see pricing
+                    </p>
+                  </div>
+                )
               ) : (
-                <div className="py-6 border-t border-white/10">
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                // Regular mode: Show full pricing breakdown
+                multiGarmentQuote && meetsMinimum ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-3 pt-4 border-t border-white/10"
+                  >
+                    <div className="flex justify-between text-sm">
+                      <span className="text-white/60">Garments</span>
+                      <span className="font-bold">${multiGarmentQuote.garment_cost.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-white/60">Print Cost</span>
+                      <span className="font-bold">${multiGarmentQuote.print_cost.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-white/60">Setup ({multiGarmentQuote.total_screens} screens)</span>
+                      <span className="font-bold">${multiGarmentQuote.setup_fees.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-white/10 pt-4 mt-4">
+                      <div className="flex justify-between items-baseline mb-3">
+                        <span className="text-white/80 font-bold">Estimated Total</span>
+                        <span className="text-3xl font-black text-primary-400">${multiGarmentQuote.total.toFixed(2)}</span>
+                      </div>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full">
+                        <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        <p className="text-sm text-white/70 font-bold">
+                          ~${multiGarmentQuote.per_shirt_price.toFixed(2)} per shirt
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : !meetsMinimum ? (
+                  <div className="text-center py-4 border-t border-white/10">
+                    <p className="text-white/50 font-medium text-sm">
+                      Add at least 24 pieces to see pricing
+                    </p>
                   </div>
-                  <p className="text-white/50 font-medium text-sm text-center mt-3">Calculating quote...</p>
-                </div>
+                ) : (
+                  <div className="py-6 border-t border-white/10">
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <p className="text-white/50 font-medium text-sm text-center mt-3">Calculating quote...</p>
+                  </div>
+                )
               )}
 
               {/* Validation Checklist */}
               <div className="mt-6 pt-5 border-t border-white/10 space-y-3">
-                {[
+                {(isCampaignMode ? [
+                  { label: 'Colors selected', checked: hasColors },
+                  { label: 'Print location selected', checked: hasPrintLocations },
+                ] : [
                   { label: 'Colors selected', checked: hasColors },
                   { label: 'Minimum 24 pieces', checked: meetsMinimum },
                   { label: 'Print location selected', checked: hasPrintLocations },
-                ].map(({ label, checked }) => (
+                ]).map(({ label, checked }) => (
                   <div key={label} className="flex items-center gap-3">
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
                       checked ? 'bg-success-500' : 'border-2 border-white/20'

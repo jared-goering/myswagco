@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
+import { trackSignUp, trackLogin, event } from '@/lib/analytics'
 
 type AuthMode = 'login' | 'signup' | 'forgot'
 
@@ -13,6 +14,15 @@ const FEATURE_MESSAGES = {
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+      </svg>
+    ),
+  },
+  campaign: {
+    title: 'Sign in to create a Group Campaign',
+    message: 'Create an account to set up group campaigns where your team can pick sizes and pay themselves.',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     ),
   },
@@ -109,6 +119,7 @@ export default function CustomerAuthModal() {
       if (mode === 'signup') {
         const { error } = await signUpWithEmail(email, password, name)
         if (error) throw error
+        trackSignUp('email')
         setSuccess('Account created! Please check your email to confirm.')
         return
       }
@@ -116,6 +127,7 @@ export default function CustomerAuthModal() {
       if (mode === 'login') {
         const { error } = await signInWithEmail(email, password)
         if (error) throw error
+        trackLogin('email')
         // Modal will close automatically on successful auth
       }
     } catch (err) {
@@ -132,6 +144,8 @@ export default function CustomerAuthModal() {
     try {
       const { error } = await signInWithGoogle()
       if (error) throw error
+      // Track Google sign-in attempt (actual success tracked after redirect)
+      event('google_auth_initiated', { method: 'google' })
       // User will be redirected to Google
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google')
@@ -162,7 +176,7 @@ export default function CustomerAuthModal() {
           onClick={(e) => e.stopPropagation()}
         >
           {/* Decorative gradient header */}
-          <div className="h-2 bg-gradient-to-r from-primary-500 via-violet-500 to-fuchsia-500" />
+          <div className="h-2 bg-gradient-to-r from-primary-500 via-teal-500 to-cyan-500" />
           
           {/* Close button */}
           <button
@@ -177,9 +191,9 @@ export default function CustomerAuthModal() {
           <div className="p-6 sm:p-8">
             {/* Feature-specific header */}
             {featureInfo && mode === 'login' && (
-              <div className="mb-6 p-4 bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-xl border border-violet-100">
+              <div className="mb-6 p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl border border-teal-100">
                 <div className="flex items-start gap-3">
-                  <div className="p-2 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg text-white">
+                  <div className="p-2 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-lg text-white">
                     {featureInfo.icon}
                   </div>
                   <div>

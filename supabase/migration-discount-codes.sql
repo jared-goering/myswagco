@@ -50,3 +50,4 @@ VALUES
   ('SUMMER2024', '15% summer sale discount', 'percentage', 15.00, true, '2024-09-01 00:00:00+00')
 ON CONFLICT (code) DO NOTHING;
 
+

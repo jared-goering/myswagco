@@ -4,3 +4,4 @@
 ALTER TABLE pending_orders ADD COLUMN IF NOT EXISTS discount_code_id UUID REFERENCES discount_codes(id);
 ALTER TABLE pending_orders ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2);
 
+

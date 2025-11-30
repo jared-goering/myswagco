@@ -1,8 +1,16 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput, SelectedGarments, GarmentSelection, MultiGarmentQuoteResponse, AppliedDiscount } from '@/types'
+import { PrintConfig, SizeQuantities, ColorSizeQuantities, QuoteResponse, ArtworkTransform, PrintLocation, ArtworkFile, VectorizationStatus, OrderDraft, OrderDraftInput, SelectedGarments, GarmentSelection, MultiGarmentQuoteResponse, AppliedDiscount, OrderMode, PaymentStyle } from '@/types'
 
 interface OrderState {
+  // Order mode (regular or campaign)
+  orderMode: OrderMode
+  
+  // Campaign-specific fields
+  campaignName: string
+  campaignDeadline: string
+  paymentStyle: PaymentStyle
+  
   // Draft tracking
   draftId: string | null
   
@@ -55,6 +63,19 @@ interface OrderState {
   // Text description for artwork (persisted)
   textDescription: string
   
+  // Mockup image data URLs (captured from design editor canvas, one per color)
+  mockupImageDataUrls: Record<string, string>
+  
+  // Order mode actions
+  setOrderMode: (mode: OrderMode) => void
+  
+  // Campaign actions
+  setCampaignName: (name: string) => void
+  setCampaignDeadline: (deadline: string) => void
+  setPaymentStyle: (style: PaymentStyle) => void
+  setCampaignDetails: (details: { name?: string; deadline?: string; paymentStyle?: PaymentStyle }) => void
+  resetCampaign: () => void
+  
   // Multi-garment actions
   addGarment: (garmentId: string) => void
   removeGarment: (garmentId: string) => void
@@ -88,6 +109,8 @@ interface OrderState {
   setTextDescription: (text: string) => void
   setAppliedDiscount: (discount: AppliedDiscount | null, discountCodeId: string | null) => void
   clearDiscount: () => void
+  setMockupImageDataUrl: (color: string, dataUrl: string) => void
+  clearMockupImages: () => void
   reset: () => void
   
   // Draft management actions
@@ -100,6 +123,14 @@ interface OrderState {
 }
 
 const initialState = {
+  // Order mode
+  orderMode: 'regular' as OrderMode,
+  
+  // Campaign fields
+  campaignName: '',
+  campaignDeadline: '',
+  paymentStyle: 'everyone_pays' as PaymentStyle,
+  
   draftId: null as string | null,
   selectedGarments: {} as SelectedGarments,
   garmentId: null as string | null,
@@ -129,13 +160,33 @@ const initialState = {
   multiGarmentQuote: null as MultiGarmentQuoteResponse | null,
   appliedDiscount: null as AppliedDiscount | null,
   discountCodeId: null as string | null,
-  textDescription: ''
+  textDescription: '',
+  mockupImageDataUrls: {} as Record<string, string>
 }
 
 export const useOrderStore = create<OrderState>()(
   persist(
     (set, get) => ({
       ...initialState,
+      
+      // Order mode actions
+      setOrderMode: (mode) => set({ orderMode: mode }),
+      
+      // Campaign actions
+      setCampaignName: (name) => set({ campaignName: name }),
+      setCampaignDeadline: (deadline) => set({ campaignDeadline: deadline }),
+      setPaymentStyle: (style) => set({ paymentStyle: style }),
+      setCampaignDetails: (details) => set({
+        ...(details.name !== undefined && { campaignName: details.name }),
+        ...(details.deadline !== undefined && { campaignDeadline: details.deadline }),
+        ...(details.paymentStyle !== undefined && { paymentStyle: details.paymentStyle }),
+      }),
+      resetCampaign: () => set({
+        orderMode: 'regular',
+        campaignName: '',
+        campaignDeadline: '',
+        paymentStyle: 'everyone_pays',
+      }),
       
       // Multi-garment actions
       addGarment: (garmentId) => set((state) => ({
@@ -344,6 +395,10 @@ export const useOrderStore = create<OrderState>()(
       setTextDescription: (text) => set({ textDescription: text }),
       setAppliedDiscount: (discount, discountCodeId) => set({ appliedDiscount: discount, discountCodeId }),
       clearDiscount: () => set({ appliedDiscount: null, discountCodeId: null }),
+      setMockupImageDataUrl: (color, dataUrl) => set((state) => ({
+        mockupImageDataUrls: { ...state.mockupImageDataUrls, [color]: dataUrl }
+      })),
+      clearMockupImages: () => set({ mockupImageDataUrls: {} }),
       reset: () => set(initialState),
       
       // Draft management
@@ -480,6 +535,12 @@ export const useOrderStore = create<OrderState>()(
       storage: createJSONStorage(() => sessionStorage),
       // Only persist serializable data - exclude File objects
       partialize: (state) => ({
+        // Order mode and campaign fields
+        orderMode: state.orderMode,
+        campaignName: state.campaignName,
+        campaignDeadline: state.campaignDeadline,
+        paymentStyle: state.paymentStyle,
+        // Draft and garment data
         draftId: state.draftId,
         selectedGarments: state.selectedGarments,
         garmentId: state.garmentId,
@@ -500,6 +561,7 @@ export const useOrderStore = create<OrderState>()(
         appliedDiscount: state.appliedDiscount,
         discountCodeId: state.discountCodeId,
         textDescription: state.textDescription,
+        mockupImageDataUrls: state.mockupImageDataUrls,
         // Note: artworkFiles is NOT persisted as File objects can't be serialized
       }),
     }

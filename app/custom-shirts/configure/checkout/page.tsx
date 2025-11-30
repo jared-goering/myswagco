@@ -12,6 +12,7 @@ import { Garment, MultiGarmentQuoteResponse } from '@/types'
 import { motion } from 'framer-motion'
 import SignInPromptCard from '@/components/SignInPromptCard'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
+import { trackBeginCheckout, trackFunnelStep, trackConversion, event } from '@/lib/analytics'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -61,6 +62,19 @@ export default function MultiGarmentCheckout() {
     fetchGarments()
     fetchQuote()
   }, [])
+
+  // Track checkout step when quote is loaded
+  useEffect(() => {
+    if (multiGarmentQuote && selectedIds.length > 0) {
+      const items = selectedIds.map(id => ({
+        item_id: id,
+        item_name: garments.find(g => g.id === id)?.name || 'Garment',
+        quantity: getTotalQuantity()
+      }))
+      trackBeginCheckout(items, multiGarmentQuote.total)
+      trackFunnelStep('custom_order', 4, 'checkout')
+    }
+  }, [multiGarmentQuote, selectedIds.length])
 
   async function fetchGarments() {
     try {
@@ -174,7 +188,7 @@ export default function MultiGarmentCheckout() {
                   {customer?.avatar_url ? (
                     <img src={customer.avatar_url} alt={customer?.name || 'Avatar'} className="w-8 h-8 rounded-full" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                       {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
@@ -671,6 +685,9 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       // Store pending order ID for confirmation page
       sessionStorage.setItem('pendingOrderId', pendingOrder.id)
       sessionStorage.setItem('paymentIntentId', paymentIntentId)
+      
+      // Track payment step
+      event('checkout_payment_step', { deposit_amount: discountedDeposit })
       
       setStep('payment')
     } catch (err: any) {

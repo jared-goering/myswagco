@@ -13,7 +13,7 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bgColor
   art_revision_needed: { label: 'Revision Needed', color: 'text-rose-700', bgColor: 'bg-rose-50' },
   in_production: { label: 'In Production', color: 'text-blue-700', bgColor: 'bg-blue-50' },
   balance_due: { label: 'Balance Due', color: 'text-orange-700', bgColor: 'bg-orange-50' },
-  ready_to_ship: { label: 'Ready to Ship', color: 'text-violet-700', bgColor: 'bg-violet-50' },
+  ready_to_ship: { label: 'Ready to Ship', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   completed: { label: 'Completed', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   cancelled: { label: 'Cancelled', color: 'text-charcoal-500', bgColor: 'bg-charcoal-50' },
 }
@@ -94,7 +94,7 @@ export default function OrdersPage() {
                   className="w-8 h-8 rounded-full"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                   {(customer?.name || customer?.email || user?.email)?.[0]?.toUpperCase() || '?'}
                 </div>
               )}
@@ -143,8 +143,8 @@ export default function OrdersPage() {
           </div>
         ) : orders.length === 0 ? (
           <div className="bento-card text-center py-16">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center">
-              <svg className="w-10 h-10 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center">
+              <svg className="w-10 h-10 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
@@ -154,7 +154,7 @@ export default function OrdersPage() {
             </p>
             <Link
               href="/custom-shirts"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-violet-500 text-white rounded-bento-lg font-black hover:shadow-lg transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-teal-500 text-white rounded-bento-lg font-black hover:shadow-lg transition-all"
             >
               Start Shopping
             </Link>

@@ -27,7 +27,7 @@ interface CustomerAuthContextType {
 export interface AuthModalContext {
   title?: string
   message?: string
-  feature?: 'ai_generator' | 'save_artwork' | 'view_orders' | 'checkout'
+  feature?: 'ai_generator' | 'save_artwork' | 'view_orders' | 'checkout' | 'campaign'
   onSuccess?: () => void
   redirectTo?: string
   initialMode?: 'login' | 'signup' | 'forgot'
