@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { createOrderFromCampaign } from '@/lib/campaign-order'
+import { ShippingAddress } from '@/types'
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -53,6 +55,8 @@ export async function POST(
     }
     
     const { slug } = params
+    const body = await request.json().catch(() => ({}))
+    const { shipping_address } = body as { shipping_address?: ShippingAddress }
     
     // Get the campaign
     const { data: campaign } = await supabaseAdmin
@@ -92,6 +96,15 @@ export async function POST(
       )
     }
     
+    // Shipping address is required for creating the production order
+    if (!shipping_address || !shipping_address.line1 || !shipping_address.city || 
+        !shipping_address.state || !shipping_address.postal_code) {
+      return NextResponse.json(
+        { error: 'Shipping address is required' },
+        { status: 400 }
+      )
+    }
+    
     // Get all confirmed orders for this campaign
     const { data: orders } = await supabaseAdmin
       .from('campaign_orders')
@@ -111,7 +124,7 @@ export async function POST(
     const totalAmount = campaign.price_per_shirt * totalQuantity
     const amountInCents = Math.round(totalAmount * 100)
     
-    // Create payment intent
+    // Create payment intent with shipping address in metadata
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: 'usd',
@@ -122,6 +135,7 @@ export async function POST(
         campaign_name: campaign.name,
         total_quantity: totalQuantity.toString(),
         order_count: orders.length.toString(),
+        shipping_address: JSON.stringify(shipping_address),
       },
       receipt_email: campaign.organizer_email || user.email || undefined,
       description: `${campaign.name} - ${totalQuantity} shirts`,
@@ -142,7 +156,7 @@ export async function POST(
   }
 }
 
-// PATCH - Confirm payment and close campaign
+// PATCH - Confirm payment, create production order, and complete campaign
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { slug: string } }
@@ -168,10 +182,10 @@ export async function PATCH(
       )
     }
     
-    // Get the campaign
+    // Get the campaign with organizer info
     const { data: campaign } = await supabaseAdmin
       .from('campaigns')
-      .select('id, organizer_id, payment_style, status')
+      .select('id, name, organizer_id, organizer_name, organizer_email, payment_style, status')
       .eq('slug', slug)
       .single()
     
@@ -216,21 +230,45 @@ export async function PATCH(
       )
     }
     
-    // Close the campaign
-    const { error: updateError } = await supabaseAdmin
-      .from('campaigns')
-      .update({ status: 'closed' })
-      .eq('id', campaign.id)
-    
-    if (updateError) {
-      console.error('Error closing campaign:', updateError)
+    // Extract shipping address from payment intent metadata
+    let shippingAddress: ShippingAddress
+    try {
+      shippingAddress = JSON.parse(paymentIntent.metadata.shipping_address || '{}')
+      if (!shippingAddress.line1 || !shippingAddress.city) {
+        throw new Error('Invalid shipping address')
+      }
+    } catch (e) {
       return NextResponse.json(
-        { error: 'Failed to close campaign' },
+        { error: 'Invalid shipping address in payment' },
+        { status: 400 }
+      )
+    }
+    
+    // Create the production order from campaign
+    // isFullyPaid: true because the organizer just paid the full campaign amount via Stripe
+    const orderResult = await createOrderFromCampaign({
+      campaignId: campaign.id,
+      campaignSlug: slug,
+      shippingAddress,
+      organizerName: campaign.organizer_name || user.email || 'Campaign Organizer',
+      organizerEmail: campaign.organizer_email || user.email || '',
+      organizerId: campaign.organizer_id,
+      paymentIntentId,
+      isFullyPaid: true // Full amount was just paid via Stripe
+    })
+    
+    if (!orderResult.success) {
+      console.error('Error creating order from campaign:', orderResult.error)
+      return NextResponse.json(
+        { error: orderResult.error || 'Failed to create production order' },
         { status: 500 }
       )
     }
     
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ 
+      success: true,
+      orderId: orderResult.orderId
+    })
   } catch (error: any) {
     console.error('Error confirming organizer payment:', error)
     return NextResponse.json(

@@ -4,7 +4,9 @@ import Script from 'next/script'
 import './globals.css'
 import Providers from '@/components/Providers'
 import GoogleAnalytics from '@/components/GoogleAnalytics'
-import { GA_MEASUREMENT_ID } from '@/lib/analytics'
+
+// GA4 Measurement ID - read at build time
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -132,18 +134,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Google Tag Manager (gtag.js) - shared by GA4 and Google Ads */}
+        {/* Google Ads Tag - Always load first for Google Ads detection */}
         <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID || 'AW-17766992287'}`}
+          src="https://www.googletagmanager.com/gtag/js?id=AW-17766992287"
           strategy="afterInteractive"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="gtag-init" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
             gtag('config', 'AW-17766992287');
+            ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
           `}
         </Script>
       </head>

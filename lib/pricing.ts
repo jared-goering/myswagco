@@ -27,8 +27,10 @@ export function calculateActiveLocations(printConfig: PrintConfig): number {
 
 /**
  * Get the pricing tier for a given quantity
+ * Falls back to the lowest tier if quantity is below all tier minimums
  */
 export async function getPricingTierForQuantity(quantity: number) {
+  // First try to find a tier that matches the quantity
   const { data: tier, error } = await supabaseAdmin
     .from('pricing_tiers')
     .select('*')
@@ -38,12 +40,25 @@ export async function getPricingTierForQuantity(quantity: number) {
     .limit(1)
     .single()
 
-  if (error) {
-    console.error('Error fetching pricing tier:', error)
+  if (!error && tier) {
+    return tier
+  }
+
+  // If no tier found (quantity below minimum), fall back to lowest tier
+  // This handles campaign orders that may have quantities below the normal minimum
+  const { data: lowestTier, error: lowestError } = await supabaseAdmin
+    .from('pricing_tiers')
+    .select('*')
+    .order('min_qty', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (lowestError || !lowestTier) {
+    console.error('Error fetching pricing tier:', error || lowestError)
     throw new Error('Unable to fetch pricing tier')
   }
 
-  return tier
+  return lowestTier
 }
 
 /**

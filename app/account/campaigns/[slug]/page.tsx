@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -8,7 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useCustomerAuth } from '@/lib/auth/CustomerAuthContext'
-import { Campaign, CampaignOrder, CampaignStats } from '@/types'
+import { Campaign, CampaignOrder, CampaignStats, ShippingAddress } from '@/types'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
+import { trackConversion, trackPurchase } from '@/lib/analytics'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -45,6 +47,17 @@ export default function CampaignDashboardPage() {
   const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null)
   const [paymentData, setPaymentData] = useState<{ amount: number; totalQuantity: number; orderCount: number } | null>(null)
   const [initializingPayment, setInitializingPayment] = useState(false)
+  
+  // Shipping address state for payment flow
+  const [showShippingModal, setShowShippingModal] = useState(false)
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'US'
+  })
 
   // Group orders by participant email + close timestamps (within 5 seconds)
   const groupedOrders = useMemo<GroupedOrder[]>(() => {
@@ -190,10 +203,10 @@ export default function CampaignDashboardPage() {
   }
 
   async function endCampaignEarly() {
-    // For organizer_pays campaigns with orders, show payment modal
+    // For organizer_pays campaigns with orders, show shipping address modal first
     if (campaign?.payment_style === 'organizer_pays' && (stats?.total_quantity || 0) > 0) {
       setShowEndCampaignModal(false)
-      await initializeOrganizerPayment()
+      setShowShippingModal(true)
       return
     }
     
@@ -224,12 +237,38 @@ export default function CampaignDashboardPage() {
       setEndingCampaign(false)
     }
   }
+  
+  // Validate shipping address
+  function isShippingAddressValid(): boolean {
+    return !!(
+      shippingAddress.line1.trim() &&
+      shippingAddress.city.trim() &&
+      shippingAddress.state.trim() &&
+      shippingAddress.postal_code.trim()
+    )
+  }
+  
+  // Proceed from shipping to payment
+  async function proceedToPayment() {
+    if (!isShippingAddressValid()) {
+      alert('Please fill in all required address fields')
+      return
+    }
+    setShowShippingModal(false)
+    await initializeOrganizerPayment()
+  }
 
   async function initializeOrganizerPayment() {
     setInitializingPayment(true)
     try {
       const response = await fetch(`/api/campaigns/${slug}/pay`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shipping_address: shippingAddress
+        })
       })
       
       if (response.ok) {
@@ -256,6 +295,12 @@ export default function CampaignDashboardPage() {
 
   async function handlePaymentSuccess(paymentIntentId: string) {
     try {
+      // Track Google Ads conversion for organizer payment
+      if (paymentData?.amount) {
+        trackConversion('campaign_order', paymentData.amount, paymentIntentId)
+        trackPurchase(paymentIntentId, [], paymentData.amount)
+      }
+      
       // Confirm payment and close campaign
       const response = await fetch(`/api/campaigns/${slug}/pay`, {
         method: 'PATCH',
@@ -405,11 +450,13 @@ export default function CampaignDashboardPage() {
           <div className="flex items-center gap-2 mb-2">
             <h1 className="text-3xl font-black text-charcoal-700 tracking-tight">{campaign.name}</h1>
             <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-              isActive 
-                ? 'bg-emerald-100 text-emerald-700' 
-                : 'bg-surface-200 text-charcoal-500'
+              campaign.status === 'completed'
+                ? 'bg-emerald-100 text-emerald-700'
+                : isActive 
+                  ? 'bg-teal-100 text-teal-700' 
+                  : 'bg-surface-200 text-charcoal-500'
             }`}>
-              {isActive ? 'Active' : 'Closed'}
+              {campaign.status === 'completed' ? 'Completed' : isActive ? 'Active' : 'Closed'}
             </span>
           </div>
           <p className="text-charcoal-500">
@@ -419,6 +466,23 @@ export default function CampaignDashboardPage() {
             }
           </p>
         </div>
+        
+        {/* Production Order Banner */}
+        {campaign.final_order_id && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold text-charcoal-700">Production Order Created</p>
+                <p className="text-sm text-charcoal-500">Your order is now in the production queue</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Stats */}
@@ -850,6 +914,174 @@ export default function CampaignDashboardPage() {
         )}
       </AnimatePresence>
 
+      {/* Shipping Address Modal */}
+      <AnimatePresence>
+        {showShippingModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowShippingModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-teal-500/30">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-black text-charcoal-700">Shipping Address</h3>
+                <p className="text-charcoal-500 mt-1">Where should we ship the completed order?</p>
+              </div>
+              
+              {/* Order Summary */}
+              <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl p-4 mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-charcoal-600 font-medium">Total shirts</span>
+                  <span className="font-bold text-charcoal-700">{stats?.total_quantity || 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-charcoal-600 font-medium">Estimated total</span>
+                  <span className="text-xl font-black text-charcoal-800">
+                    ${((campaign?.price_per_shirt || 0) * (stats?.total_quantity || 0)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Shipping Address Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    Street Address <span className="text-rose-500">*</span>
+                  </label>
+                  <AddressAutocomplete
+                    value={{
+                      line1: shippingAddress.line1,
+                      line2: shippingAddress.line2 || '',
+                      city: shippingAddress.city,
+                      state: shippingAddress.state,
+                      postal_code: shippingAddress.postal_code,
+                      country: shippingAddress.country
+                    }}
+                    onChange={(addr) => setShippingAddress({
+                      line1: addr.line1,
+                      line2: addr.line2,
+                      city: addr.city,
+                      state: addr.state,
+                      postal_code: addr.postal_code,
+                      country: addr.country
+                    })}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    Apt, Suite, Unit (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={shippingAddress.line2 || ''}
+                    onChange={(e) => setShippingAddress(prev => ({ ...prev, line2: e.target.value }))}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
+                    placeholder="Apartment, suite, unit, etc."
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                      City <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={shippingAddress.city}
+                      onChange={(e) => setShippingAddress(prev => ({ ...prev, city: e.target.value }))}
+                      className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                      State <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={shippingAddress.state}
+                      onChange={(e) => setShippingAddress(prev => ({ ...prev, state: e.target.value }))}
+                      className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
+                      placeholder="State"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                      ZIP Code <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={shippingAddress.postal_code}
+                      onChange={(e) => setShippingAddress(prev => ({ ...prev, postal_code: e.target.value }))}
+                      className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all outline-none"
+                      placeholder="12345"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={shippingAddress.country}
+                      onChange={(e) => setShippingAddress(prev => ({ ...prev, country: e.target.value }))}
+                      className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 bg-surface-50"
+                      disabled
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowShippingModal(false)}
+                  className="flex-1 py-3 px-4 font-bold text-charcoal-600 bg-surface-100 hover:bg-surface-200 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={proceedToPayment}
+                  disabled={!isShippingAddressValid() || initializingPayment}
+                  className="flex-1 py-3 px-4 font-bold text-white bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {initializingPayment ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    'Continue to Payment'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Organizer Payment Modal */}
       <AnimatePresence>
         {showPaymentModal && paymentClientSecret && paymentData && (
@@ -894,6 +1126,22 @@ export default function CampaignDashboardPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-charcoal-700 font-bold">Total</span>
                     <span className="text-3xl font-black text-charcoal-800">${paymentData.amount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Shipping Address Summary */}
+              <div className="bg-surface-50 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-charcoal-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <div className="text-sm">
+                    <p className="font-bold text-charcoal-700 mb-1">Ship to:</p>
+                    <p className="text-charcoal-600">{shippingAddress.line1}</p>
+                    {shippingAddress.line2 && <p className="text-charcoal-600">{shippingAddress.line2}</p>}
+                    <p className="text-charcoal-600">{shippingAddress.city}, {shippingAddress.state} {shippingAddress.postal_code}</p>
                   </div>
                 </div>
               </div>

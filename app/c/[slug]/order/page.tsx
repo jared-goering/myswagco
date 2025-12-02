@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -11,6 +11,7 @@ import { Campaign, Garment, CampaignGarmentConfig } from '@/types'
 import ProductCard from '@/components/campaign/ProductCard'
 import CartWidget from '@/components/campaign/CartWidget'
 import CheckoutForm from '@/components/campaign/CheckoutForm'
+import { trackConversion, trackPurchase } from '@/lib/analytics'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -173,7 +174,8 @@ export default function ParticipantOrderPage() {
         setClientSecret(payData.clientSecret)
         setStep('payment')
       } else {
-        // No payment needed, go to confirmation
+        // No payment needed (organizer_pays), track as free order conversion
+        trackConversion('campaign_order', 0, orderData.primary_order_id || orderData.id)
         setStep('confirmation')
       }
     } catch (err: any) {
@@ -434,6 +436,7 @@ export default function ParticipantOrderPage() {
                 <PaymentForm 
                   orderId={orderId} 
                   slug={slug} 
+                  amount={totalAmountDue}
                   onSuccess={() => setStep('confirmation')} 
                 />
               </Elements>
@@ -558,11 +561,12 @@ export default function ParticipantOrderPage() {
 }
 
 // Payment Form Component
-function PaymentForm({ orderId, slug, onSuccess }: { orderId: string; slug: string; onSuccess: () => void }) {
+function PaymentForm({ orderId, slug, amount, onSuccess }: { orderId: string; slug: string; amount: number; onSuccess: () => void }) {
   const stripe = useStripe()
   const elements = useElements()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasTrackedConversion = useRef(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -583,6 +587,13 @@ function PaymentForm({ orderId, slug, onSuccess }: { orderId: string; slug: stri
       setError(submitError.message || 'Payment failed')
       setSubmitting(false)
     } else if (paymentIntent?.status === 'succeeded') {
+      // Track Google Ads conversion (only once)
+      if (!hasTrackedConversion.current) {
+        hasTrackedConversion.current = true
+        trackConversion('campaign_order', amount, orderId)
+        trackPurchase(orderId, [], amount)
+      }
+      
       // Confirm payment on our backend to update order status
       try {
         const response = await fetch(`/api/campaigns/${slug}/orders/${orderId}/pay`, {

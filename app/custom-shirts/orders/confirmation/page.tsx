@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Order, Garment } from '@/types'
 import { useOrderStore } from '@/lib/store/orderStore'
 import { loadStripe } from '@stripe/stripe-js'
+import { trackConversion, trackFunnelComplete } from '@/lib/analytics'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY!)
 
@@ -20,6 +21,7 @@ function ConfirmationContent() {
   const hasCleanedUp = useRef(false)
   const hasUploadedArtwork = useRef(false)
   const isProcessingPayment = useRef(false)
+  const hasTrackedConversion = useRef(false)
 
   useEffect(() => {
     const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret')
@@ -126,6 +128,13 @@ function ConfirmationContent() {
       if (response.ok) {
         const data = await response.json()
         setOrder(data)
+        
+        // Track conversion for Google Ads (only once)
+        if (!hasTrackedConversion.current) {
+          hasTrackedConversion.current = true
+          trackConversion('deposit_paid', data.deposit_amount, orderId)
+          trackFunnelComplete('custom_order', data.total_cost)
+        }
         
         // Upload artwork if we have it in the store and haven't uploaded yet
         if (!hasUploadedArtwork.current && Object.keys(artworkFiles).some(k => artworkFiles[k])) {

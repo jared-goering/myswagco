@@ -227,6 +227,7 @@ export default function AdminOrderDetail() {
         garment_id: order.garment_id,
         garment_color: order.garment_color,
         size_quantities: order.size_quantities,
+        color_size_quantities: order.color_size_quantities,
         print_config: order.print_config,
         selected_garments: order.selected_garments || null
       })
@@ -459,10 +460,17 @@ export default function AdminOrderDetail() {
   async function saveOrderDetails() {
     setUpdating(true)
     try {
+      // Include payment data with order data so totals are saved
+      const dataToSave = {
+        ...orderData,
+        total_cost: paymentData.total_cost,
+        balance_due: paymentData.balance_due
+      }
+      
       const response = await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderData)
+        body: JSON.stringify(dataToSave)
       })
 
       if (response.ok) {
@@ -497,11 +505,91 @@ export default function AdminOrderDetail() {
         garment_id: order.garment_id,
         garment_color: order.garment_color,
         size_quantities: order.size_quantities,
+        color_size_quantities: order.color_size_quantities,
         print_config: order.print_config,
         selected_garments: order.selected_garments || null
       })
     }
   }
+
+  // Calculate total quantity from orderData (for editing)
+  function calculateOrderDataQuantity(): number {
+    // Multi-garment orders
+    if (orderData.selected_garments && Object.keys(orderData.selected_garments).length > 0) {
+      return Object.values(orderData.selected_garments).reduce((total: number, selection: any) => {
+        return total + Object.values(selection.colorSizeQuantities || {}).reduce((garmentTotal: number, sizeQty: any) => {
+          return garmentTotal + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+        }, 0)
+      }, 0)
+    }
+    // Multi-color orders
+    if (orderData.color_size_quantities && Object.keys(orderData.color_size_quantities).length > 0) {
+      return Object.values(orderData.color_size_quantities).reduce((total: number, sizeQty: any) => {
+        return total + Object.values(sizeQty).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+      }, 0)
+    }
+    // Legacy single-color orders
+    return Object.values(orderData.size_quantities || {}).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
+  }
+
+  // Recalculate total cost when order data changes during editing
+  async function recalculateTotalCost() {
+    const totalQuantity = calculateOrderDataQuantity()
+    if (totalQuantity === 0) {
+      setPaymentData(prev => ({
+        ...prev,
+        total_cost: 0,
+        balance_due: 0 - prev.deposit_amount
+      }))
+      return
+    }
+
+    try {
+      // Get garment ID(s) for pricing
+      let primaryGarmentId = orderData.garment_id
+      if (orderData.selected_garments && Object.keys(orderData.selected_garments).length > 0) {
+        primaryGarmentId = Object.keys(orderData.selected_garments)[0]
+      }
+
+      if (!primaryGarmentId) return
+
+      // Fetch quote for this configuration
+      const response = await fetch('/api/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          garment_id: primaryGarmentId,
+          quantity: totalQuantity,
+          print_config: orderData.print_config
+        })
+      })
+
+      if (response.ok) {
+        const quote = await response.json()
+        const newTotal = quote.total_cost || (quote.per_shirt_price * totalQuantity)
+        const newBalanceDue = Math.max(0, newTotal - paymentData.deposit_amount)
+        
+        setPaymentData(prev => ({
+          ...prev,
+          total_cost: newTotal,
+          balance_due: newBalanceDue
+        }))
+      }
+    } catch (error) {
+      console.error('Error recalculating total:', error)
+    }
+  }
+
+  // Auto-recalculate when editing order data
+  useEffect(() => {
+    if (editingOrder && orderData.print_config) {
+      // Debounce the recalculation
+      const timer = setTimeout(() => {
+        recalculateTotalCost()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [editingOrder, orderData.selected_garments, orderData.color_size_quantities, orderData.size_quantities, orderData.garment_id, orderData.print_config])
 
   async function savePaymentInfo() {
     setUpdating(true)
@@ -597,6 +685,9 @@ export default function AdminOrderDetail() {
     return Object.values(order.size_quantities || {}).reduce((sum: number, qty) => sum + (qty as number || 0), 0)
   }
   const totalQty = calculateTotalQuantity()
+  
+  // Standard sizes for size breakdown editing
+  const STANDARD_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
   
   // Get aggregated size quantities from all garments/colors
   const getAggregatedSizeQuantities = () => {
@@ -1270,6 +1361,75 @@ export default function AdminOrderDetail() {
                                   + Add Color
                                 </button>
                               </div>
+                              
+                              {/* Print Locations for this garment */}
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Print Locations</p>
+                                <div className="flex flex-wrap gap-3">
+                                  {['front', 'back'].map(location => {
+                                    const printConfig = selection.printConfig || orderData.print_config?.locations || {}
+                                    const locationConfig = printConfig[location] || { enabled: false, num_colors: 1 }
+                                    const isEnabled = locationConfig.enabled
+                                    
+                                    return (
+                                      <div key={location} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isEnabled}
+                                            onChange={(e) => {
+                                              const newPrintConfig = {
+                                                ...(selection.printConfig || {}),
+                                                [location]: {
+                                                  ...locationConfig,
+                                                  enabled: e.target.checked
+                                                }
+                                              }
+                                              const newSelectedGarments = {
+                                                ...orderData.selected_garments,
+                                                [garmentId]: {
+                                                  ...selection,
+                                                  printConfig: newPrintConfig
+                                                }
+                                              }
+                                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                            }}
+                                            className="w-4 h-4 text-blue-600 rounded"
+                                          />
+                                          <span className="text-sm font-medium capitalize">{location}</span>
+                                        </label>
+                                        {isEnabled && (
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="6"
+                                            value={locationConfig.num_colors || 1}
+                                            onChange={(e) => {
+                                              const newPrintConfig = {
+                                                ...(selection.printConfig || {}),
+                                                [location]: {
+                                                  ...locationConfig,
+                                                  num_colors: parseInt(e.target.value) || 1
+                                                }
+                                              }
+                                              const newSelectedGarments = {
+                                                ...orderData.selected_garments,
+                                                [garmentId]: {
+                                                  ...selection,
+                                                  printConfig: newPrintConfig
+                                                }
+                                              }
+                                              setOrderData({ ...orderData, selected_garments: newSelectedGarments })
+                                            }}
+                                            className="w-12 px-2 py-1 text-xs border border-gray-200 rounded"
+                                            title="Number of colors"
+                                          />
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
                             </div>
                           )
                         })}
@@ -1283,13 +1443,18 @@ export default function AdminOrderDetail() {
                             if (availableGarmentsToAdd.length > 0) {
                               const newGarment = availableGarmentsToAdd[0]
                               const defaultColor = newGarment.available_colors?.[0] || 'Default'
+                              // Copy print config from the first existing garment or use order-level config
+                              const firstGarmentId = Object.keys(orderData.selected_garments)[0]
+                              const firstGarmentConfig = orderData.selected_garments[firstGarmentId]?.printConfig || orderData.print_config?.locations || { front: { enabled: true, num_colors: 1 } }
+                              
                               const newSelectedGarments = {
                                 ...orderData.selected_garments,
                                 [newGarment.id]: {
                                   selectedColors: [defaultColor],
                                   colorSizeQuantities: {
                                     [defaultColor]: { S: 0, M: 0, L: 0, XL: 0 }
-                                  }
+                                  },
+                                  printConfig: { ...firstGarmentConfig }
                                 }
                               }
                               setOrderData({ ...orderData, selected_garments: newSelectedGarments })
@@ -1329,44 +1494,218 @@ export default function AdminOrderDetail() {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
-                          Garment Color
-                        </label>
-                        <input
-                          type="text"
-                          value={orderData.garment_color || ''}
-                          onChange={(e) => setOrderData({...orderData, garment_color: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
+                      {/* Size Breakdown - handles both color_size_quantities and size_quantities */}
                       <div>
                         <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">Size Breakdown</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          {Object.entries(orderData.size_quantities || {}).map(([size, qty]) => (
-                            <div key={size} className="flex items-center space-x-2">
-                              <label className="text-sm text-gray-600 w-16">{size}</label>
+                        
+                        {/* Multi-color orders (color_size_quantities) */}
+                        {orderData.color_size_quantities && Object.keys(orderData.color_size_quantities).length > 0 ? (
+                          <div className="space-y-4">
+                            {Object.entries(orderData.color_size_quantities).map(([color, sizeQty]: [string, any]) => (
+                              <div key={color} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <input
+                                    type="text"
+                                    value={color}
+                                    onChange={(e) => {
+                                      const newColor = e.target.value
+                                      if (newColor !== color) {
+                                        const newColorSizeQtys = { ...orderData.color_size_quantities }
+                                        newColorSizeQtys[newColor] = newColorSizeQtys[color]
+                                        delete newColorSizeQtys[color]
+                                        setOrderData({ ...orderData, color_size_quantities: newColorSizeQtys })
+                                      }
+                                    }}
+                                    className="text-sm font-medium px-2 py-1 border border-gray-200 rounded focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Color name"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newColorSizeQtys = { ...orderData.color_size_quantities }
+                                      delete newColorSizeQtys[color]
+                                      setOrderData({ ...orderData, color_size_quantities: newColorSizeQtys })
+                                    }}
+                                    className="text-red-400 hover:text-red-600 text-xs"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  {STANDARD_SIZES.map(size => (
+                                    <div key={size} className="flex items-center space-x-1 bg-white rounded px-2 py-1 border border-gray-100">
+                                      <label className="text-xs text-gray-500">{size}</label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={(sizeQty as Record<string, number>)[size] || 0}
+                                        onChange={(e) => {
+                                          const newQty = parseInt(e.target.value) || 0
+                                          const newColorSizeQtys = {
+                                            ...orderData.color_size_quantities,
+                                            [color]: {
+                                              ...sizeQty,
+                                              [size]: newQty
+                                            }
+                                          }
+                                          setOrderData({ ...orderData, color_size_quantities: newColorSizeQtys })
+                                        }}
+                                        className="w-14 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            {/* Add Color Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const usedColors = Object.keys(orderData.color_size_quantities || {})
+                                const currentGarment = availableGarments.find(g => g.id === orderData.garment_id)
+                                const availableColors = currentGarment?.available_colors?.filter((c: string) => !usedColors.includes(c)) || []
+                                const newColor = availableColors[0] || `Color ${usedColors.length + 1}`
+                                
+                                const newColorSizeQtys = {
+                                  ...orderData.color_size_quantities,
+                                  [newColor]: STANDARD_SIZES.reduce((acc, size) => ({ ...acc, [size]: 0 }), {})
+                                }
+                                setOrderData({ ...orderData, color_size_quantities: newColorSizeQtys })
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              + Add Color
+                            </button>
+                          </div>
+                        ) : (
+                          /* Legacy single-color orders (size_quantities) */
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">
+                                Garment Color
+                              </label>
                               <input
-                                type="number"
-                                min="0"
-                                value={qty as number}
-                                onChange={(e) => setOrderData({
-                                  ...orderData,
-                                  size_quantities: {
-                                    ...orderData.size_quantities,
-                                    [size]: parseInt(e.target.value) || 0
-                                  }
-                                })}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                type="text"
+                                value={orderData.garment_color || ''}
+                                onChange={(e) => setOrderData({...orderData, garment_color: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                               />
                             </div>
-                          ))}
-                        </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              {STANDARD_SIZES.map(size => (
+                                <div key={size} className="flex items-center space-x-2 bg-gray-50 rounded-lg px-2 py-1.5">
+                                  <label className="text-xs text-gray-500 w-8">{size}</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={(orderData.size_quantities || {})[size] || 0}
+                                    onChange={(e) => setOrderData({
+                                      ...orderData,
+                                      size_quantities: {
+                                        ...orderData.size_quantities,
+                                        [size]: parseInt(e.target.value) || 0
+                                      }
+                                    })}
+                                    className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            {/* Convert to multi-color button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Convert legacy size_quantities to color_size_quantities
+                                const colorName = orderData.garment_color || 'Default'
+                                const newColorSizeQtys = {
+                                  [colorName]: { ...orderData.size_quantities }
+                                }
+                                setOrderData({
+                                  ...orderData,
+                                  color_size_quantities: newColorSizeQtys,
+                                  size_quantities: null
+                                })
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              + Add Another Color
+                            </button>
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Add Another Garment Style Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Convert single-garment order to multi-garment format
+                          const currentGarmentId = orderData.garment_id
+                          const currentColor = orderData.garment_color || 'Default'
+                          
+                          // Get current print config from order-level settings
+                          const currentPrintConfig = orderData.print_config?.locations || { front: { enabled: true, num_colors: 1 } }
+                          
+                          // Build current garment's selection from existing data
+                          let currentSelection: any = { 
+                            selectedColors: [], 
+                            colorSizeQuantities: {},
+                            printConfig: { ...currentPrintConfig }
+                          }
+                          
+                          if (orderData.color_size_quantities && Object.keys(orderData.color_size_quantities).length > 0) {
+                            // Use color_size_quantities if available
+                            currentSelection = {
+                              selectedColors: Object.keys(orderData.color_size_quantities),
+                              colorSizeQuantities: orderData.color_size_quantities,
+                              printConfig: { ...currentPrintConfig }
+                            }
+                          } else if (orderData.size_quantities) {
+                            // Convert legacy size_quantities to multi-garment format
+                            currentSelection = {
+                              selectedColors: [currentColor],
+                              colorSizeQuantities: {
+                                [currentColor]: orderData.size_quantities
+                              },
+                              printConfig: { ...currentPrintConfig }
+                            }
+                          }
+                          
+                          // Find a new garment to add
+                          const availableGarmentsToAdd = availableGarments.filter(g => g.id !== currentGarmentId)
+                          if (availableGarmentsToAdd.length > 0) {
+                            const newGarment = availableGarmentsToAdd[0]
+                            const defaultColor = newGarment.available_colors?.[0] || 'Default'
+                            
+                            const newSelectedGarments = {
+                              [currentGarmentId]: currentSelection,
+                              [newGarment.id]: {
+                                selectedColors: [defaultColor],
+                                colorSizeQuantities: {
+                                  [defaultColor]: STANDARD_SIZES.reduce((acc, size) => ({ ...acc, [size]: 0 }), {})
+                                },
+                                // New garments start with front only by default - user can change
+                                printConfig: { front: { enabled: true, num_colors: 1 }, back: { enabled: false, num_colors: 1 } }
+                              }
+                            }
+                            
+                            setOrderData({
+                              ...orderData,
+                              selected_garments: newSelectedGarments,
+                              // Clear single-garment fields
+                              size_quantities: null,
+                              color_size_quantities: null
+                            })
+                          }
+                        }}
+                        className="mt-4 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                      >
+                        + Add Another Garment Style
+                      </button>
                     </>
                   )}
 
+                  {/* Print Locations - only show for single-garment orders (multi-garment has per-style print config) */}
+                  {!(orderData.selected_garments && Object.keys(orderData.selected_garments).length > 0) && (
                   <div>
                     <p className="text-xs font-medium text-gray-700 uppercase tracking-wide mb-3">Print Locations</p>
                     <div className="space-y-2">
@@ -1414,6 +1753,27 @@ export default function AdminOrderDetail() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                  )}
+                  
+                  {/* Calculated Total Display */}
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Calculated Total</p>
+                        <p className="text-xs text-blue-500 mt-0.5">
+                          {calculateOrderDataQuantity()} items
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-700">${paymentData.total_cost.toFixed(2)}</p>
+                        {paymentData.deposit_paid && paymentData.deposit_amount > 0 && (
+                          <p className="text-xs text-blue-500">
+                            Balance: ${paymentData.balance_due.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -349,19 +349,39 @@ export const trackConversion = (
     transaction_id: transactionId,
   })
   
-  // Google Ads conversion tracking (if you have conversion actions set up)
-  // Uncomment and add your conversion IDs when ready
-  // switch (conversionType) {
-  //   case 'deposit_paid':
-  //     gtag('event', 'conversion', { send_to: 'AW-17766992287/CONVERSION_LABEL' })
-  //     break
-  //   case 'campaign_created':
-  //     gtag('event', 'conversion', { send_to: 'AW-17766992287/CONVERSION_LABEL' })
-  //     break
-  //   case 'campaign_order':
-  //     gtag('event', 'conversion', { send_to: 'AW-17766992287/CONVERSION_LABEL' })
-  //     break
-  // }
+  // Google Ads conversion tracking
+  switch (conversionType) {
+    case 'deposit_paid':
+      // Purchase conversion for custom orders
+      gtag('event', 'conversion', {
+        send_to: 'AW-17766992287/OK46COecoMobEJ-T-5dC',
+        value: value,
+        currency: 'USD',
+        transaction_id: transactionId,
+      })
+      break
+    case 'campaign_order':
+      // Purchase conversion for campaign orders
+      gtag('event', 'conversion', {
+        send_to: 'AW-17766992287/OK46COecoMobEJ-T-5dC',
+        value: value,
+        currency: 'USD',
+        transaction_id: transactionId,
+      })
+      break
+  }
+}
+
+/**
+ * Track Google Ads purchase conversion directly
+ */
+export const trackGoogleAdsPurchase = (value: number, transactionId?: string) => {
+  gtag('event', 'conversion', {
+    send_to: 'AW-17766992287/OK46COecoMobEJ-T-5dC',
+    value: value,
+    currency: 'USD',
+    transaction_id: transactionId || '',
+  })
 }
 
 // ============================================

@@ -7,7 +7,8 @@ import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import AdminLayout from '@/components/AdminLayout'
 import GarmentPickerModal from '@/components/admin/GarmentPickerModal'
-import { Campaign, Garment, ArtworkTransform, CampaignGarmentConfig, PrintLocation } from '@/types'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
+import { Campaign, Garment, ArtworkTransform, CampaignGarmentConfig, PrintLocation, ShippingAddress } from '@/types'
 
 // Dynamically import the Konva-based renderer (no SSR since Konva needs window)
 const CampaignMockupRenderer = dynamic(
@@ -69,6 +70,18 @@ export default function AdminCampaignEdit() {
   
   // Track locally added garments (not yet fetched from API)
   const [localGarments, setLocalGarments] = useState<Garment[]>([])
+  
+  // Create production order modal state
+  const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
+  const [creatingOrder, setCreatingOrder] = useState(false)
+  const [orderShippingAddress, setOrderShippingAddress] = useState<ShippingAddress>({
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'US'
+  })
 
   useEffect(() => {
     fetchCampaign()
@@ -295,6 +308,59 @@ export default function AdminCampaignEdit() {
   
   // Check if we can delete a garment (need at least one remaining)
   const canDeleteGarment = Object.keys(editableGarmentConfigs).length > 1
+  
+  // Check if shipping address is valid
+  function isOrderShippingAddressValid(): boolean {
+    return !!(
+      orderShippingAddress.line1.trim() &&
+      orderShippingAddress.city.trim() &&
+      orderShippingAddress.state.trim() &&
+      orderShippingAddress.postal_code.trim()
+    )
+  }
+  
+  // Create production order from campaign
+  async function handleCreateOrder() {
+    if (!isOrderShippingAddressValid()) {
+      setError('Please fill in all required address fields')
+      return
+    }
+    
+    setCreatingOrder(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`/api/campaigns/${campaign?.slug}/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipping_address: orderShippingAddress
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data.success) {
+        setShowCreateOrderModal(false)
+        setSuccess(true)
+        // Refetch to get updated campaign with final_order_id
+        await fetchCampaign()
+        setTimeout(() => setSuccess(false), 3000)
+      } else {
+        setError(data.error || 'Failed to create production order')
+      }
+    } catch (err) {
+      console.error('Error creating production order:', err)
+      setError('Failed to create production order')
+    } finally {
+      setCreatingOrder(false)
+    }
+  }
+  
+  // Check if we can show the create order button
+  const canCreateOrder = campaign && !campaign.final_order_id && 
+    (campaign.status === 'closed' || campaign.status === 'active') &&
+    (campaign.order_count || 0) > 0
 
   // Get garments list - only show garments that are in editableGarmentConfigs
   const apiGarments = campaign?.garments || (campaign?.garment ? [campaign.garment] : [])
@@ -438,6 +504,60 @@ export default function AdminCampaignEdit() {
             <div className="text-sm font-bold text-charcoal-500">Pending</div>
           </div>
         </div>
+        
+        {/* Production Order Section */}
+        {campaign?.final_order_id ? (
+          <div className="mb-8 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold text-charcoal-700">Production Order Created</p>
+                <p className="text-sm text-charcoal-500">Order has been created and is in the production queue</p>
+              </div>
+            </div>
+            <Link
+              href={`/admin/orders/${campaign.final_order_id}`}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors flex items-center gap-2"
+            >
+              View Order
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        ) : canCreateOrder && (
+          <div className="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold text-charcoal-700">Ready to Create Production Order</p>
+                <p className="text-sm text-charcoal-500">
+                  {campaign?.payment_style === 'everyone_pays' 
+                    ? `${campaign.order_count} paid order${campaign.order_count !== 1 ? 's' : ''} ready for production`
+                    : `${campaign.order_count} confirmed order${campaign.order_count !== 1 ? 's' : ''} ready for production`
+                  }
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCreateOrderModal(true)}
+              className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-bold rounded-xl transition-colors flex items-center gap-2"
+            >
+              Create Production Order
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Left Column: Mockup Preview */}
@@ -905,6 +1025,171 @@ export default function AdminCampaignEdit() {
                 className="px-4 py-2 bg-error-600 hover:bg-error-700 text-white font-bold rounded-lg transition-colors"
               >
                 Remove Style
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Create Production Order Modal */}
+      {showCreateOrderModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/30">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-black text-charcoal-700">Create Production Order</h3>
+              <p className="text-charcoal-500 mt-1">Enter shipping address for the order</p>
+            </div>
+            
+            {/* Order Summary */}
+            <div className="bg-surface-50 rounded-xl p-4 mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-charcoal-600 font-medium">Campaign</span>
+                <span className="font-bold text-charcoal-700">{campaign?.name}</span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-charcoal-600 font-medium">Orders</span>
+                <span className="font-bold text-charcoal-700">{campaign?.order_count || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-charcoal-600 font-medium">Total shirts</span>
+                <span className="font-bold text-charcoal-700">{campaign?.total_quantity || 0}</span>
+              </div>
+            </div>
+            
+            {/* Shipping Address Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                  Street Address <span className="text-rose-500">*</span>
+                </label>
+                <AddressAutocomplete
+                  value={{
+                    line1: orderShippingAddress.line1,
+                    line2: orderShippingAddress.line2 || '',
+                    city: orderShippingAddress.city,
+                    state: orderShippingAddress.state,
+                    postal_code: orderShippingAddress.postal_code,
+                    country: orderShippingAddress.country
+                  }}
+                  onChange={(addr) => setOrderShippingAddress({
+                    line1: addr.line1,
+                    line2: addr.line2,
+                    city: addr.city,
+                    state: addr.state,
+                    postal_code: addr.postal_code,
+                    country: addr.country
+                  })}
+                  className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                  Apt, Suite, Unit (optional)
+                </label>
+                <input
+                  type="text"
+                  value={orderShippingAddress.line2 || ''}
+                  onChange={(e) => setOrderShippingAddress(prev => ({ ...prev, line2: e.target.value }))}
+                  className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+                  placeholder="Apartment, suite, unit, etc."
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    City <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={orderShippingAddress.city}
+                    onChange={(e) => setOrderShippingAddress(prev => ({ ...prev, city: e.target.value }))}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+                    placeholder="City"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    State <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={orderShippingAddress.state}
+                    onChange={(e) => setOrderShippingAddress(prev => ({ ...prev, state: e.target.value }))}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+                    placeholder="State"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    ZIP Code <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={orderShippingAddress.postal_code}
+                    onChange={(e) => setOrderShippingAddress(prev => ({ ...prev, postal_code: e.target.value }))}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
+                    placeholder="12345"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-charcoal-600 mb-2">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={orderShippingAddress.country}
+                    className="w-full border-2 border-surface-300 rounded-xl px-4 py-3 text-charcoal-700 bg-surface-50"
+                    disabled
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-error-100 border border-error-200 rounded-xl text-error-700 text-sm font-semibold">
+                {error}
+              </div>
+            )}
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateOrderModal(false)
+                  setError(null)
+                }}
+                disabled={creatingOrder}
+                className="flex-1 py-3 px-4 font-bold text-charcoal-600 bg-surface-100 hover:bg-surface-200 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateOrder}
+                disabled={!isOrderShippingAddressValid() || creatingOrder}
+                className="flex-1 py-3 px-4 font-bold text-white bg-primary-500 hover:bg-primary-600 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {creatingOrder ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Creating...
+                  </>
+                ) : (
+                  'Create Order'
+                )}
               </button>
             </div>
           </div>
