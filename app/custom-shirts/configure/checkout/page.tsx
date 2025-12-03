@@ -558,7 +558,7 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       
       // Upload artwork files BEFORE creating pending order (File objects can't persist across redirect)
       // Use artworkFileRecords if artworkFiles is empty (after page reload)
-      const uploadedArtwork: { location: string; file_url: string; file_name: string; transform?: any; file_size?: number }[] = []
+      const uploadedArtwork: { location: string; file_url: string; file_name: string; transform?: any; file_size?: number; cropped_file_url?: string | null }[] = []
       
       // First, check if we have File objects (normal case)
       const hasFileObjects = Object.values(store.artworkFiles).some(f => f !== null)
