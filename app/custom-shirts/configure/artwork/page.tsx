@@ -699,10 +699,27 @@ export default function MultiGarmentArtworkPage() {
       const response = await fetch(artwork.image_url)
       const blob = await response.blob()
       
-      const isVector = artwork.metadata?.is_vector || artwork.image_url.endsWith('.svg')
+      // Detect SVG more robustly: check metadata, URL (with query params), and blob type
+      // Note: Supabase might return various content types for SVGs
+      const svgBlobTypes = ['image/svg+xml', 'text/xml', 'application/xml']
+      const isVector = artwork.metadata?.is_vector || 
+        artwork.image_url.includes('.svg') ||
+        svgBlobTypes.includes(blob.type)
       const extension = isVector ? 'svg' : 'png'
+      const mimeType = isVector ? 'image/svg+xml' : blob.type
       const fileName = `${artwork.name}.${extension}`
-      const file = new File([blob], fileName, { type: blob.type })
+      const file = new File([blob], fileName, { type: mimeType })
+      
+      console.log('[SAVED ARTWORK DEBUG] Loading saved artwork:', {
+        artworkName: artwork.name,
+        imageUrl: artwork.image_url,
+        metadataIsVector: artwork.metadata?.is_vector,
+        urlIncludesSvg: artwork.image_url.includes('.svg'),
+        blobType: blob.type,
+        isVector,
+        fileName,
+        mimeType
+      })
       
       await handleFileSelect(selectedLocationForSaved, file, {
         skipAutoSave: true,

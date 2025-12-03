@@ -239,6 +239,86 @@ function getSvgViewBoxDimensions(svgDataUrl: string): { width: number; height: n
   }
 }
 
+// Crop SVG to its actual content bounds using getBBox()
+// This is much more accurate than pixel scanning for SVGs
+function cropSvgToContentBounds(
+  svgUrl: string,
+  onComplete: (croppedDataUrl: string, bounds: { width: number; height: number }) => void
+): void {
+  console.log('[SVG CROP] Starting SVG content detection...')
+  
+  // Fetch the SVG content
+  fetch(svgUrl)
+    .then(res => res.text())
+    .then(svgText => {
+      console.log('[SVG CROP] Fetched SVG, length:', svgText.length)
+      
+      // Create a temporary container to measure
+      const container = document.createElement('div')
+      container.style.position = 'absolute'
+      container.style.visibility = 'hidden'
+      container.style.left = '-9999px'
+      container.innerHTML = svgText
+      document.body.appendChild(container)
+      
+      const tempSvg = container.querySelector('svg')
+      if (!tempSvg) {
+        console.log('[SVG CROP] No SVG element found')
+        document.body.removeChild(container)
+        return
+      }
+      
+      // Get bounding box of all content using SVG's native getBBox()
+      const bbox = tempSvg.getBBox()
+      console.log('[SVG CROP] getBBox result:', bbox)
+      
+      document.body.removeChild(container)
+      
+      if (bbox.width <= 0 || bbox.height <= 0) {
+        console.log('[SVG CROP] Invalid bbox dimensions')
+        return
+      }
+      
+      // Parse the original SVG
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(svgText, 'image/svg+xml')
+      const svgElement = doc.documentElement
+      
+      // Add small padding (2%)
+      const pad = Math.max(bbox.width, bbox.height) * 0.02
+      const newViewBox = `${bbox.x - pad} ${bbox.y - pad} ${bbox.width + pad * 2} ${bbox.height + pad * 2}`
+      console.log('[SVG CROP] New viewBox:', newViewBox)
+      
+      // Update the SVG's viewBox to fit the content
+      svgElement.setAttribute('viewBox', newViewBox)
+      
+      // Set explicit dimensions based on content aspect ratio
+      const maxDim = 500
+      const aspectRatio = bbox.width / bbox.height
+      let newWidth: number, newHeight: number
+      if (aspectRatio > 1) {
+        newWidth = maxDim
+        newHeight = Math.round(maxDim / aspectRatio)
+      } else {
+        newHeight = maxDim
+        newWidth = Math.round(maxDim * aspectRatio)
+      }
+      svgElement.setAttribute('width', String(newWidth))
+      svgElement.setAttribute('height', String(newHeight))
+      
+      // Serialize back to data URL
+      const serializer = new XMLSerializer()
+      const newSvgText = serializer.serializeToString(svgElement)
+      const newDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(newSvgText)}`
+      
+      console.log('[SVG CROP] Created cropped SVG:', newWidth, 'x', newHeight)
+      onComplete(newDataUrl, { width: newWidth, height: newHeight })
+    })
+    .catch(err => {
+      console.error('[SVG CROP] Error:', err)
+    })
+}
+
 // Render SVG at full resolution and return via callback
 function renderSvgAtFullSize(
   svgDataUrl: string,
@@ -577,8 +657,14 @@ export default function DesignEditor({
     }
 
     // Generate an ID for the current artwork to detect actual changes
-    const artworkId = artworkFile?.name || artworkFileRecord?.id || artworkFileRecord?.file_url || null
+    // For fresh uploads with File object, use file properties (most reliable)
+    // For persisted records (no File), use record ID or URL
+    const artworkId = artworkFile 
+      ? `file-${artworkFile.name}-${artworkFile.size}-${artworkFile.lastModified}` 
+      : (artworkFileRecord?.id || artworkFileRecord?.file_url || null)
     const artworkChanged = artworkId !== prevArtworkIdRef.current
+    
+    console.log('[CROP DEBUG]', printLocation, '- artworkId:', artworkId, 'prev:', prevArtworkIdRef.current, 'changed:', artworkChanged)
     
     if (artworkChanged) {
       console.log('[CROP DEBUG]', printLocation, '- Artwork changed, resetting refs')
@@ -616,22 +702,92 @@ export default function DesignEditor({
       urlToLoad = persistedUrl
     }
 
-    // Check if we're loading a vectorized image
-    console.log('[CROP DEBUG]', printLocation, '- Checking isLoadingVectorized conditions:')
+    // Check if we should apply content cropping
+    // This applies to: 1) vectorized images, 2) directly uploaded SVGs
+    console.log('[CROP DEBUG]', printLocation, '- Checking shouldCropToContent conditions:')
+    console.log('[CROP DEBUG]', printLocation, '-   artworkFileRecord:', JSON.stringify(artworkFileRecord, null, 2))
     console.log('[CROP DEBUG]', printLocation, '-   vectorization_status:', artworkFileRecord?.vectorization_status)
     console.log('[CROP DEBUG]', printLocation, '-   vectorized_file_url exists:', !!artworkFileRecord?.vectorized_file_url)
+    console.log('[CROP DEBUG]', printLocation, '-   is_vector:', artworkFileRecord?.is_vector, 'typeof:', typeof artworkFileRecord?.is_vector)
     console.log('[CROP DEBUG]', printLocation, '-   urlToLoad:', urlToLoad?.substring(0, 100))
-    console.log('[CROP DEBUG]', printLocation, '-   URLs match:', urlToLoad === artworkFileRecord?.vectorized_file_url)
     
-    const isLoadingVectorized = artworkFileRecord?.vectorization_status === 'completed' && 
+    // Vectorized images (converted from raster to SVG) - these may have extra whitespace from vectorization
+    const isVectorizedImage = artworkFileRecord?.vectorization_status === 'completed' && 
       artworkFileRecord?.vectorized_file_url && 
       (urlToLoad === artworkFileRecord.vectorized_file_url)
+    
+    // Directly uploaded SVGs - use getBBox() for accurate content bounds
+    const isDirectSvg = artworkFileRecord?.is_vector === true && 
+      artworkFileRecord?.vectorization_status === 'not_needed'
+    
+    console.log('[CROP DEBUG]', printLocation, '-   isVectorizedImage:', isVectorizedImage)
+    console.log('[CROP DEBUG]', printLocation, '-   isDirectSvg:', isDirectSvg)
+    
+    // For vectorized images, use pixel scanning
+    // For direct SVGs, use getBBox() which is more accurate
+    const shouldCropToContent = isVectorizedImage
+
+    // For direct SVGs, use SVG-native getBBox() to crop to content
+    // Use a separate ref to track if cropping is in progress to avoid duplicate runs
+    if (isDirectSvg) {
+      // Skip if already processed or in progress
+      if (hasDetectedBoundsRef.current) {
+        console.log('[CROP DEBUG]', printLocation, '- Direct SVG: already processed, skipping')
+        return
+      }
+      
+      console.log('[CROP DEBUG]', printLocation, '- Direct SVG detected, using getBBox() cropping')
+      // Mark as in progress immediately to prevent duplicate runs
+      hasDetectedBoundsRef.current = true
+      
+      cropSvgToContentBounds(urlToLoad, (croppedDataUrl, bounds) => {
+        console.log('[CROP DEBUG]', printLocation, '- SVG cropped to:', bounds.width, 'x', bounds.height)
+        
+        // Load the cropped SVG as an image
+        const croppedImg = new window.Image()
+        croppedImg.crossOrigin = 'anonymous'
+        croppedImg.onload = () => {
+          console.log('[CROP DEBUG]', printLocation, '- Cropped SVG image loaded:', croppedImg.width, 'x', croppedImg.height)
+          
+          croppedVectorizedImageRef.current = croppedImg
+          lastImageDimensionsRef.current = { width: croppedImg.width, height: croppedImg.height }
+          setImage(croppedImg)
+          
+          // Calculate initial transform
+          if (!transform) {
+            const scale = Math.min(
+              printArea.width / croppedImg.width,
+              printArea.height / croppedImg.height,
+              1
+            ) * 0.8
+            
+            const scaledWidth = croppedImg.width * scale
+            const scaledHeight = croppedImg.height * scale
+            
+            const newTransform = {
+              x: printArea.x + (printArea.width - scaledWidth) / 2,
+              y: printArea.y + (printArea.height - scaledHeight) / 2,
+              scale,
+              rotation: 0,
+            }
+            onTransformChange(newTransform)
+            saveToHistory(newTransform)
+          }
+          
+          requestAnimationFrame(() => {
+            isInitialLoadRef.current = false
+          })
+        }
+        croppedImg.src = croppedDataUrl
+      })
+      return // Exit early, the callback will handle the rest
+    }
 
     const img = new window.Image()
     img.crossOrigin = 'anonymous' // Needed for data URLs and external URLs
     img.onload = () => {
       console.log('[CROP DEBUG]', printLocation, '- Image loaded, size:', img.width, 'x', img.height)
-      console.log('[CROP DEBUG]', printLocation, '- isLoadingVectorized:', isLoadingVectorized)
+      console.log('[CROP DEBUG]', printLocation, '- shouldCropToContent:', shouldCropToContent, '(vectorized:', isVectorizedImage, ', directSvg:', isDirectSvg, ')')
       console.log('[CROP DEBUG]', printLocation, '- hasDetectedBoundsRef.current:', hasDetectedBoundsRef.current)
       
       // Store dimensions for this image
@@ -641,7 +797,7 @@ export default function DesignEditor({
       let finalImage: HTMLImageElement = img
       let detectedCrop: ContentBounds | null = null
       
-      if (isLoadingVectorized && !hasDetectedBoundsRef.current) {
+      if (shouldCropToContent && !hasDetectedBoundsRef.current) {
         console.log('[CROP DEBUG]', printLocation, '- Calling detectContentBounds...')
         const bounds = detectContentBounds(img)
         console.log('[CROP DEBUG]', printLocation, '- bounds result:', bounds)
@@ -955,10 +1111,14 @@ export default function DesignEditor({
   const currentViewIsVectorizedRef = useRef(false)
   
   // Update the current view ref when view changes
+  // Both vectorized images and direct SVGs use the cropped version
   useEffect(() => {
-    const isVectorized = showVectorized && artworkFileRecord?.vectorization_status === 'completed'
+    const isVectorizedImage = artworkFileRecord?.vectorization_status === 'completed'
+    const isDirectSvg = artworkFileRecord?.is_vector === true && 
+      artworkFileRecord?.vectorization_status === 'not_needed'
+    const isVectorized = showVectorized && (isVectorizedImage || isDirectSvg)
     currentViewIsVectorizedRef.current = isVectorized
-  }, [showVectorized, artworkFileRecord?.vectorization_status])
+  }, [showVectorized, artworkFileRecord?.vectorization_status, artworkFileRecord?.is_vector])
   
   // Sync transform changes to the appropriate ref (so toggling restores correct size)
   // Only depends on transform - uses ref to determine which view we're on
@@ -998,7 +1158,12 @@ export default function DesignEditor({
       return
     }
 
-    const isVectorized = showVectorized && artworkFileRecord?.vectorization_status === 'completed'
+    // Check if we should show cropped version
+    // Both vectorized images and direct SVGs use cropped versions
+    const isVectorizedImage = artworkFileRecord?.vectorization_status === 'completed'
+    const isDirectSvg = artworkFileRecord?.is_vector === true && 
+      artworkFileRecord?.vectorization_status === 'not_needed'
+    const isVectorized = showVectorized && (isVectorizedImage || isDirectSvg)
     const wasVectorized = prevShowVectorizedRef.current
     
     // Only act if we're actually toggling (not initial render)
