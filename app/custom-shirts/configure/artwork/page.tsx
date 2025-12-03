@@ -676,6 +676,60 @@ export default function MultiGarmentArtworkPage() {
     setArtworkTransform(location, transform)
   }
 
+  // Handle cropped image from DesignEditor - upload and save the cropped version
+  // This ensures the admin panel sees exactly what was designed
+  async function handleCroppedImage(location: PrintLocation, dataUrl: string) {
+    const record = artworkFileRecords[location]
+    if (!record) {
+      console.log('[CROP] No record found for location:', location)
+      return
+    }
+    
+    // Don't re-upload if we already have a cropped URL
+    if (record.cropped_file_url) {
+      console.log('[CROP] Already have cropped URL for:', location)
+      return
+    }
+    
+    console.log('[CROP] Uploading cropped image for:', location, 'dataUrl length:', dataUrl.length)
+    
+    try {
+      // Convert data URL to blob
+      const response = await fetch(dataUrl)
+      const blob = await response.blob()
+      
+      // Create form data for upload
+      const formData = new FormData()
+      formData.append('file', blob, `cropped_${record.file_name || 'artwork'}.png`)
+      formData.append('location', location)
+      formData.append('is_cropped', 'true')
+      if (user) {
+        formData.append('user_id', user.id)
+      }
+      
+      // Upload to temp storage
+      const uploadResponse = await fetch('/api/artwork/upload-temp', {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (uploadResponse.ok) {
+        const result = await uploadResponse.json()
+        console.log('[CROP] Cropped image uploaded:', result.file_url)
+        
+        // Update the record with the cropped URL
+        setArtworkFileRecord(location, {
+          ...record,
+          cropped_file_url: result.file_url
+        })
+      } else {
+        console.error('[CROP] Failed to upload cropped image:', await uploadResponse.text())
+      }
+    } catch (error) {
+      console.error('[CROP] Error uploading cropped image:', error)
+    }
+  }
+
   async function fetchSavedArtwork() {
     if (!isAuthenticated) return
     setLoadingSavedArtwork(true)
@@ -1226,6 +1280,7 @@ export default function MultiGarmentArtworkPage() {
                                 setCanvasReadyForCapture(currentCaptureKeyRef.current)
                               }
                             }}
+                            onCroppedImage={handleCroppedImage}
                           />
                         </motion.div>
                       </AnimatePresence>

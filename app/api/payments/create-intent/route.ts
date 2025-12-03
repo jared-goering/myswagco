@@ -81,9 +81,21 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    // Stripe minimum charge is $0.50 USD
+    const MINIMUM_CHARGE_CENTS = 50
+    const amountCents = Math.round(amount * 100)
+    
+    // Ensure we meet Stripe's minimum charge requirement
+    if (amountCents < MINIMUM_CHARGE_CENTS) {
+      return NextResponse.json(
+        { error: `Payment amount must be at least $0.50. Current amount: $${amount.toFixed(2)}` },
+        { status: 400 }
+      )
+    }
+    
     // Create payment intent with setup_future_usage to save the card
     const paymentIntentData: Stripe.PaymentIntentCreateParams = {
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: amountCents,
       currency: 'usd',
       metadata,
       receipt_email: customerEmail || undefined

@@ -117,10 +117,17 @@ export default function CustomerAuthModal() {
       }
 
       if (mode === 'signup') {
-        const { error } = await signUpWithEmail(email, password, name)
+        const { error, requiresEmailConfirmation } = await signUpWithEmail(email, password, name)
         if (error) throw error
         trackSignUp('email')
-        setSuccess('Account created! Please check your email to confirm.')
+        // If email confirmation is required, show message. Otherwise, user is already signed in
+        // and the modal will close automatically via auth state change
+        if (requiresEmailConfirmation) {
+          setSuccess('Account created! Please check your email to confirm.')
+        } else {
+          // User is immediately signed in - modal will close via auth state change
+          setSuccess('Account created! Welcome!')
+        }
         return
       }
 

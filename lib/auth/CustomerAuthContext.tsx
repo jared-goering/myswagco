@@ -12,7 +12,7 @@ interface CustomerAuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error: Error | null }>
+  signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error: Error | null; requiresEmailConfirmation?: boolean }>
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: Error | null }>
@@ -122,12 +122,17 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
     })
-    return { error: error ? new Error(error.message) : null }
+    // If email confirmation is disabled, user will have a session immediately
+    // Return the session info so the UI can handle it appropriately
+    return { 
+      error: error ? new Error(error.message) : null,
+      requiresEmailConfirmation: !data.session && !error
+    }
   }
 
   const signInWithGoogle = async () => {

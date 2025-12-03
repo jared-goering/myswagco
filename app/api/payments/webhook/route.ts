@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
                       order_id: newOrder.id,
                       location: artwork.location,
                       file_url: artwork.file_url,
+                      cropped_file_url: artwork.cropped_file_url || null,
                       file_name: artwork.file_name || 'artwork',
                       file_size: 0,
                       is_vector: isVector,

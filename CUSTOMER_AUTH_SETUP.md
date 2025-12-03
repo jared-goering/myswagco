@@ -43,9 +43,17 @@ Email/password auth is enabled by default in Supabase. To customize:
 
 1. Go to **Authentication > Providers > Email**
 2. Configure options:
-   - **Enable email confirmations**: Recommended for production
-   - **Enable double confirmation**: Optional extra security
+   - **Enable email confirmations**: 
+     - ✅ **Enabled** (default): Users must confirm their email before signing in. More secure but adds friction.
+     - ❌ **Disabled**: Users are immediately signed in after signup. Better UX, less secure.
+   - **Enable double confirmation**: Optional extra security (only relevant if email confirmations are enabled)
    - **Minimum password length**: Default is 6
+
+**To disable email confirmation for easier sign-up:**
+1. Go to **Authentication > Providers > Email** in Supabase Dashboard
+2. Toggle off **"Enable email confirmations"**
+3. Save the configuration
+4. Users will now be automatically signed in immediately after creating an account
 
 ## Step 5: Set Up Email Templates (Optional)
 

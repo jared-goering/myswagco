@@ -33,6 +33,8 @@ interface DesignEditorProps {
   getLocationLabel?: (location: PrintLocation) => string
   // Capture callback - receives a function to capture the canvas as data URL
   onCaptureReady?: (captureFunc: () => string | null) => void
+  // Cropped image callback - called when image is cropped to content bounds
+  onCroppedImage?: (location: PrintLocation, dataUrl: string) => void
 }
 
 // Canvas dimensions - sized to show shirt proportionally (22" wide × 30" long)
@@ -462,7 +464,8 @@ export default function DesignEditor({
   onLocationChange,
   hasArtworkForLocation,
   getLocationLabel,
-  onCaptureReady
+  onCaptureReady,
+  onCroppedImage
 }: DesignEditorProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [isSelected, setIsSelected] = useState(false)
@@ -560,6 +563,18 @@ export default function DesignEditor({
     }
   }
 
+  // Helper to save transform with image dimensions
+  // This ensures the admin panel can render the design correctly
+  const saveTransformWithDimensions = useCallback((newTransform: Omit<ArtworkTransform, 'imageWidth' | 'imageHeight'>) => {
+    const transformWithDimensions: ArtworkTransform = {
+      ...newTransform,
+      imageWidth: image?.width,
+      imageHeight: image?.height,
+    }
+    onTransformChange(transformWithDimensions)
+    return transformWithDimensions
+  }, [image, onTransformChange])
+
   // Save to history
   const saveToHistory = useCallback((newTransform: ArtworkTransform) => {
     setHistory(prev => {
@@ -616,22 +631,22 @@ export default function DesignEditor({
       // Arrow keys to nudge
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        onTransformChange({ ...transform, x: transform.x - nudgeAmount })
+        saveTransformWithDimensions({ ...transform, x: transform.x - nudgeAmount })
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
-        onTransformChange({ ...transform, x: transform.x + nudgeAmount })
+        saveTransformWithDimensions({ ...transform, x: transform.x + nudgeAmount })
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        onTransformChange({ ...transform, y: transform.y - nudgeAmount })
+        saveTransformWithDimensions({ ...transform, y: transform.y - nudgeAmount })
       } else if (e.key === 'ArrowDown') {
         e.preventDefault()
-        onTransformChange({ ...transform, y: transform.y + nudgeAmount })
+        saveTransformWithDimensions({ ...transform, y: transform.y + nudgeAmount })
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [image, transform, isSelected, onTransformChange, handleUndo, handleRedo])
+  }, [image, transform, isSelected, saveTransformWithDimensions, handleUndo, handleRedo])
 
   // Load image when file changes and create stable URL
   // Also handle persisted records (after page reload)
@@ -743,6 +758,11 @@ export default function DesignEditor({
       cropSvgToContentBounds(urlToLoad, (croppedDataUrl, bounds) => {
         console.log('[CROP DEBUG]', printLocation, '- SVG cropped to:', bounds.width, 'x', bounds.height)
         
+        // Notify parent about the cropped image so it can be saved
+        if (onCroppedImage) {
+          onCroppedImage(printLocation, croppedDataUrl)
+        }
+        
         // Load the cropped SVG as an image
         const croppedImg = new window.Image()
         croppedImg.crossOrigin = 'anonymous'
@@ -764,11 +784,14 @@ export default function DesignEditor({
             const scaledWidth = croppedImg.width * scale
             const scaledHeight = croppedImg.height * scale
             
-            const newTransform = {
+            const newTransform: ArtworkTransform = {
               x: printArea.x + (printArea.width - scaledWidth) / 2,
               y: printArea.y + (printArea.height - scaledHeight) / 2,
               scale,
               rotation: 0,
+              // Include cropped image dimensions so admin panel can render correctly
+              imageWidth: croppedImg.width,
+              imageHeight: croppedImg.height,
             }
             onTransformChange(newTransform)
             saveToHistory(newTransform)
@@ -828,6 +851,13 @@ export default function DesignEditor({
             createCroppedImage(img, bounds, (croppedImg) => {
               console.log('[CROP DEBUG]', printLocation, '- Cropped image created, size:', croppedImg.width, 'x', croppedImg.height)
               console.log('[CROP DEBUG]', printLocation, '- Calling setImage with cropped image...')
+              
+              // Notify parent about the cropped image so it can be saved
+              // The image's src is a data URL from canvas.toDataURL()
+              if (onCroppedImage && croppedImg.src.startsWith('data:')) {
+                onCroppedImage(printLocation, croppedImg.src)
+              }
+              
               // Store cropped for toggling
               croppedVectorizedImageRef.current = croppedImg
               storedContentCropRef.current = detectedCrop
@@ -852,11 +882,14 @@ export default function DesignEditor({
                 const scaledWidth = effectiveW * scale
                 const scaledHeight = effectiveH * scale
                 
-                const newTransform = {
+                const newTransform: ArtworkTransform = {
                   x: printArea.x + (printArea.width - scaledWidth) / 2,
                   y: printArea.y + (printArea.height - scaledHeight) / 2,
                   scale,
                   rotation: 0,
+                  // Include cropped image dimensions so admin panel can render correctly
+                  imageWidth: effectiveW,
+                  imageHeight: effectiveH,
                 }
                 console.log('[CROP DEBUG]', printLocation, '- New transform scale:', scale)
                 // Store initial vectorized transform
@@ -886,11 +919,14 @@ export default function DesignEditor({
                   const newWidth = effectiveW * newScale
                   const newHeight = effectiveH * newScale
                   
-                  const newTransform = {
+                  const newTransform: ArtworkTransform = {
                     x: centerX - newWidth / 2,
                     y: centerY - newHeight / 2,
                     scale: newScale,
                     rotation: transform.rotation,
+                    // Include cropped image dimensions so admin panel can render correctly
+                    imageWidth: effectiveW,
+                    imageHeight: effectiveH,
                   }
                   console.log('[CROP DEBUG]', printLocation, '- New transform scale:', newScale)
                   // Store initial vectorized transform
@@ -936,11 +972,14 @@ export default function DesignEditor({
         const scaledWidth = effectiveW * scale
         const scaledHeight = effectiveH * scale
         
-        const newTransform = {
+        const newTransform: ArtworkTransform = {
           x: printArea.x + (printArea.width - scaledWidth) / 2,
           y: printArea.y + (printArea.height - scaledHeight) / 2,
           scale,
           rotation: 0,
+          // Include image dimensions so admin panel can render correctly
+          imageWidth: effectiveW,
+          imageHeight: effectiveH,
         }
         onTransformChange(newTransform)
         saveToHistory(newTransform)
@@ -997,8 +1036,8 @@ export default function DesignEditor({
       scale: newScale,
       rotation: node.rotation(),
     }
-    onTransformChange(newTransform)
-    saveToHistory(newTransform)
+    const transformWithDims = saveTransformWithDimensions(newTransform)
+    saveToHistory(transformWithDims)
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
@@ -1009,8 +1048,8 @@ export default function DesignEditor({
       scale: transform.scale,
       rotation: transform.rotation,
     }
-    onTransformChange(newTransform)
-    saveToHistory(newTransform)
+    const transformWithDims = saveTransformWithDimensions(newTransform)
+    saveToHistory(transformWithDims)
   }
 
   // Toolbar actions
@@ -1018,7 +1057,7 @@ export default function DesignEditor({
     if (!image || !transform) return
     const scaledWidth = image.width * transform.scale
     const scaledHeight = image.height * transform.scale
-    onTransformChange({
+    saveTransformWithDimensions({
       ...transform,
       x: printArea.x + (printArea.width - scaledWidth) / 2,
       y: printArea.y + (printArea.height - scaledHeight) / 2,
@@ -1036,7 +1075,7 @@ export default function DesignEditor({
     const scaledWidth = image.width * scale
     const scaledHeight = image.height * scale
     
-    onTransformChange({
+    saveTransformWithDimensions({
       x: printArea.x + (printArea.width - scaledWidth) / 2,
       y: printArea.y + (printArea.height - scaledHeight) / 2,
       scale,
@@ -1055,7 +1094,7 @@ export default function DesignEditor({
     const scaledWidth = image.width * scale
     const scaledHeight = image.height * scale
     
-    onTransformChange({
+    saveTransformWithDimensions({
       x: printArea.x + (printArea.width - scaledWidth) / 2,
       y: printArea.y + (printArea.height - scaledHeight) / 2,
       scale,
@@ -1068,7 +1107,7 @@ export default function DesignEditor({
 
   const handleRotate = (angle: number) => {
     if (!transform) return
-    onTransformChange({
+    saveTransformWithDimensions({
       ...transform,
       rotation: (transform.rotation + angle) % 360,
     })
@@ -1236,11 +1275,14 @@ export default function DesignEditor({
           const scaledWidth = origImg.width * scale
           const scaledHeight = origImg.height * scale
           
-          const newTransform = {
+          const newTransform: ArtworkTransform = {
             x: printArea.x + (printArea.width - scaledWidth) / 2,
             y: printArea.y + (printArea.height - scaledHeight) / 2,
             scale,
             rotation: transform.rotation,
+            // Include image dimensions
+            imageWidth: origImg.width,
+            imageHeight: origImg.height,
           }
           console.log('[CROP DEBUG] Calculated new original transform:', newTransform)
           originalTransformRef.current = newTransform

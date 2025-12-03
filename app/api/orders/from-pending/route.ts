@@ -205,26 +205,43 @@ export async function POST(request: NextRequest) {
 
     // Create artwork_files records from uploaded temp files
     if (pendingOrder.artwork_data && Array.isArray(pendingOrder.artwork_data)) {
+      console.log(`[ORDER CREATION] Processing ${pendingOrder.artwork_data.length} artwork files for order ${newOrder.id}`)
+      
       for (const artwork of pendingOrder.artwork_data) {
         if (artwork.file_url) {
           const isVector = artwork.file_name?.toLowerCase().endsWith('.svg') || 
                           artwork.file_name?.toLowerCase().endsWith('.ai') ||
                           artwork.file_name?.toLowerCase().endsWith('.eps')
           
-          await supabaseAdmin
+          const { error: insertError } = await supabaseAdmin
             .from('artwork_files')
             .insert({
               order_id: newOrder.id,
               location: artwork.location,
               file_url: artwork.file_url,
+              cropped_file_url: artwork.cropped_file_url || null,
               file_name: artwork.file_name || 'artwork',
-              file_size: 0,
+              file_size: artwork.file_size || 0,
               is_vector: isVector,
               vectorization_status: isVector ? 'not_needed' : 'pending',
               transform: artwork.transform || null
             })
+          
+          if (insertError) {
+            console.error(`[ORDER CREATION] Error inserting artwork file for order ${newOrder.id}:`, insertError)
+          } else {
+            console.log(`[ORDER CREATION] Successfully created artwork file record for ${artwork.location}`)
+          }
+        } else {
+          console.warn(`[ORDER CREATION] Artwork entry missing file_url:`, artwork)
         }
       }
+    } else {
+      console.warn(`[ORDER CREATION] No artwork_data found in pending order ${pendingOrderId}`, {
+        has_artwork_data: !!pendingOrder.artwork_data,
+        artwork_data_type: typeof pendingOrder.artwork_data,
+        artwork_data_value: pendingOrder.artwork_data
+      })
     }
 
     // Send confirmation email

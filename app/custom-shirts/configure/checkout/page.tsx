@@ -265,8 +265,14 @@ function OrderSummary({ garments, quote }: { garments: Garment[]; quote: MultiGa
   const depositPercentage = Math.round(depositRatio * 100)
   const discountAmount = appliedDiscount?.discount_amount || 0
   const discountedTotal = Math.max(0, quote.total - discountAmount)
-  const discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
-  const discountedBalance = discountedTotal - discountedDeposit
+  
+  // Calculate deposit with Stripe minimum charge enforcement ($0.50)
+  const MINIMUM_CHARGE = 0.50
+  let rawDiscountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
+  const discountedDeposit = rawDiscountedDeposit < MINIMUM_CHARGE && rawDiscountedDeposit > 0
+    ? Math.min(MINIMUM_CHARGE, discountedTotal)
+    : rawDiscountedDeposit
+  const discountedBalance = Math.max(0, discountedTotal - discountedDeposit)
 
   async function handleApplyDiscount() {
     if (!discountCode.trim()) {
@@ -551,81 +557,130 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       const hasMultipleGarments = Object.keys(store.selectedGarments).length > 1
       
       // Upload artwork files BEFORE creating pending order (File objects can't persist across redirect)
-      const uploadedArtwork: { location: string; file_url: string; file_name: string; transform?: any }[] = []
+      // Use artworkFileRecords if artworkFiles is empty (after page reload)
+      const uploadedArtwork: { location: string; file_url: string; file_name: string; transform?: any; file_size?: number }[] = []
       
-      for (const [location, file] of Object.entries(store.artworkFiles)) {
-        if (file) {
-          try {
-            const formData = new FormData()
-            formData.append('file', file)
-            formData.append('location', location)
-            // Upload to temporary storage (will be linked to order after payment)
-            if (user) {
-              formData.append('user_id', user.id)
-            }
-            
-            const transform = store.artworkTransforms[location]
-            if (transform) {
-              formData.append('transform', JSON.stringify(transform))
-            }
-            
-            const uploadResponse = await fetch('/api/artwork/upload-temp', {
-              method: 'POST',
-              body: formData
-            })
-            
-            if (uploadResponse.ok) {
-              const uploadResult = await uploadResponse.json()
-              uploadedArtwork.push({
-                location,
-                file_url: uploadResult.file_url,
-                file_name: file.name,
-                transform: transform
+      // First, check if we have File objects (normal case)
+      const hasFileObjects = Object.values(store.artworkFiles).some(f => f !== null)
+      
+      if (hasFileObjects) {
+        // Normal flow: upload File objects
+        for (const [location, file] of Object.entries(store.artworkFiles)) {
+          if (file) {
+            try {
+              const formData = new FormData()
+              formData.append('file', file)
+              formData.append('location', location)
+              // Upload to temporary storage (will be linked to order after payment)
+              if (user) {
+                formData.append('user_id', user.id)
+              }
+              
+              const transform = store.artworkTransforms[location]
+              if (transform) {
+                formData.append('transform', JSON.stringify(transform))
+              }
+              
+              const uploadResponse = await fetch('/api/artwork/upload-temp', {
+                method: 'POST',
+                body: formData
               })
+              
+              if (uploadResponse.ok) {
+                const uploadResult = await uploadResponse.json()
+                // Get cropped_file_url from the record if it exists
+                const record = store.artworkFileRecords[location]
+                uploadedArtwork.push({
+                  location,
+                  file_url: uploadResult.file_url,
+                  file_name: file.name,
+                  file_size: file.size,
+                  transform: transform,
+                  cropped_file_url: record?.cropped_file_url || null
+                })
+              }
+            } catch (err) {
+              console.error(`Error uploading artwork for ${location}:`, err)
             }
-          } catch (err) {
-            console.error(`Error uploading artwork for ${location}:`, err)
+          }
+        }
+      } else {
+        // Page reload case: use artworkFileRecords (already uploaded files)
+        console.log('[CHECKOUT] Using artworkFileRecords (page was reloaded, File objects lost)')
+        for (const [location, record] of Object.entries(store.artworkFileRecords)) {
+          if (record && record.file_url) {
+            uploadedArtwork.push({
+              location,
+              file_url: record.file_url,
+              file_name: record.file_name,
+              file_size: record.file_size,
+              transform: store.artworkTransforms[location] || record.transform || null,
+              cropped_file_url: record.cropped_file_url || null
+            })
           }
         }
       }
       
-      // Also upload vectorized SVGs
-      for (const [location, svgData] of Object.entries(store.vectorizedSvgData)) {
-        if (svgData && svgData.startsWith('data:')) {
-          try {
-            const base64Data = svgData.split(',')[1]
-            const binaryData = atob(base64Data)
-            const bytes = new Uint8Array(binaryData.length)
-            for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i)
-            const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
-            
-            const originalFile = store.artworkFiles[location]
-            const fileName = originalFile ? `${originalFile.name.replace(/\.[^/.]+$/, '')}_vectorized.svg` : `${location}_vectorized.svg`
-            
-            const formData = new FormData()
-            formData.append('file', svgBlob, fileName)
-            formData.append('location', location)
-            formData.append('is_vectorized', 'true')
-            
-            const uploadResponse = await fetch('/api/artwork/upload-temp', {
-              method: 'POST',
-              body: formData
-            })
-            
-            if (uploadResponse.ok) {
-              const uploadResult = await uploadResponse.json()
+      // Also upload vectorized SVGs (only if we have File objects, otherwise they're already in records)
+      if (hasFileObjects) {
+        for (const [location, svgData] of Object.entries(store.vectorizedSvgData)) {
+          if (svgData && svgData.startsWith('data:')) {
+            try {
+              const base64Data = svgData.split(',')[1]
+              const binaryData = atob(base64Data)
+              const bytes = new Uint8Array(binaryData.length)
+              for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i)
+              const svgBlob = new Blob([bytes], { type: 'image/svg+xml' })
+              
+              const originalFile = store.artworkFiles[location]
+              const fileName = originalFile ? `${originalFile.name.replace(/\.[^/.]+$/, '')}_vectorized.svg` : `${location}_vectorized.svg`
+              
+              const formData = new FormData()
+              formData.append('file', svgBlob, fileName)
+              formData.append('location', location)
+              formData.append('is_vectorized', 'true')
+              
+              const uploadResponse = await fetch('/api/artwork/upload-temp', {
+                method: 'POST',
+                body: formData
+              })
+              
+              if (uploadResponse.ok) {
+                const uploadResult = await uploadResponse.json()
+                uploadedArtwork.push({
+                  location,
+                  file_url: uploadResult.file_url,
+                  file_name: fileName,
+                  transform: store.artworkTransforms[location]
+                })
+              }
+            } catch (err) {
+              console.error(`Error uploading vectorized SVG for ${location}:`, err)
+            }
+          }
+        }
+      } else {
+        // After page reload: check for vectorized files in records
+        for (const [location, record] of Object.entries(store.artworkFileRecords)) {
+          if (record && record.vectorized_file_url) {
+            // Use vectorized version if available
+            const existingIndex = uploadedArtwork.findIndex(a => a.location === location)
+            if (existingIndex >= 0) {
+              uploadedArtwork[existingIndex].file_url = record.vectorized_file_url
+            } else {
               uploadedArtwork.push({
                 location,
-                file_url: uploadResult.file_url,
-                file_name: fileName,
-                transform: store.artworkTransforms[location]
+                file_url: record.vectorized_file_url,
+                file_name: record.file_name.replace(/\.[^/.]+$/, '') + '_vectorized.svg',
+                file_size: record.file_size,
+                transform: store.artworkTransforms[location] || record.transform || null
               })
             }
-          } catch (err) {
-            console.error(`Error uploading vectorized SVG for ${location}:`, err)
           }
         }
       }
+      
+      console.log(`[CHECKOUT] Prepared ${uploadedArtwork.length} artwork files for pending order`)
       
       // Create a PENDING order (actual order created after payment succeeds)
       const pendingOrderData = {
@@ -662,7 +717,14 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
       const discountAmount = store.appliedDiscount?.discount_amount || 0
       const discountedTotal = Math.max(0, quote.total - discountAmount)
       const depositRatio = quote.deposit_amount / quote.total
-      const discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
+      let discountedDeposit = Math.round(discountedTotal * depositRatio * 100) / 100
+      
+      // Stripe requires minimum charge of $0.50
+      // If deposit is less than $0.50, charge at least $0.50 or the full amount (whichever is smaller)
+      const MINIMUM_CHARGE = 0.50
+      if (discountedDeposit < MINIMUM_CHARGE && discountedDeposit > 0) {
+        discountedDeposit = Math.min(MINIMUM_CHARGE, discountedTotal)
+      }
 
       // Create payment intent with pending order reference
       const paymentResponse = await fetch('/api/payments/create-intent', {
@@ -677,7 +739,10 @@ function CheckoutForm({ garments, quote }: { garments: Garment[]; quote: MultiGa
         })
       })
 
-      if (!paymentResponse.ok) throw new Error('Failed to create payment intent')
+      if (!paymentResponse.ok) {
+        const errorData = await paymentResponse.json()
+        throw new Error(errorData.error || 'Failed to create payment intent')
+      }
 
       const { clientSecret: secret, paymentIntentId } = await paymentResponse.json()
       setClientSecret(secret)

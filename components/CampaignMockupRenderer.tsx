@@ -63,6 +63,8 @@ function ArtworkImage({
   
   if (!image) return null
   
+  // Use loaded image dimensions directly
+  // The caller should pass the cropped_file_url to ensure correct image is loaded
   return (
     <KonvaImage
       image={image}

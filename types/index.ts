@@ -192,6 +192,10 @@ export interface ArtworkTransform {
   y: number
   scale: number
   rotation: number
+  // Dimensions of the image that was used when this transform was calculated
+  // Required for correct rendering since design editor may crop images
+  imageWidth?: number
+  imageHeight?: number
 }
 
 export type VectorizationStatus = 'not_needed' | 'pending' | 'processing' | 'completed' | 'failed'
@@ -202,6 +206,7 @@ export interface ArtworkFile {
   location: PrintLocation
   file_url: string
   vectorized_file_url?: string | null
+  cropped_file_url?: string | null // URL of cropped version for correct preview rendering
   is_vector: boolean
   vectorization_status: VectorizationStatus
   file_name: string

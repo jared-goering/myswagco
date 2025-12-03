@@ -145,35 +145,87 @@ interface PreviewCanvasProps {
 function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(CANVAS_WIDTH)
+  const hasMeasuredRef = useRef(false)
   
   // Track container width for responsive scaling
   useEffect(() => {
     if (!containerRef.current) return
     
+    let resizeObserver: ResizeObserver | null = null
+    let rafId: number | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    
     const updateWidth = () => {
       if (containerRef.current) {
-        setContainerWidth(containerRef.current.offsetWidth)
+        const width = containerRef.current.offsetWidth
+        // Only update if we have a valid width (greater than 0)
+        if (width > 0) {
+          setContainerWidth(width)
+          hasMeasuredRef.current = true
+        }
       }
     }
     
-    // Initial measurement
-    updateWidth()
+    // Use requestAnimationFrame to ensure layout is complete before measuring
+    rafId = requestAnimationFrame(() => {
+      // Double-check after layout completes
+      rafId = requestAnimationFrame(() => {
+        updateWidth()
+        
+        // Use ResizeObserver for responsive updates
+        if (containerRef.current) {
+          resizeObserver = new ResizeObserver(() => {
+            updateWidth()
+          })
+          resizeObserver.observe(containerRef.current)
+        }
+        
+        // Fallback: re-measure after a short delay if we haven't measured yet
+        // This handles cases where the container isn't ready yet
+        if (!hasMeasuredRef.current) {
+          timeoutId = setTimeout(() => {
+            if (containerRef.current) {
+              const actualWidth = containerRef.current.offsetWidth
+              if (actualWidth > 0 && actualWidth !== CANVAS_WIDTH) {
+                setContainerWidth(actualWidth)
+                hasMeasuredRef.current = true
+              }
+            }
+          }, 100)
+        }
+      })
+    })
     
-    // Use ResizeObserver for responsive updates
-    const resizeObserver = new ResizeObserver(updateWidth)
-    resizeObserver.observe(containerRef.current)
-    
-    return () => resizeObserver.disconnect()
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
+    }
   }, [])
   
   const shirtImageUrl = getShirtImageUrl(artworkFile.location, garment, activeColor)
   const [shirtImage] = useImage(shirtImageUrl || '', 'anonymous')
-  const [artworkImage] = useImage(artworkFile.file_url, 'anonymous')
+  
+  // Use the same image that was used in the design editor
+  // Priority: cropped_file_url > vectorized_file_url > file_url
+  // The cropped version is the exact image the design editor used for calculating transforms
+  const artworkUrl = artworkFile.cropped_file_url 
+    || (artworkFile.vectorized_file_url && artworkFile.vectorization_status === 'completed' ? artworkFile.vectorized_file_url : null)
+    || artworkFile.file_url
+  
+  const [artworkImage] = useImage(artworkUrl, 'anonymous')
   
   const transform = artworkFile.transform
   
   // Calculate display dimensions maintaining aspect ratio
-  const displayWidth = containerWidth
+  // Ensure we have valid dimensions (fallback to CANVAS_WIDTH if containerWidth is invalid)
+  const displayWidth = containerWidth > 0 ? containerWidth : CANVAS_WIDTH
   const displayHeight = displayWidth / ASPECT_RATIO
   const scale = displayWidth / CANVAS_WIDTH
   
@@ -214,7 +266,10 @@ function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps
   }
   
   const printArea = PRINT_AREAS[artworkFile.location]
-  const dimensions = calculateDimensions(artworkImage.width, artworkImage.height, transform, artworkFile.location)
+  // Use saved dimensions from transform if available, otherwise use loaded image dimensions
+  const effectiveWidth = transform.imageWidth || artworkImage.width
+  const effectiveHeight = transform.imageHeight || artworkImage.height
+  const dimensions = calculateDimensions(effectiveWidth, effectiveHeight, transform, artworkFile.location)
   const position = getPositionDescriptor(transform, artworkFile.location)
   const maxDimensions = MAX_PRINT_DIMENSIONS[artworkFile.location]
   const isOversize = dimensions.width > maxDimensions.width || dimensions.height > maxDimensions.height
@@ -269,16 +324,19 @@ function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps
               opacity={0.3}
             />
             
-            {/* Artwork image */}
-            <KonvaImage
-              image={artworkImage}
-              x={transform.x}
-              y={transform.y}
-              width={artworkImage.width * transform.scale}
-              height={artworkImage.height * transform.scale}
-              rotation={transform.rotation}
-              listening={false}
-            />
+            {/* Artwork image - only render when image is loaded */}
+            {/* Use loaded image dimensions - cropped_file_url ensures correct image is loaded */}
+            {artworkImage && (
+              <KonvaImage
+                image={artworkImage}
+                x={transform.x}
+                y={transform.y}
+                width={artworkImage.width * transform.scale}
+                height={artworkImage.height * transform.scale}
+                rotation={transform.rotation}
+                listening={false}
+              />
+            )}
           </Layer>
         </Stage>
         
