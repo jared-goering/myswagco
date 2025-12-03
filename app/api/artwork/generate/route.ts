@@ -272,7 +272,11 @@ Generate a screen print design based on this request. Remember: 1-4 solid colors
     console.error(`[+${errorTime}ms] ERROR generating artwork:`, error?.message || error)
     console.error('  - Error name:', error?.name)
     console.error('  - Error status:', error?.status)
+    console.error('  - Error statusText:', error?.statusText)
+    console.error('  - Error code:', error?.code)
+    console.error('  - Full error object:', JSON.stringify(error, null, 2))
     console.error('  - Error details:', error?.errorDetails)
+    console.error('  - Error stack:', error?.stack)
     console.log(`========== AI DESIGN GENERATION END (FAILED at ${errorTime}ms) ==========\n`)
     
     // Extract retry delay if available

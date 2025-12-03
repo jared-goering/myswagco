@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Image as KonvaImage } from 'react-konva'
 import { PrintLocation, ArtworkFile, Garment, ArtworkTransform } from '@/types'
 import useImage from 'use-image'
@@ -19,6 +19,7 @@ interface DesignPreviewCardProps {
 // Canvas dimensions (match DesignEditor)
 const CANVAS_WIDTH = 500
 const CANVAS_HEIGHT = 550
+const ASPECT_RATIO = CANVAS_WIDTH / CANVAS_HEIGHT
 
 // Shirt positioning
 const SHIRT_PADDING = 28
@@ -142,17 +143,55 @@ interface PreviewCanvasProps {
 }
 
 function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(CANVAS_WIDTH)
+  
+  // Track container width for responsive scaling
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth)
+      }
+    }
+    
+    // Initial measurement
+    updateWidth()
+    
+    // Use ResizeObserver for responsive updates
+    const resizeObserver = new ResizeObserver(updateWidth)
+    resizeObserver.observe(containerRef.current)
+    
+    return () => resizeObserver.disconnect()
+  }, [])
+  
   const shirtImageUrl = getShirtImageUrl(artworkFile.location, garment, activeColor)
   const [shirtImage] = useImage(shirtImageUrl || '', 'anonymous')
   const [artworkImage] = useImage(artworkFile.file_url, 'anonymous')
   
   const transform = artworkFile.transform
-  const printArea = PRINT_AREAS[artworkFile.location]
+  
+  // Calculate display dimensions maintaining aspect ratio
+  const displayWidth = containerWidth
+  const displayHeight = displayWidth / ASPECT_RATIO
+  const scale = displayWidth / CANVAS_WIDTH
   
   if (!transform || !artworkImage) {
     return (
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
-        <Stage width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
+      <div 
+        ref={containerRef}
+        className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg w-full"
+        style={{ 
+          aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`,
+        }}
+      >
+        <Stage 
+          width={displayWidth} 
+          height={displayHeight}
+          scaleX={scale}
+          scaleY={scale}
+        >
           <Layer>
             {shirtImage && (
               <KonvaImage
@@ -174,6 +213,7 @@ function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps
     )
   }
   
+  const printArea = PRINT_AREAS[artworkFile.location]
   const dimensions = calculateDimensions(artworkImage.width, artworkImage.height, transform, artworkFile.location)
   const position = getPositionDescriptor(transform, artworkFile.location)
   const maxDimensions = MAX_PRINT_DIMENSIONS[artworkFile.location]
@@ -181,8 +221,19 @@ function PreviewCanvas({ artworkFile, garment, activeColor }: PreviewCanvasProps
   
   return (
     <div className="space-y-4">
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
-        <Stage width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
+      <div 
+        ref={containerRef}
+        className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg w-full"
+        style={{ 
+          aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`,
+        }}
+      >
+        <Stage 
+          width={displayWidth} 
+          height={displayHeight}
+          scaleX={scale}
+          scaleY={scale}
+        >
           <Layer>
             {/* Shirt background */}
             {shirtImage && (

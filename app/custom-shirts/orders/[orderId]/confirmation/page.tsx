@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Order, Garment } from '@/types'
 import { useOrderStore } from '@/lib/store/orderStore'
+import { trackConversion, trackFunnelComplete } from '@/lib/analytics'
 
 export default function OrderConfirmation() {
   const params = useParams()
@@ -14,6 +15,7 @@ export default function OrderConfirmation() {
   const [loading, setLoading] = useState(true)
   const { deleteDraft, reset, draftId } = useOrderStore()
   const hasCleanedUp = useRef(false)
+  const hasTrackedConversion = useRef(false)
 
   useEffect(() => {
     fetchOrder()
@@ -40,6 +42,13 @@ export default function OrderConfirmation() {
       if (response.ok) {
         const data = await response.json()
         setOrder(data)
+        
+        // Track conversion for Google Ads (only once)
+        if (!hasTrackedConversion.current) {
+          hasTrackedConversion.current = true
+          trackConversion('deposit_paid', data.deposit_amount, orderId)
+          trackFunnelComplete('custom_order', data.total_cost)
+        }
       }
     } catch (error) {
       console.error('Error fetching order:', error)
