@@ -22,3 +22,6 @@ COMMENT ON COLUMN garments.ss_style_id IS 'S&S Activewear style ID for inventory
 COMMENT ON COLUMN garments.supplier_source IS 'Origin supplier of the garment: ssactivewear, ascolour, manual, etc.';
 
 
+
+
+

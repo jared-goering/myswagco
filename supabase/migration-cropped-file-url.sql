@@ -9,3 +9,6 @@ ADD COLUMN IF NOT EXISTS cropped_file_url TEXT;
 -- Add comment explaining the column
 COMMENT ON COLUMN artwork_files.cropped_file_url IS 'URL of the cropped version of the artwork (after whitespace removal). Used for accurate rendering in admin panel and campaign mockups.';
 
+
+
+

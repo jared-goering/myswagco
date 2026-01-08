@@ -41,3 +41,6 @@ COMMENT ON COLUMN campaigns.garment_configs IS 'Multi-garment support: maps garm
 COMMENT ON COLUMN campaign_orders.garment_id IS 'The specific garment style ordered by the participant (for multi-garment campaigns)';
 
 
+
+
+

@@ -127,3 +127,6 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('saved-artwork', 'saved-artwork', true);
 
 
+
+
+

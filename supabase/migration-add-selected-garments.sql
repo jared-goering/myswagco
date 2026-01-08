@@ -12,3 +12,6 @@ CREATE INDEX IF NOT EXISTS idx_order_drafts_selected_garments ON order_drafts US
 COMMENT ON COLUMN order_drafts.selected_garments IS 'Multi-garment selection: maps garment ID to {selectedColors: string[], colorSizeQuantities: {...}}';
 
 
+
+
+

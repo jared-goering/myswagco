@@ -12,3 +12,6 @@ CREATE INDEX IF NOT EXISTS idx_orders_selected_garments ON orders USING GIN (sel
 COMMENT ON COLUMN orders.selected_garments IS 'Multi-garment selection: maps garment ID to {selectedColors: string[], colorSizeQuantities: {...}}. When present, garment_id refers to primary/first garment.';
 
 
+
+
+

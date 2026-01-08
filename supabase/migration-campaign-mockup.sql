@@ -8,3 +8,6 @@ ADD COLUMN IF NOT EXISTS mockup_image_url TEXT DEFAULT NULL;
 COMMENT ON COLUMN campaigns.mockup_image_url IS 'URL of the captured mockup image showing the design on the shirt';
 
 
+
+
+

@@ -76,17 +76,23 @@ async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentDat
       console.log('S&S API sample item:', JSON.stringify(allStyles[0], null, 2).substring(0, 500))
     }
     
+    // Normalize brand name for comparison (handles "J. America" vs "j_america", etc.)
+    const normalizeBrand = (name: string) => 
+      name.toUpperCase().replace(/[-_\.]/g, ' ').replace(/\s+/g, ' ').trim()
+    
     // Find the matching style - match by BOTH style and brand
     let styleData = null
     if (Array.isArray(allStyles)) {
       // First try: exact match on style name AND brand
       styleData = allStyles.find((s: any) => {
         const styleName = String(s.styleName || s.StyleName || '').toUpperCase()
-        const brandName = String(s.brandName || '').toUpperCase()
-        const brandFromUrl = brand.toUpperCase().replace(/[-_]/g, ' ')
+        const normalizedApiBrand = normalizeBrand(String(s.brandName || ''))
+        const normalizedUrlBrand = normalizeBrand(brand)
         
-        // Check if brand matches (handle variations like "comfort-colors" vs "COMFORT COLORS")
-        const brandMatches = brandName.includes(brandFromUrl) || brandFromUrl.includes(brandName.split(' ')[0])
+        // Check if brand matches (handle variations like "comfort-colors" vs "COMFORT COLORS", "J. America" vs "j_america")
+        const brandMatches = normalizedApiBrand.includes(normalizedUrlBrand) || 
+                            normalizedUrlBrand.includes(normalizedApiBrand) ||
+                            normalizedApiBrand.split(' ')[0] === normalizedUrlBrand.split(' ')[0]
         
         return brandMatches && styleName === styleId
       })
@@ -96,10 +102,12 @@ async function fetchFromSSActivewearAPI(url: string): Promise<ImportedGarmentDat
         styleData = allStyles.find((s: any) => {
           const styleName = String(s.styleName || s.StyleName || '').toUpperCase()
           const uniqueStyleName = String(s.uniqueStyleName || '').toUpperCase()
-          const brandName = String(s.brandName || '').toUpperCase()
-          const brandFromUrl = brand.toUpperCase().replace(/[-_]/g, ' ')
+          const normalizedApiBrand = normalizeBrand(String(s.brandName || ''))
+          const normalizedUrlBrand = normalizeBrand(brand)
           
-          const brandMatches = brandName.includes(brandFromUrl) || brandFromUrl.includes(brandName.split(' ')[0])
+          const brandMatches = normalizedApiBrand.includes(normalizedUrlBrand) || 
+                              normalizedUrlBrand.includes(normalizedApiBrand) ||
+                              normalizedApiBrand.split(' ')[0] === normalizedUrlBrand.split(' ')[0]
           
           return brandMatches && (
             styleName === styleId || 

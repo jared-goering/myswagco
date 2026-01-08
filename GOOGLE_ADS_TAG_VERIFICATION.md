@@ -141,3 +141,6 @@ To verify the setup is working:
 - Conversion tracking is done via JavaScript function calls rather than inline script tags, which is more maintainable and allows for dynamic transaction IDs
 - All conversion pages use refs to prevent duplicate tracking (important for React StrictMode in development)
 
+
+
+
