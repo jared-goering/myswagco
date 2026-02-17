@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   keywords: ['about My Swag Co', 'direct manufacturer apparel', 'Montana Shirt Co', 'Homeplace Apparel', 'custom apparel manufacturer'],
   openGraph: {
     title: 'About My Swag Co — Direct Manufacturer Custom Apparel',
-    description: 'We own the production. Team of 20, based in Whitefish, MT. No middlemen, no hidden fees.',
+    description: 'We own the production. Team of 20, based in Wichita, KS. No middlemen, no hidden fees.',
     type: 'website',
   },
 }
@@ -21,8 +21,8 @@ export default function AboutPage() {
     description: 'Direct manufacturer of custom screen printed apparel.',
     address: {
       '@type': 'PostalAddress',
-      addressLocality: 'Whitefish',
-      addressRegion: 'MT',
+      addressLocality: 'Wichita',
+      addressRegion: 'KS',
       addressCountry: 'US',
     },
     numberOfEmployees: {
@@ -154,11 +154,10 @@ export default function AboutPage() {
             Where we are
           </h2>
           <p className="text-[rgb(var(--text-secondary))] leading-relaxed">
-            Our home base is <strong className="text-[rgb(var(--text-primary))]">Whitefish, Montana</strong> —
-            a small mountain town in northwest Montana. It&apos;s not exactly a tech hub, but it&apos;s where we
-            make great shirts and live a pretty good life. Montana Shirt Co handles the bulk of our screen
+            Our home base is <strong className="text-[rgb(var(--text-primary))]">Wichita, Kansas</strong> —
+            right in the heart of the country. Montana Shirt Co handles the bulk of our screen
             printing production, with Homeplace Apparel as our partner facility for additional capacity and
-            specialty work.
+            specialty work. Two facilities, one team, zero middlemen.
           </p>
         </section>
 

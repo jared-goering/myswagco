@@ -43,6 +43,11 @@ const siteConfig = {
     'conference merch',
     'event merchandise',
     'direct manufacturer apparel',
+    'custom screen printing online',
+    'group order custom shirts',
+    'direct manufacturer custom apparel',
+    'custom merch for startups',
+    'employee welcome kit merch',
   ],
 }
 
@@ -171,15 +176,31 @@ export default function RootLayout({
                 '@context': 'https://schema.org',
                 '@type': 'Organization',
                 name: 'My Swag Co',
-                url: 'https://myswagco.co',
-                description: 'Custom screen printed apparel. Direct manufacturer.',
+                url: siteConfig.url,
+                logo: `${siteConfig.url}/og-image.png`,
+                description: siteConfig.description,
+                address: {
+                  '@type': 'PostalAddress',
+                  addressLocality: 'Wichita',
+                  addressRegion: 'KS',
+                  addressCountry: 'US',
+                },
                 sameAs: [],
               },
               {
                 '@context': 'https://schema.org',
                 '@type': 'WebSite',
                 name: 'My Swag Co',
-                url: 'https://myswagco.co',
+                url: siteConfig.url,
+                publisher: {
+                  '@type': 'Organization',
+                  name: 'My Swag Co',
+                },
+                potentialAction: {
+                  '@type': 'SearchAction',
+                  target: `${siteConfig.url}/custom-shirts?q={search_term_string}`,
+                  'query-input': 'required name=search_term_string',
+                },
               },
             ]),
           }}
