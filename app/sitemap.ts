@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { getAllPosts } from './blog/posts'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://myswagco.co'
@@ -47,7 +48,33 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('Error fetching garments for sitemap:', error)
   }
   
-  return [...staticPages, ...garmentPages]
+  // About page
+  const aboutPage: MetadataRoute.Sitemap = [
+    {
+      url: `${baseUrl}/about`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+  ]
+
+  // Blog pages
+  const blogPages: MetadataRoute.Sitemap = [
+    {
+      url: `${baseUrl}/blog`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    ...getAllPosts().map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: new Date(post.date),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    })),
+  ]
+
+  return [...staticPages, ...aboutPage, ...blogPages, ...garmentPages]
 }
 
 

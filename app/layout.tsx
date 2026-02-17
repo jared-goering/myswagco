@@ -30,6 +30,19 @@ const siteConfig = {
     'wholesale t-shirts',
     'print shop',
     'screen print service',
+    'AI t-shirt design',
+    'AI t-shirt design tool',
+    'custom merch',
+    'group order apparel',
+    'team swag',
+    'branded merchandise',
+    'employee swag',
+    'custom hoodies',
+    'custom hats',
+    'welcome kit merch',
+    'conference merch',
+    'event merchandise',
+    'direct manufacturer apparel',
   ],
 }
 
@@ -150,6 +163,27 @@ export default function RootLayout({
         </Script>
       </head>
       <body className={inter.className}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              {
+                '@context': 'https://schema.org',
+                '@type': 'Organization',
+                name: 'My Swag Co',
+                url: 'https://myswagco.co',
+                description: 'Custom screen printed apparel. Direct manufacturer.',
+                sameAs: [],
+              },
+              {
+                '@context': 'https://schema.org',
+                '@type': 'WebSite',
+                name: 'My Swag Co',
+                url: 'https://myswagco.co',
+              },
+            ]),
+          }}
+        />
         <GoogleAnalytics />
         <Providers>
           {children}
