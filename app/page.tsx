@@ -1535,6 +1535,8 @@ export default function Home() {
                 <li><a href="#ai-generator" className="text-white/60 hover:text-white font-medium transition-colors">AI Design Generator</a></li>
                 <li><a href="#pricing" className="text-white/60 hover:text-white font-medium transition-colors">Pricing</a></li>
                 <li><a href="#faq" className="text-white/60 hover:text-white font-medium transition-colors">FAQ</a></li>
+                <li><a href="/about" className="text-white/60 hover:text-white font-medium transition-colors">About Us</a></li>
+                <li><a href="/blog" className="text-white/60 hover:text-white font-medium transition-colors">Blog</a></li>
               </ul>
             </div>
 
