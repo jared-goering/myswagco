@@ -30,6 +30,24 @@ const siteConfig = {
     'wholesale t-shirts',
     'print shop',
     'screen print service',
+    'AI t-shirt design',
+    'AI t-shirt design tool',
+    'custom merch',
+    'group order apparel',
+    'team swag',
+    'branded merchandise',
+    'employee swag',
+    'custom hoodies',
+    'custom hats',
+    'welcome kit merch',
+    'conference merch',
+    'event merchandise',
+    'direct manufacturer apparel',
+    'custom screen printing online',
+    'group order custom shirts',
+    'direct manufacturer custom apparel',
+    'custom merch for startups',
+    'employee welcome kit merch',
   ],
 }
 
@@ -150,6 +168,43 @@ export default function RootLayout({
         </Script>
       </head>
       <body className={inter.className}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              {
+                '@context': 'https://schema.org',
+                '@type': 'Organization',
+                name: 'My Swag Co',
+                url: siteConfig.url,
+                logo: `${siteConfig.url}/og-image.png`,
+                description: siteConfig.description,
+                address: {
+                  '@type': 'PostalAddress',
+                  addressLocality: 'Wichita',
+                  addressRegion: 'KS',
+                  addressCountry: 'US',
+                },
+                sameAs: [],
+              },
+              {
+                '@context': 'https://schema.org',
+                '@type': 'WebSite',
+                name: 'My Swag Co',
+                url: siteConfig.url,
+                publisher: {
+                  '@type': 'Organization',
+                  name: 'My Swag Co',
+                },
+                potentialAction: {
+                  '@type': 'SearchAction',
+                  target: `${siteConfig.url}/custom-shirts?q={search_term_string}`,
+                  'query-input': 'required name=search_term_string',
+                },
+              },
+            ]),
+          }}
+        />
         <GoogleAnalytics />
         <Providers>
           {children}
